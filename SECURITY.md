@@ -36,20 +36,32 @@ We will respond within 48 hours and work on a fix as soon as possible.
 2. **LangChain Community XXE Vulnerability**
    - **CVE**: XML External Entity (XXE) Attacks
    - **Affected**: langchain-community < 0.3.27
-   - **Fixed**: Upgraded to langchain-community 0.3.27
+   - **Fixed**: Upgraded to langchain-community 0.3.28
    - **Impact**: Protected against XML-based injection attacks
 
 3. **LangChain Community SSRF Vulnerability**
    - **CVE**: Server-Side Request Forgery in RequestsToolkit
    - **Affected**: langchain-community < 0.0.28
-   - **Fixed**: Upgraded to langchain-community 0.3.27
+   - **Fixed**: Upgraded to langchain-community 0.3.28
    - **Impact**: Prevented unauthorized server-side requests
 
 4. **LangChain Pickle Deserialization Vulnerability**
    - **CVE**: Unsafe deserialization of untrusted data
    - **Affected**: langchain-community < 0.2.4
-   - **Fixed**: Upgraded to langchain-community 0.3.27
+   - **Fixed**: Upgraded to langchain-community 0.3.28
    - **Impact**: Prevented arbitrary code execution via malicious pickle data
+
+5. **LangChain Core Template Injection Vulnerability**
+   - **CVE**: Template Injection via Attribute Access in Prompt Templates
+   - **Affected**: langchain-core <= 0.3.79
+   - **Fixed**: Upgraded to langchain-core 0.3.81
+   - **Impact**: Prevented template injection attacks that could expose sensitive data
+
+6. **LangChain Core Serialization Injection Vulnerability**
+   - **CVE**: Serialization injection enables secret extraction in dumps/loads APIs
+   - **Affected**: langchain-core < 0.3.81
+   - **Fixed**: Upgraded to langchain-core 0.3.81
+   - **Impact**: Protected against secret extraction via malicious serialized objects
 
 ## Security Best Practices
 

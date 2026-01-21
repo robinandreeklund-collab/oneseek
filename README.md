@@ -20,8 +20,8 @@ Målet är att bygga mot en unik plattform med **debatt/compare mellan modeller*
 
 ## Tech Stack
 - **Inference**: vLLM (lokal på NVIDIA RTX 5090)
-- **Frontend**: Next.js 14+ (App Router), shadcn/ui, Tailwind, Vercel AI SDK (baserat på [nextjs-vllm-ui](https://github.com/yoziru/nextjs-vllm-ui))
-- **Backend / Agent**: FastAPI, LangGraph, LangChain
+- **Frontend**: Next.js 14+ (App Router), shadcn/ui, Tailwind (baserat på [nextjs-vllm-ui](https://github.com/yoziru/nextjs-vllm-ui))
+- **Backend / Agent**: FastAPI 0.115+, LangGraph 0.2+, LangChain 0.3+ (senaste säkerhetspatchar)
 - **Retrieval**: Vespa Cloud (hybrid BM25 + semantic search)
 - **Embeddings**: all-MiniLM-L6-v2 (lokal via sentence-transformers)
 
