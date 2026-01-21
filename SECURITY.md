@@ -27,13 +27,14 @@ We will respond within 48 hours and work on a fix as soon as possible.
 
 #### Dependency Compatibility Updates (2024-01-21 - Latest)
 
-1. **Starlette Version Conflict Resolution**
-   - **Issue**: External packages require starlette>=0.49.1, but fastapi pulled in 0.41.3
+1. **FastAPI Major Upgrade for Starlette Compatibility**
+   - **Issue**: FastAPI 0.115.5 requires starlette<0.42.0, but external packages need >=0.49.1
    - **Conflicts**: 
      - sse-starlette 3.2.0 requires starlette>=0.49.1
      - model-hosting-container-standards 0.1.13 requires starlette>=0.49.1
-   - **Fixed**: Added explicit starlette==0.49.1 requirement
-   - **Impact**: Ensures correct starlette version for all external packages
+     - fastapi 0.115.5 requires starlette<0.42.0 (incompatible!)
+   - **Fixed**: Upgraded fastapi 0.115.5 → 0.128.0 (supports newer starlette)
+   - **Impact**: FastAPI now compatible with modern starlette versions needed for SSE streaming
 
 2. **vLLM & External Tools Compatibility Upgrade**
    - **Issue**: Conflicts with external packages (vllm 0.14.0, mcp 1.25.0) installed in environment
@@ -45,22 +46,7 @@ We will respond within 48 hours and work on a fix as soon as possible.
      - pydantic: 2.10.3 → 2.12.0
      - openai: 1.54.4 → 1.99.1
      - uvicorn: 0.27.0 → 0.32.1
-     - fastapi: 0.115.0 → 0.115.5
-     - starlette: explicitly set to 0.49.1
-   - **Impact**: Compatible with vllm 0.14.0 and other external tools
-
-2. **vLLM & External Tools Compatibility Upgrade**
-   - **Issue**: Conflicts with external packages (vllm 0.14.0, mcp 1.25.0) installed in environment
-   - **Conflicts**: 
-     - vllm requires pydantic>=2.12.0, openai>=1.99.1
-     - mcp requires pydantic>=2.11.0, uvicorn>=0.31.1
-     - sse-starlette requires starlette>=0.49.1
-   - **Fixed**: 
-     - pydantic: 2.10.3 → 2.12.0
-     - openai: 1.54.4 → 1.99.1
-     - uvicorn: 0.27.0 → 0.32.1
-     - fastapi: 0.115.0 → 0.115.5
-     - starlette: explicitly set to 0.49.1
+     - fastapi: 0.115.0 → 0.128.0
    - **Impact**: Compatible with vllm 0.14.0 and other external tools
 
 3. **OpenAI Client Compatibility Fix**
