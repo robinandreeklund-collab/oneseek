@@ -9,6 +9,14 @@
 
 Målet är att bygga mot en unik plattform med **debatt/compare mellan modeller**, **blockchain-logging för verifierbarhet** och **multi-step agenter** – men denna MVP är minimal och körbar lokalt.
 
+## 🚀 Kom igång snabbt
+
+**→ [📖 QUICKSTART.md - Komplett steg-för-steg guide för nybörjare](QUICKSTART.md)**
+
+Denna guide täcker allt från installation av Python och Node.js till att köra din första AI-chat!
+
+---
+
 ## Funktioner i denna MVP
 - **Streaming chat** med lokal LLM – token-by-token response i realtid (aktiverat som default)
 - **RAG-berikning**: Hämtar relevanta snippets från Vespa Cloud innan svar genereras
