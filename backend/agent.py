@@ -206,8 +206,71 @@ class OneSeekAgent:
             "steps": steps
         }
     
+    def _generate_node_streaming(self, state: AgentState, callback) -> AgentState:
+        """Generate response with streaming support"""
+        steps = state.get("steps", [])
+        steps.append("Generating response with LLM (streaming)...")
+        callback("step", "Generating response with LLM (streaming)...")
+        
+        messages = state.get("messages", [])
+        retrieved_docs = state.get("retrieved_docs", [])
+        
+        # Build context from retrieved documents
+        context = ""
+        if retrieved_docs:
+            context = "### Retrieved Context:\n\n"
+            for i, doc in enumerate(retrieved_docs, 1):
+                context += f"**Source {i}: {doc.get('title', 'Untitled')}**\n"
+                context += f"{doc.get('content', '')}\n\n"
+            context += "---\n\n"
+        
+        # Build chat history
+        chat_messages = []
+        
+        # System message with context
+        system_content = (
+            "You are a helpful AI assistant. "
+            "Use the following retrieved context to enhance your answers. "
+            "If the context is relevant, incorporate it naturally into your response. "
+            "If the context is not relevant, answer based on your knowledge."
+        )
+        if context:
+            system_content += f"\n\n{context}"
+        
+        chat_messages.append(SystemMessage(content=system_content))
+        
+        # Add chat history
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            
+            if role == "user":
+                chat_messages.append(HumanMessage(content=content))
+            elif role == "assistant":
+                chat_messages.append(AIMessage(content=content))
+        
+        # Generate response with streaming
+        final_response = ""
+        try:
+            for chunk in self.llm.stream(chat_messages):
+                token = chunk.content
+                if token:
+                    final_response += token
+                    callback("token", token)
+            steps.append("Response generated successfully")
+        except Exception as e:
+            final_response = f"Error generating response: {str(e)}"
+            steps.append(f"Error during generation: {str(e)}")
+            print(f"Generation error: {e}")
+        
+        return {
+            **state,
+            "final_response": final_response,
+            "steps": steps
+        }
+    
     def run(self, messages: List[Dict[str, str]]) -> Dict[str, Any]:
-        """Run the agent workflow"""
+        """Run the agent workflow (non-streaming)"""
         initial_state: AgentState = {
             "messages": messages,
             "retrieved_docs": [],
@@ -222,6 +285,42 @@ class OneSeekAgent:
             "content": final_state.get("final_response", ""),
             "retrieved": final_state.get("retrieved_docs", []),
             "steps": final_state.get("steps", [])
+        }
+    
+    def run_with_streaming(self, messages: List[Dict[str, str]]) -> Dict[str, Any]:
+        """Run the agent workflow with streaming support"""
+        tokens = []
+        steps_list = []
+        retrieved_docs = []
+        
+        def callback(event_type: str, content: Any):
+            if event_type == "token":
+                tokens.append(content)
+            elif event_type == "step":
+                steps_list.append(content)
+        
+        # Step 1: Retrieve documents
+        initial_state: AgentState = {
+            "messages": messages,
+            "retrieved_docs": [],
+            "steps": [],
+            "final_response": ""
+        }
+        
+        # Run retrieve node
+        state_after_retrieve = self._retrieve_node(initial_state)
+        retrieved_docs = state_after_retrieve.get("retrieved_docs", [])
+        steps_list.extend(state_after_retrieve.get("steps", []))
+        
+        # Step 2: Generate with streaming
+        state_after_generate = self._generate_node_streaming(state_after_retrieve, callback)
+        steps_list.extend([s for s in state_after_generate.get("steps", []) if s not in steps_list])
+        
+        return {
+            "content": state_after_generate.get("final_response", ""),
+            "retrieved": retrieved_docs,
+            "steps": steps_list,
+            "tokens": tokens
         }
 
 

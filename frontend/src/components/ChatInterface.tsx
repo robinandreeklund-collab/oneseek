@@ -23,6 +23,7 @@ export function ChatInterface() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Load chat history from localStorage
   useEffect(() => {
@@ -61,12 +62,26 @@ export function ChatInterface() {
     setInput("");
     setIsLoading(true);
 
+    // Create placeholder for assistant message
+    const assistantIndex = messages.length + 1;
+    let assistantMessage: Message = {
+      role: "assistant",
+      content: "",
+      retrieved: [],
+      steps: [],
+    };
+
+    setMessages((prev) => [...prev, assistantMessage]);
+
     try {
       // Prepare messages for API (exclude metadata)
       const apiMessages = [...messages, userMessage].map(({ role, content }) => ({
         role,
         content,
       }));
+
+      // Create AbortController for cancellation
+      abortControllerRef.current = new AbortController();
 
       const response = await fetch(`${API_BASE_URL}/chat`, {
         method: "POST",
@@ -75,40 +90,127 @@ export function ChatInterface() {
         },
         body: JSON.stringify({
           messages: apiMessages,
+          stream: true,
         }),
+        signal: abortControllerRef.current.signal,
       });
 
       if (!response.ok) {
         throw new Error(`API error: ${response.status} ${response.statusText}`);
       }
 
-      const data = await response.json();
+      // Handle streaming response
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
 
-      const assistantMessage: Message = {
-        role: "assistant",
-        content: data.content,
-        retrieved: data.retrieved || [],
-        steps: data.steps || [],
-      };
+      if (!reader) {
+        throw new Error("No response body");
+      }
 
-      setMessages((prev) => [...prev, assistantMessage]);
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+
+              if (data.type === "step") {
+                // Update steps
+                assistantMessage = {
+                  ...assistantMessage,
+                  steps: [...(assistantMessage.steps || []), data.content],
+                };
+                setMessages((prev) => {
+                  const newMessages = [...prev];
+                  newMessages[assistantIndex] = assistantMessage;
+                  return newMessages;
+                });
+              } else if (data.type === "retrieved") {
+                // Update retrieved documents
+                assistantMessage = {
+                  ...assistantMessage,
+                  retrieved: data.content,
+                };
+                setMessages((prev) => {
+                  const newMessages = [...prev];
+                  newMessages[assistantIndex] = assistantMessage;
+                  return newMessages;
+                });
+              } else if (data.type === "token") {
+                // Append token to content
+                assistantMessage = {
+                  ...assistantMessage,
+                  content: assistantMessage.content + data.content,
+                };
+                setMessages((prev) => {
+                  const newMessages = [...prev];
+                  newMessages[assistantIndex] = assistantMessage;
+                  return newMessages;
+                });
+              } else if (data.type === "done") {
+                // Final update with complete data
+                assistantMessage = {
+                  role: "assistant",
+                  content: data.content,
+                  retrieved: data.retrieved || [],
+                  steps: data.steps || [],
+                };
+                setMessages((prev) => {
+                  const newMessages = [...prev];
+                  newMessages[assistantIndex] = assistantMessage;
+                  return newMessages;
+                });
+              } else if (data.type === "error") {
+                throw new Error(data.content);
+              }
+            } catch (parseError) {
+              console.error("Failed to parse SSE data:", parseError);
+            }
+          }
+        }
+      }
     } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        console.log("Request cancelled");
+        return;
+      }
+
       console.error("Chat error:", error);
-      
+
       const errorMessage: Message = {
         role: "assistant",
         content: `Fel vid anrop till backend: ${error instanceof Error ? error.message : "Okänt fel"}. Kontrollera att FastAPI-servern körs på ${API_BASE_URL}`,
       };
-      
-      setMessages((prev) => [...prev, errorMessage]);
+
+      setMessages((prev) => {
+        const newMessages = [...prev];
+        newMessages[assistantIndex] = errorMessage;
+        return newMessages;
+      });
     } finally {
       setIsLoading(false);
+      abortControllerRef.current = null;
     }
   };
 
   const clearHistory = () => {
     setMessages([]);
     localStorage.removeItem("oneseek-chat-history");
+  };
+
+  const cancelRequest = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -143,8 +245,13 @@ export function ChatInterface() {
                   : "bg-muted"
               )}
             >
-              <div className="text-sm whitespace-pre-wrap">{message.content}</div>
-              
+              <div className="text-sm whitespace-pre-wrap">
+                {message.content}
+                {isLoading && index === messages.length - 1 && message.role === "assistant" && !message.content && (
+                  <span className="inline-block animate-pulse">▊</span>
+                )}
+              </div>
+
               {/* Show transparency accordion for assistant messages with metadata */}
               {message.role === "assistant" && (message.retrieved || message.steps) && (
                 <TransparensAccordion
@@ -156,14 +263,6 @@ export function ChatInterface() {
           </div>
         ))}
 
-        {isLoading && (
-          <div className="flex justify-start">
-            <div className="bg-muted rounded-lg px-4 py-3">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
-          </div>
-        )}
-
         <div ref={messagesEndRef} />
       </div>
 
@@ -171,7 +270,15 @@ export function ChatInterface() {
       <div className="border-t border-border bg-card p-4">
         <div className="max-w-4xl mx-auto space-y-2">
           {messages.length > 0 && (
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+              {isLoading && (
+                <button
+                  onClick={cancelRequest}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Avbryt
+                </button>
+              )}
               <button
                 onClick={clearHistory}
                 className="text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -180,7 +287,7 @@ export function ChatInterface() {
               </button>
             </div>
           )}
-          
+
           <form onSubmit={handleSubmit} className="flex gap-2">
             <input
               type="text"
