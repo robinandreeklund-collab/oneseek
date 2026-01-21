@@ -25,6 +25,15 @@ We will respond within 48 hours and work on a fix as soon as possible.
 
 ### Latest Security Fixes (2024-01-21)
 
+#### Dependency Compatibility Updates (2024-01-21 - Latest)
+
+1. **Pydantic Compatibility Fix**
+   - **Issue**: Dependency conflict between pydantic 2.5.3 and langchain 0.3.10
+   - **Affected**: pydantic 2.5.3 (too old for langchain 0.3.10)
+   - **Fixed**: Upgraded to pydantic 2.10.3
+   - **Reason**: langchain 0.3.10 requires pydantic>=2.7.4
+   - **Impact**: Resolved installation conflicts, ensures compatibility across all packages
+
 #### Fixed Vulnerabilities
 
 1. **FastAPI ReDoS Vulnerability**
