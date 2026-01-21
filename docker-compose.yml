@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - VESPA_URL=${VESPA_URL}
+      - VESPA_CERT_PATH=/certs/certificate.pem
+      - VESPA_KEY_PATH=/certs/private-key.pem
+      - VLLM_URL=${VLLM_URL:-http://host.docker.internal:8000/v1}
+      - VLLM_MODEL=${VLLM_MODEL:-Qwen/Qwen2.5-14B-Instruct-AWQ}
+      - MODEL_TEMPERATURE=${MODEL_TEMPERATURE:-0.7}
+      - MAX_TOKENS=${MAX_TOKENS:-2048}
+    volumes:
+      - ${VESPA_CERT_PATH}:/certs/certificate.pem:ro
+      - ${VESPA_KEY_PATH}:/certs/private-key.pem:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:8001
+    depends_on:
+      - backend
+    restart: unless-stopped
