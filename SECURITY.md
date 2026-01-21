@@ -27,17 +27,23 @@ We will respond within 48 hours and work on a fix as soon as possible.
 
 #### Dependency Compatibility Updates (2024-01-21 - Latest)
 
-1. **LangSmith Compatibility Fix**
+1. **LangChain Community Compatibility Fix**
+   - **Issue**: Dependency conflict between langchain 0.3.15 and langchain-community 0.3.28
+   - **Conflict**: langchain-community 0.3.28 requires langchain>=0.3.27, but had langchain 0.3.15
+   - **Fixed**: Upgraded langchain from 0.3.15 → 0.3.27
+   - **Impact**: All langchain packages now fully compatible with each other
+
+2. **LangSmith Compatibility Fix**
    - **Issue**: Dependency conflict between langchain 0.3.10 and langchain-core 0.3.81
    - **Conflict**: langchain 0.3.10 requires langsmith<0.2.0, but langchain-core 0.3.81 requires langsmith>=0.3.45
-   - **Fixed**: Upgraded langchain from 0.3.10 → 0.3.15
-   - **Impact**: Resolves langsmith version conflict, all packages now compatible
+   - **Fixed**: Upgraded langchain from 0.3.10 → 0.3.15 (then to 0.3.27)
+   - **Impact**: Resolves langsmith version conflict
 
-2. **Pydantic Compatibility Fix**
+3. **Pydantic Compatibility Fix**
    - **Issue**: Dependency conflict between pydantic 2.5.3 and langchain 0.3.10
    - **Affected**: pydantic 2.5.3 (too old for langchain 0.3.10)
    - **Fixed**: Upgraded to pydantic 2.10.3
-   - **Reason**: langchain 0.3.10 requires pydantic>=2.7.4
+   - **Reason**: langchain requires pydantic>=2.7.4
    - **Impact**: Resolved installation conflicts, ensures compatibility across all packages
 
 #### Fixed Vulnerabilities
