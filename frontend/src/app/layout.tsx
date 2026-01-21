@@ -1,12 +1,21 @@
+import { ThemeProvider } from "@/providers/theme-provider";
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+
+import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"] });
+export const runtime = "edge"; // 'nodejs' (default) | 'edge'
 
 export const metadata: Metadata = {
-  title: "OneSeek.ai - Local AI Chat with RAG",
-  description: "Local-first AI chat with Retrieval-Augmented Generation via Vespa Cloud",
+  title: "vLLM UI",
+  description: "vLLM chatbot web interface",
+};
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: 1,
 };
 
 export default function RootLayout({
@@ -16,7 +25,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+      <body>
+        <ThemeProvider attribute="class" defaultTheme="dark">
+          {children}
+          <Toaster />
+        </ThemeProvider>
+      </body>
     </html>
   );
 }
