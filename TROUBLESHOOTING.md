@@ -2,9 +2,44 @@
 
 Common issues and solutions for OneSeek.ai MVP.
 
+## Security Issues
+
+### 1. Dependency Vulnerabilities
+
+**Problem:** `safety check` or `npm audit` reports vulnerabilities
+
+**Solution:**
+```bash
+# Backend - update to patched versions
+cd backend
+pip install --upgrade -r requirements.txt
+
+# Frontend - fix vulnerabilities
+cd frontend
+npm audit fix
+```
+
+**Current patched versions:**
+- fastapi >= 0.115.0 (fixes ReDoS)
+- langchain-community >= 0.3.27 (fixes XXE, SSRF, pickle vulnerabilities)
+
+### 2. Import Errors After Upgrade
+
+**Problem:** `ImportError: cannot import name 'HumanMessage' from 'langchain.schema'`
+
+**Solution:**
+The newer langchain versions have reorganized modules. Update imports:
+```python
+# Old (< 0.1.0)
+from langchain.schema import HumanMessage
+
+# New (>= 0.3.0)
+from langchain_core.messages import HumanMessage
+```
+
 ## Backend Issues
 
-### 1. Import Errors
+### 1. Module Installation Errors
 
 **Problem:** `ModuleNotFoundError: No module named 'fastapi'` or similar
 
@@ -12,6 +47,7 @@ Common issues and solutions for OneSeek.ai MVP.
 ```bash
 cd backend
 source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
