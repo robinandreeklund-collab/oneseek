@@ -27,29 +27,42 @@ We will respond within 48 hours and work on a fix as soon as possible.
 
 #### Dependency Compatibility Updates (2024-01-21 - Latest)
 
-1. **OpenAI Client Compatibility Fix**
+1. **vLLM & External Tools Compatibility Upgrade**
+   - **Issue**: Conflicts with external packages (vllm 0.14.0, mcp 1.25.0) installed in environment
+   - **Conflicts**: 
+     - vllm requires pydantic>=2.12.0, openai>=1.99.1
+     - mcp requires pydantic>=2.11.0, uvicorn>=0.31.1
+     - sse-starlette requires starlette>=0.49.1
+   - **Fixed**: 
+     - pydantic: 2.10.3 → 2.12.0
+     - openai: 1.54.4 → 1.99.1
+     - uvicorn: 0.27.0 → 0.32.1
+     - fastapi: 0.115.0 → 0.115.5 (brings updated starlette)
+   - **Impact**: Compatible with vllm 0.14.0 and other external tools
+
+2. **OpenAI Client Compatibility Fix**
    - **Issue**: Dependency conflict between openai 1.10.0 and langchain-openai 0.2.8
    - **Conflict**: langchain-openai 0.2.8 requires openai>=1.54.0, but had openai 1.10.0
-   - **Fixed**: Upgraded openai from 1.10.0 → 1.54.4
-   - **Impact**: OpenAI client now compatible with langchain-openai
+   - **Fixed**: Upgraded openai from 1.10.0 → 1.54.4 (then to 1.99.1)
+   - **Impact**: OpenAI client now compatible with langchain-openai and vllm
 
-2. **LangChain Community Compatibility Fix**
+3. **LangChain Community Compatibility Fix**
    - **Issue**: Dependency conflict between langchain 0.3.15 and langchain-community 0.3.28
    - **Conflict**: langchain-community 0.3.28 requires langchain>=0.3.27, but had langchain 0.3.15
    - **Fixed**: Upgraded langchain from 0.3.15 → 0.3.27
    - **Impact**: All langchain packages now fully compatible with each other
 
-3. **LangSmith Compatibility Fix**
+4. **LangSmith Compatibility Fix**
    - **Issue**: Dependency conflict between langchain 0.3.10 and langchain-core 0.3.81
    - **Conflict**: langchain 0.3.10 requires langsmith<0.2.0, but langchain-core 0.3.81 requires langsmith>=0.3.45
    - **Fixed**: Upgraded langchain from 0.3.10 → 0.3.15 (then to 0.3.27)
    - **Impact**: Resolves langsmith version conflict
 
-4. **Pydantic Compatibility Fix**
+5. **Pydantic Compatibility Fix**
    - **Issue**: Dependency conflict between pydantic 2.5.3 and langchain 0.3.10
    - **Affected**: pydantic 2.5.3 (too old for langchain 0.3.10)
-   - **Fixed**: Upgraded to pydantic 2.10.3
-   - **Reason**: langchain requires pydantic>=2.7.4
+   - **Fixed**: Upgraded to pydantic 2.10.3 (then to 2.12.0)
+   - **Reason**: langchain requires pydantic>=2.7.4, vllm requires >=2.12.0
    - **Impact**: Resolved installation conflicts, ensures compatibility across all packages
 
 #### Fixed Vulnerabilities
