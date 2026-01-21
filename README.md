@@ -10,10 +10,12 @@
 Målet är att bygga mot en unik plattform med **debatt/compare mellan modeller**, **blockchain-logging för verifierbarhet** och **multi-step agenter** – men denna MVP är minimal och körbar lokalt.
 
 ## Funktioner i denna MVP
-- Streaming chat med lokal LLM (t.ex. Qwen2.5-14B-Instruct-AWQ eller Llama-3.1-8B)
-- RAG-berikning: Hämtar relevanta snippets från Vespa Cloud innan svar genereras
-- Transparens i UI: Accordion med källor, retrieved docs och raw prompt
-- Enkel backend med FastAPI + LangGraph för orkestrering
+- **Streaming chat** med lokal LLM – token-by-token response i realtid (aktiverat som default)
+- **RAG-berikning**: Hämtar relevanta snippets från Vespa Cloud innan svar genereras
+- **Transparens i UI**: Accordion med källor, retrieved docs och processing steps
+- **Enkel backend** med FastAPI + LangGraph för orkestrering
+- **Progressiv visning**: Steps och källor visas live under generering
+- **Cancel-support**: Avbryt requests mitt i streaming
 - Inga externa API:er krävs för core (bara vLLM + Vespa Cloud dev-tier)
 
 ## Tech Stack
