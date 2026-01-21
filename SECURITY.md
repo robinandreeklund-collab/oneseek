@@ -27,19 +27,25 @@ We will respond within 48 hours and work on a fix as soon as possible.
 
 #### Dependency Compatibility Updates (2024-01-21 - Latest)
 
-1. **LangChain Community Compatibility Fix**
+1. **OpenAI Client Compatibility Fix**
+   - **Issue**: Dependency conflict between openai 1.10.0 and langchain-openai 0.2.8
+   - **Conflict**: langchain-openai 0.2.8 requires openai>=1.54.0, but had openai 1.10.0
+   - **Fixed**: Upgraded openai from 1.10.0 → 1.54.4
+   - **Impact**: OpenAI client now compatible with langchain-openai
+
+2. **LangChain Community Compatibility Fix**
    - **Issue**: Dependency conflict between langchain 0.3.15 and langchain-community 0.3.28
    - **Conflict**: langchain-community 0.3.28 requires langchain>=0.3.27, but had langchain 0.3.15
    - **Fixed**: Upgraded langchain from 0.3.15 → 0.3.27
    - **Impact**: All langchain packages now fully compatible with each other
 
-2. **LangSmith Compatibility Fix**
+3. **LangSmith Compatibility Fix**
    - **Issue**: Dependency conflict between langchain 0.3.10 and langchain-core 0.3.81
    - **Conflict**: langchain 0.3.10 requires langsmith<0.2.0, but langchain-core 0.3.81 requires langsmith>=0.3.45
    - **Fixed**: Upgraded langchain from 0.3.10 → 0.3.15 (then to 0.3.27)
    - **Impact**: Resolves langsmith version conflict
 
-3. **Pydantic Compatibility Fix**
+4. **Pydantic Compatibility Fix**
    - **Issue**: Dependency conflict between pydantic 2.5.3 and langchain 0.3.10
    - **Affected**: pydantic 2.5.3 (too old for langchain 0.3.10)
    - **Fixed**: Upgraded to pydantic 2.10.3
