@@ -148,9 +148,16 @@ async def stream_chat_response(messages: List[Dict[str, str]]) -> AsyncIterator[
             yield f"2:{json.dumps([metadata])}\n"
         
         # Stream LLM response tokens as text chunks
-        # Format: "0:{token_text}\n" where 0 indicates text chunk
+        # Format: "0:token_text\n" where 0 indicates text chunk
         for token in result.get("tokens", []):
-            yield f"0:{json.dumps(token)}\n"
+            # Escape token if needed, but don't double-encode
+            if isinstance(token, str):
+                # Escape special characters for the stream format
+                escaped_token = token.replace('\n', '\\n').replace('\r', '\\r')
+                yield f"0:{escaped_token}\n"
+            else:
+                # If token is not a string, JSON encode it
+                yield f"0:{json.dumps(token)}\n"
             await asyncio.sleep(0.001)  # Small delay for smoother streaming
         
         # Send final done message
