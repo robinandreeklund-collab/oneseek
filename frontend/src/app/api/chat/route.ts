@@ -38,10 +38,10 @@ export async function POST(req: Request) {
     }
 
     // Stream the response from FastAPI backend to the client
-    // The backend sends Server-Sent Events (SSE)
+    // The backend sends data in Vercel AI SDK format
     return new Response(response.body, {
       headers: {
-        "Content-Type": "text/event-stream",
+        "Content-Type": "text/plain; charset=utf-8",
         "Cache-Control": "no-cache",
         "Connection": "keep-alive",
       },

@@ -96,10 +96,10 @@ async def chat(request: ChatRequest):
         messages = [msg.dict() for msg in request.messages]
         
         if request.stream:
-            # Return streaming response
+            # Return streaming response in AI SDK format
             return StreamingResponse(
                 stream_chat_response(messages),
-                media_type="text/event-stream"
+                media_type="text/plain; charset=utf-8"
             )
         else:
             # Non-streaming response (legacy support)
@@ -125,40 +125,41 @@ async def chat(request: ChatRequest):
 
 async def stream_chat_response(messages: List[Dict[str, str]]) -> AsyncIterator[str]:
     """
-    Stream chat response using SSE (Server-Sent Events)
+    Stream chat response in Vercel AI SDK compatible format
     
-    Yields JSON events for:
-    - steps: Processing steps as they happen
-    - retrieved: Retrieved documents from Vespa
-    - content: LLM response tokens as they're generated
-    - done: Final signal with complete data
+    Streams text tokens and metadata for the frontend.
+    Uses newline-delimited JSON format expected by AI SDK.
     """
     try:
         agent = get_agent()
         
-        # Run agent in background to get retrieval results
-        # We'll stream this first, then stream LLM tokens
+        # Run agent to get result with streaming
         result = await asyncio.to_thread(agent.run_with_streaming, messages)
         
-        # Stream steps as they come
-        for step in result.get("steps", []):
-            yield f"data: {json.dumps({'type': 'step', 'content': step})}\n\n"
-            await asyncio.sleep(0.01)  # Small delay for better UX
+        # Send metadata about steps and retrieved docs first (as annotations)
+        metadata = {
+            "steps": result.get("steps", []),
+            "retrieved": result.get("retrieved", [])
+        }
         
-        # Stream retrieved documents
-        if result.get("retrieved"):
-            yield f"data: {json.dumps({'type': 'retrieved', 'content': result['retrieved']})}\n\n"
+        # Stream annotations/data first
+        if metadata["steps"] or metadata["retrieved"]:
+            # Send as data annotation (AI SDK format)
+            yield f"2:{json.dumps([metadata])}\n"
         
-        # Stream LLM response tokens
+        # Stream LLM response tokens as text chunks
+        # Format: "0:{token_text}\n" where 0 indicates text chunk
         for token in result.get("tokens", []):
-            yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
-            await asyncio.sleep(0.01)
+            yield f"0:{json.dumps(token)}\n"
+            await asyncio.sleep(0.001)  # Small delay for smoother streaming
         
-        # Send final complete response
-        yield f"data: {json.dumps({'type': 'done', 'content': result.get('content', ''), 'retrieved': result.get('retrieved', []), 'steps': result.get('steps', [])})}\n\n"
+        # Send final done message
+        yield "d:\n"
         
     except Exception as e:
-        yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+        # Send error in AI SDK format
+        error_msg = f"Error: {str(e)}"
+        yield f"3:{json.dumps(error_msg)}\n"
 
 
 @app.get("/config")
