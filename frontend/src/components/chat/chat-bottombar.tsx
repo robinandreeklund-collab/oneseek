@@ -82,7 +82,7 @@ export default function ChatBottombar({
                 </span>
               )}
             </div>
-            {!isLoading && (
+            {!isLoading ? (
               <Button
                 size="icon"
                 className="absolute bottom-1.5 md:bottom-2 md:right-2 right-2 z-100"
