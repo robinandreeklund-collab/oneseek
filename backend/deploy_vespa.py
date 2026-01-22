@@ -203,10 +203,14 @@ def get_sample_documents():
 def deploy_to_vespa_cloud(app_package, tenant: str, application: str):
     """Deploy application to Vespa Cloud"""
     
+    key_path = os.getenv("VESPA_KEY_PATH")
+    with open(key_path) as key_file:
+        key_content = key_file.read()
+
     vespa_cloud = VespaCloud(
         tenant=tenant,
         application=application,
-        key_content=open(os.getenv("VESPA_KEY_PATH")).read(),
+        key_content=key_content,
         application_package=app_package
     )
     
