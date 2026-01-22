@@ -136,6 +136,10 @@ async def stream_chat_response(messages: List[Dict[str, str]]) -> AsyncIterator[
         # Run agent to get result with streaming
         result = await asyncio.to_thread(agent.run_with_streaming, messages)
         
+        # Validate result has expected structure
+        if not isinstance(result, dict):
+            raise ValueError(f"Expected dict from agent, got {type(result)}")
+        
         # Send metadata about steps and retrieved docs first (as annotations)
         metadata = {
             "steps": result.get("steps", []),
@@ -147,23 +151,39 @@ async def stream_chat_response(messages: List[Dict[str, str]]) -> AsyncIterator[
             # Send as data annotation (AI SDK format)
             yield f"2:{json.dumps([metadata])}\n"
         
-        # Stream LLM response tokens as text chunks
-        # Format: "0:token_text\n" where 0 indicates text chunk
-        for token in result.get("tokens", []):
-            # Escape token if needed, but don't double-encode
-            if isinstance(token, str):
+        # Get tokens list
+        tokens = result.get("tokens", [])
+        
+        if not tokens:
+            # If no tokens but there's content, send it as a single token
+            content = result.get("content", "")
+            if content:
                 # Escape special characters for the stream format
-                escaped_token = token.replace('\n', '\\n').replace('\r', '\\r')
-                yield f"0:{escaped_token}\n"
-            else:
-                # If token is not a string, JSON encode it
-                yield f"0:{json.dumps(token)}\n"
-            await asyncio.sleep(0.001)  # Small delay for smoother streaming
+                escaped_content = content.replace('\n', '\\n').replace('\r', '\\r')
+                yield f"0:{escaped_content}\n"
+        else:
+            # Stream LLM response tokens as text chunks
+            # Format: "0:token_text\n" where 0 indicates text chunk
+            for token in tokens:
+                # Escape token if needed, but don't double-encode
+                if isinstance(token, str):
+                    # Escape special characters for the stream format
+                    escaped_token = token.replace('\n', '\\n').replace('\r', '\\r')
+                    yield f"0:{escaped_token}\n"
+                else:
+                    # If token is not a string, convert to string first
+                    yield f"0:{str(token)}\n"
+                await asyncio.sleep(0.001)  # Small delay for smoother streaming
         
         # Send final done message
         yield "d:\n"
         
     except Exception as e:
+        # Log the error for debugging
+        import traceback
+        print(f"Streaming error: {e}")
+        print(traceback.format_exc())
+        
         # Send error in AI SDK format
         error_msg = f"Error: {str(e)}"
         yield f"3:{json.dumps(error_msg)}\n"
