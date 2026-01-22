@@ -8,7 +8,6 @@ from typing import TypedDict, List, Dict, Any, Optional
 from langgraph.graph import StateGraph, END
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-from langchain_community.vectorstores import VespaStore
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from dotenv import load_dotenv
 
