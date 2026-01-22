@@ -159,13 +159,9 @@ class OneSeekAgent:
         }
     
     def _get_llm_with_thinking(self, enable_thinking: bool = False) -> ChatOpenAI:
-        """Get LLM instance with or without thinking mode enabled"""
-        if enable_thinking:
-            # Create LLM with thinking mode enabled for Qwen models
-            return ChatOpenAI(
-                **self.base_llm_config,
-                model_kwargs={"enable_thinking": True}
-            )
+        """Get LLM instance - thinking is controlled via system prompt, not API parameters"""
+        # Note: enable_thinking is handled via system prompt instructions, not API parameters
+        # Qwen models respond to instructions to use <think> tags in the system prompt
         return self.llm
     
     def _generate_node(self, state: AgentState) -> AgentState:
