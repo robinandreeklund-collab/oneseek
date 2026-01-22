@@ -22,6 +22,7 @@ class AgentState(TypedDict):
     steps: List[str]
     final_response: str
     system_prompt: Optional[str]
+    enable_thinking: Optional[bool]
 
 
 class OneSeekAgent:
@@ -47,6 +48,15 @@ class OneSeekAgent:
             temperature=float(os.getenv("MODEL_TEMPERATURE", "0.7")),
             max_tokens=int(os.getenv("MAX_TOKENS", "2048"))
         )
+        
+        # Store base config for creating LLM with different settings
+        self.base_llm_config = {
+            "base_url": self.vllm_url,
+            "api_key": "EMPTY",
+            "model": self.vllm_model,
+            "temperature": float(os.getenv("MODEL_TEMPERATURE", "0.7")),
+            "max_tokens": int(os.getenv("MAX_TOKENS", "2048"))
+        }
         
         # Initialize Vespa retriever if configured
         self.retriever = None
@@ -149,6 +159,16 @@ class OneSeekAgent:
             "steps": steps
         }
     
+    def _get_llm_with_thinking(self, enable_thinking: bool = False) -> ChatOpenAI:
+        """Get LLM instance with or without thinking mode enabled"""
+        if enable_thinking:
+            # Create LLM with thinking mode enabled for Qwen models
+            return ChatOpenAI(
+                **self.base_llm_config,
+                model_kwargs={"enable_thinking": True}
+            )
+        return self.llm
+    
     def _generate_node(self, state: AgentState) -> AgentState:
         """Generate response using LLM with retrieved context"""
         steps = state.get("steps", [])
@@ -157,6 +177,7 @@ class OneSeekAgent:
         messages = state.get("messages", [])
         retrieved_docs = state.get("retrieved_docs", [])
         custom_system_prompt = state.get("system_prompt")
+        enable_thinking = state.get("enable_thinking", False)
         
         # Build context from retrieved documents
         context = ""
@@ -182,6 +203,14 @@ class OneSeekAgent:
                 "If the context is not relevant, answer based on your knowledge."
             )
         
+        # Add thinking instructions if enabled
+        if enable_thinking:
+            system_content = (
+                "Du måste tänka på svenska. Använd <think> taggar för att visa ditt resonemang på svenska. "
+                "Think in Swedish and show your reasoning in <think> tags.\n\n"
+                + system_content
+            )
+        
         if context:
             system_content += f"\n\n{context}"
         
@@ -197,9 +226,12 @@ class OneSeekAgent:
             elif role == "assistant":
                 chat_messages.append(AIMessage(content=content))
         
+        # Get appropriate LLM (with or without thinking)
+        llm = self._get_llm_with_thinking(enable_thinking)
+        
         # Generate response
         try:
-            response = self.llm.invoke(chat_messages)
+            response = llm.invoke(chat_messages)
             final_response = response.content
             steps.append("Response generated successfully")
         except Exception as e:
@@ -222,6 +254,7 @@ class OneSeekAgent:
         messages = state.get("messages", [])
         retrieved_docs = state.get("retrieved_docs", [])
         custom_system_prompt = state.get("system_prompt")
+        enable_thinking = state.get("enable_thinking", False)
         
         # Build context from retrieved documents
         context = ""
@@ -247,6 +280,14 @@ class OneSeekAgent:
                 "If the context is not relevant, answer based on your knowledge."
             )
         
+        # Add thinking instructions if enabled
+        if enable_thinking:
+            system_content = (
+                "Du måste tänka på svenska. Använd <think> taggar för att visa ditt resonemang på svenska. "
+                "Think in Swedish and show your reasoning in <think> tags.\n\n"
+                + system_content
+            )
+        
         if context:
             system_content += f"\n\n{context}"
         
@@ -262,10 +303,13 @@ class OneSeekAgent:
             elif role == "assistant":
                 chat_messages.append(AIMessage(content=content))
         
+        # Get appropriate LLM (with or without thinking)
+        llm = self._get_llm_with_thinking(enable_thinking)
+        
         # Generate response with streaming
         final_response = ""
         try:
-            for chunk in self.llm.stream(chat_messages):
+            for chunk in llm.stream(chat_messages):
                 token = chunk.content
                 if token:
                     final_response += token
@@ -282,14 +326,15 @@ class OneSeekAgent:
             "steps": steps
         }
     
-    def run(self, messages: List[Dict[str, str]], system_prompt: Optional[str] = None) -> Dict[str, Any]:
+    def run(self, messages: List[Dict[str, str]], system_prompt: Optional[str] = None, enable_thinking: Optional[bool] = False) -> Dict[str, Any]:
         """Run the agent workflow (non-streaming)"""
         initial_state: AgentState = {
             "messages": messages,
             "retrieved_docs": [],
             "steps": [],
             "final_response": "",
-            "system_prompt": system_prompt
+            "system_prompt": system_prompt,
+            "enable_thinking": enable_thinking
         }
         
         # Execute the graph
@@ -301,7 +346,7 @@ class OneSeekAgent:
             "steps": final_state.get("steps", [])
         }
     
-    def run_with_streaming(self, messages: List[Dict[str, str]], system_prompt: Optional[str] = None) -> Dict[str, Any]:
+    def run_with_streaming(self, messages: List[Dict[str, str]], system_prompt: Optional[str] = None, enable_thinking: Optional[bool] = False) -> Dict[str, Any]:
         """Run the agent workflow with streaming support"""
         tokens = []
         steps_list = []
@@ -319,7 +364,8 @@ class OneSeekAgent:
             "retrieved_docs": [],
             "steps": [],
             "final_response": "",
-            "system_prompt": system_prompt
+            "system_prompt": system_prompt,
+            "enable_thinking": enable_thinking
         }
         
         # Run retrieve node

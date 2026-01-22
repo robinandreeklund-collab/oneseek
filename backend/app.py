@@ -46,6 +46,7 @@ class ChatRequest(BaseModel):
     system_prompt: Optional[str] = None  # Custom system prompt from frontend
     temperature: Optional[float] = None  # Model temperature
     model: Optional[str] = None  # Model selection
+    enable_thinking: Optional[bool] = False  # Enable thinking mode (Qwen models)
 
 
 class RetrievedDoc(BaseModel):
@@ -101,13 +102,13 @@ async def chat(request: ChatRequest):
         if request.stream:
             # Return streaming response in AI SDK format
             return StreamingResponse(
-                stream_chat_response(messages, request.system_prompt),
+                stream_chat_response(messages, request.system_prompt, request.enable_thinking),
                 media_type="text/plain; charset=utf-8"
             )
         else:
             # Non-streaming response (legacy support)
             agent = get_agent()
-            result = agent.run(messages, system_prompt=request.system_prompt)
+            result = agent.run(messages, system_prompt=request.system_prompt, enable_thinking=request.enable_thinking)
             
             retrieved_docs = [
                 RetrievedDoc(**doc) for doc in result.get("retrieved", [])
@@ -126,7 +127,7 @@ async def chat(request: ChatRequest):
         )
 
 
-async def stream_chat_response(messages: List[Dict[str, str]], system_prompt: Optional[str] = None) -> AsyncIterator[str]:
+async def stream_chat_response(messages: List[Dict[str, str]], system_prompt: Optional[str] = None, enable_thinking: Optional[bool] = False) -> AsyncIterator[str]:
     """
     Stream chat response in Vercel AI SDK compatible format
     
@@ -137,7 +138,7 @@ async def stream_chat_response(messages: List[Dict[str, str]], system_prompt: Op
         agent = get_agent()
         
         # Run agent to get result with streaming
-        result = await asyncio.to_thread(agent.run_with_streaming, messages, system_prompt=system_prompt)
+        result = await asyncio.to_thread(agent.run_with_streaming, messages, system_prompt=system_prompt, enable_thinking=enable_thinking)
         
         # Send metadata about steps and retrieved docs first (as annotations)
         metadata = {

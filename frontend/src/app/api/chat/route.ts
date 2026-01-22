@@ -22,6 +22,7 @@ export async function POST(req: Request) {
         system_prompt: chatOptions?.systemPrompt,
         temperature: chatOptions?.temperature || 0.7,
         model: chatOptions?.selectedModel,
+        enable_thinking: chatOptions?.enableThinking || false,
       }),
     });
 

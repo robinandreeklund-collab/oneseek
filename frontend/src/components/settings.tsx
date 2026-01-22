@@ -4,6 +4,8 @@ import ClearChatsButton from "./settings-clear-chats";
 import SettingsThemeToggle from "./settings-theme-toggle";
 import SystemPrompt, { SystemPromptProps } from "./system-prompt";
 import { Input } from "./ui/input";
+import { Switch } from "./ui/switch";
+import { Label } from "./ui/label";
 
 const TemperatureSlider = ({
   chatOptions,
@@ -53,6 +55,28 @@ const TemperatureSlider = ({
   );
 };
 
+const ThinkingToggle = ({
+  chatOptions,
+  setChatOptions,
+}: SystemPromptProps) => {
+  const handleThinkingToggle = (checked: boolean) => {
+    setChatOptions({ ...chatOptions, enableThinking: checked });
+  };
+
+  return (
+    <div className="mx-2 my-4 flex items-center justify-between">
+      <Label htmlFor="thinking-mode" className="text-xs font-medium">
+        Thinking Mode (Svenska)
+      </Label>
+      <Switch
+        id="thinking-mode"
+        checked={chatOptions.enableThinking || false}
+        onCheckedChange={handleThinkingToggle}
+      />
+    </div>
+  );
+};
+
 export default function Settings({
   chatOptions,
   setChatOptions,
@@ -61,6 +85,10 @@ export default function Settings({
     <>
       <SystemPrompt chatOptions={chatOptions} setChatOptions={setChatOptions} />
       <TemperatureSlider
+        chatOptions={chatOptions}
+        setChatOptions={setChatOptions}
+      />
+      <ThinkingToggle
         chatOptions={chatOptions}
         setChatOptions={setChatOptions}
       />
