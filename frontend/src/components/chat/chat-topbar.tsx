@@ -67,7 +67,8 @@ export default function ChatTopbar({
       setChatOptions({ ...chatOptions, selectedModel: modelNames[0] });
     } catch (error) {
       setChatOptions({ ...chatOptions, selectedModel: undefined });
-      toast.error(error as string);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+      toast.error(errorMessage);
     }
   };
 
