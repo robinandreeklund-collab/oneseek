@@ -12,7 +12,6 @@ from typing import List, Dict, Any, Optional, AsyncIterator
 import uvicorn
 import json
 import asyncio
-import os
 from agent import get_agent
 
 app = FastAPI(
@@ -92,19 +91,18 @@ async def chat(request: ChatRequest):
     Accepts a list of messages and returns an AI response enhanced with
     RAG context from Vespa. Streams the response by default for better UX.
     """
-    # Convert Pydantic models to dicts for the agent
-    messages = [msg.dict() for msg in request.messages]
-    
-    if request.stream:
-        # Return streaming response in AI SDK format
-        # Note: Errors must be handled within the stream itself
-        return StreamingResponse(
-            stream_chat_response(messages),
-            media_type="text/plain; charset=utf-8"
-        )
-    else:
-        # Non-streaming response (legacy support)
-        try:
+    try:
+        # Convert Pydantic models to dicts for the agent
+        messages = [msg.dict() for msg in request.messages]
+        
+        if request.stream:
+            # Return streaming response in AI SDK format
+            return StreamingResponse(
+                stream_chat_response(messages),
+                media_type="text/plain; charset=utf-8"
+            )
+        else:
+            # Non-streaming response (legacy support)
             agent = get_agent()
             result = agent.run(messages)
             
@@ -117,11 +115,12 @@ async def chat(request: ChatRequest):
                 retrieved=retrieved_docs,
                 steps=result.get("steps", [])
             )
-        except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Error processing chat request: {str(e)}"
-            )
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error processing chat request: {str(e)}"
+        )
 
 
 async def stream_chat_response(messages: List[Dict[str, str]]) -> AsyncIterator[str]:
@@ -130,57 +129,12 @@ async def stream_chat_response(messages: List[Dict[str, str]]) -> AsyncIterator[
     
     Streams text tokens and metadata for the frontend.
     Uses newline-delimited JSON format expected by AI SDK.
-    
-    IMPORTANT: This generator MUST yield something immediately to start
-    the streaming response, preventing FastAPI from returning HTML error pages.
     """
-    agent = None
-    result = None
-    
     try:
-        # Get agent instance (might fail if vLLM is not available)
-        try:
-            agent = get_agent()
-        except Exception as agent_error:
-            # Agent initialization failed - yield error immediately
-            import traceback
-            error_details = traceback.format_exc()
-            print(f"=" * 80)
-            print(f"AGENT INITIALIZATION ERROR:")
-            print(f"Error: {str(agent_error)}")
-            print(f"Traceback:")
-            print(error_details)
-            print(f"=" * 80)
-            
-            yield f"0:I apologize, but I'm unable to connect to the AI model. Please ensure vLLM is running on {os.getenv('VLLM_URL', 'http://localhost:8000/v1')}.\n"
-            yield "d:\n"
-            return
+        agent = get_agent()
         
-        # Run agent to get result with streaming (might fail during execution)
-        try:
-            result = await asyncio.to_thread(agent.run_with_streaming, messages)
-        except Exception as run_error:
-            # Execution failed - yield error
-            import traceback
-            error_details = traceback.format_exc()
-            print(f"=" * 80)
-            print(f"AGENT EXECUTION ERROR:")
-            print(f"Error: {str(run_error)}")
-            print(f"Traceback:")
-            print(error_details)
-            print(f"=" * 80)
-            
-            yield f"0:I apologize, but I encountered an error while processing your request: {str(run_error)}\n"
-            yield "d:\n"
-            return
-        
-        # Validate result has expected structure
-        if not isinstance(result, dict):
-            error_msg = f"Invalid result type from agent: {type(result)}"
-            print(error_msg)
-            yield f"0:I apologize, but I received an unexpected response format from the AI.\n"
-            yield "d:\n"
-            return
+        # Run agent to get result with streaming
+        result = await asyncio.to_thread(agent.run_with_streaming, messages)
         
         # Send metadata about steps and retrieved docs first (as annotations)
         metadata = {
@@ -190,70 +144,26 @@ async def stream_chat_response(messages: List[Dict[str, str]]) -> AsyncIterator[
         
         # Stream annotations/data first
         if metadata["steps"] or metadata["retrieved"]:
-            try:
-                # Send as data annotation (AI SDK format)
-                yield f"2:{json.dumps([metadata])}\n"
-            except Exception as meta_error:
-                print(f"Error sending metadata: {meta_error}")
-                # Continue without metadata
+            # Send as data annotation (AI SDK format)
+            yield f"2:{json.dumps([metadata])}\n"
         
-        # Get tokens list
-        tokens = result.get("tokens", [])
-        
-        if not tokens:
-            # If no tokens but there's content, send it as a single token
-            content = result.get("content", "")
-            if content:
-                # Escape special characters for the stream format
-                escaped_content = content.replace('\n', '\\n').replace('\r', '\\r')
-                yield f"0:{escaped_content}\n"
-            else:
-                # No content at all - send a fallback message
-                yield f"0:I apologize, but I was unable to generate a response.\n"
-        else:
-            # Stream LLM response tokens as text chunks
-            # Format: "0:token_text\n" where 0 indicates text chunk
-            for token in tokens:
-                try:
-                    # Escape token if needed, but don't double-encode
-                    if isinstance(token, str):
-                        # Escape special characters for the stream format
-                        escaped_token = token.replace('\n', '\\n').replace('\r', '\\r')
-                        yield f"0:{escaped_token}\n"
-                    else:
-                        # If token is not a string, convert to string first
-                        yield f"0:{str(token)}\n"
-                    await asyncio.sleep(0.001)  # Small delay for smoother streaming
-                except Exception as token_error:
-                    print(f"Error streaming token: {token_error}")
-                    # Skip this token and continue
-                    continue
+        # Stream LLM response tokens as text chunks
+        # Format: "0:token_text\n" where 0 indicates text chunk
+        for token in result.get("tokens", []):
+            # Convert token to string and send as raw text (not JSON-encoded)
+            token_str = str(token) if not isinstance(token, str) else token
+            # Escape newlines and carriage returns for stream format
+            escaped_token = token_str.replace('\n', '\\n').replace('\r', '\\r')
+            yield f"0:{escaped_token}\n"
+            await asyncio.sleep(0.001)  # Small delay for smoother streaming
         
         # Send final done message
         yield "d:\n"
         
     except Exception as e:
-        # Catch-all for any unexpected errors
-        # Log the error for debugging
-        import traceback
-        error_details = traceback.format_exc()
-        print(f"=" * 80)
-        print(f"UNEXPECTED STREAMING ERROR:")
-        print(f"Error type: {type(e).__name__}")
-        print(f"Error message: {str(e)}")
-        print(f"Full traceback:")
-        print(error_details)
-        print(f"=" * 80)
-        
-        # Send error as plain text token (not JSON encoded)
-        try:
-            error_text = f"I apologize, but I encountered an unexpected error: {str(e)}"
-            yield f"0:{error_text}\n"
-            yield "d:\n"
-        except:
-            # Last resort - yield something to prevent HTML error page
-            yield "0:Error\n"
-            yield "d:\n"
+        # Send error in AI SDK format
+        error_msg = f"Error: {str(e)}"
+        yield f"3:{json.dumps(error_msg)}\n"
 
 
 @app.get("/config")
