@@ -1,0 +1,10 @@
+.next/
+node_modules/
+.env
+next-env.d.ts
+Dockerfile
+.dockerignore
+Makefile
+.github
+.git
+.yarn
