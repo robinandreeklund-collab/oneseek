@@ -1,28 +1,15 @@
 import llama3Tokenizer from "llama3-tokenizer-js";
+import { Message } from "ai/react";
 
-export function getTokenLimit(model: string): number {
-  const limits: Record<string, number> = {
-    "llama3:latest": 8192,
-    "llama3:8b": 8192,
-    "llama3:70b": 8192,
-    "qwen:7b": 32768,
-    "qwen:14b": 32768,
-    "qwen:32b": 32768,
-    "qwen:72b": 32768,
-    "qwen2:0.5b": 32768,
-    "qwen2:1.5b": 32768,
-    "qwen2:7b": 131072,
-    "qwen2:72b": 131072,
-    "qwen2.5:0.5b": 32768,
-    "qwen2.5:1.5b": 32768,
-    "qwen2.5:3b": 32768,
-    "qwen2.5:7b": 131072,
-    "qwen2.5:14b": 131072,
-    "qwen2.5:32b": 131072,
-    "qwen2.5:72b": 131072,
-  };
-
-  return limits[model] || 4096; // Default to 4096 if model not found
+export async function getTokenLimit(basePath: string): Promise<number> {
+  try {
+    // For OneSeek.ai, we use a default token limit since we're using FastAPI backend
+    // The backend handles the actual model communication with vLLM
+    return 8192; // Default llama3 token limit
+  } catch (error) {
+    console.error("Error getting token limit:", error);
+    return 4096; // Fallback to conservative limit
+  }
 }
 
 export function countTokens(text: string): number {
@@ -33,4 +20,20 @@ export function countTokens(text: string): number {
     // Fallback: approximate token count (1 token ≈ 4 characters)
     return Math.ceil(text.length / 4);
   }
+}
+
+export function encodeChat(messages: Message[]): number {
+  // Estimate tokens for the entire chat history
+  let totalTokens = 0;
+  
+  for (const message of messages) {
+    // Add tokens for role (system/user/assistant)
+    totalTokens += countTokens(message.role);
+    // Add tokens for content
+    totalTokens += countTokens(message.content);
+    // Add overhead for message formatting (approximately 4 tokens per message)
+    totalTokens += 4;
+  }
+  
+  return totalTokens;
 }
