@@ -21,6 +21,7 @@ class AgentState(TypedDict):
     retrieved_docs: List[Dict[str, Any]]
     steps: List[str]
     final_response: str
+    system_prompt: Optional[str]
 
 
 class OneSeekAgent:
@@ -155,6 +156,7 @@ class OneSeekAgent:
         
         messages = state.get("messages", [])
         retrieved_docs = state.get("retrieved_docs", [])
+        custom_system_prompt = state.get("system_prompt")
         
         # Build context from retrieved documents
         context = ""
@@ -169,12 +171,17 @@ class OneSeekAgent:
         chat_messages = []
         
         # System message with context
-        system_content = (
-            "You are a helpful AI assistant. "
-            "Use the following retrieved context to enhance your answers. "
-            "If the context is relevant, incorporate it naturally into your response. "
-            "If the context is not relevant, answer based on your knowledge."
-        )
+        # Use custom system prompt if provided, otherwise use default
+        if custom_system_prompt:
+            system_content = custom_system_prompt
+        else:
+            system_content = (
+                "You are a helpful AI assistant. "
+                "Use the following retrieved context to enhance your answers. "
+                "If the context is relevant, incorporate it naturally into your response. "
+                "If the context is not relevant, answer based on your knowledge."
+            )
+        
         if context:
             system_content += f"\n\n{context}"
         
@@ -214,6 +221,7 @@ class OneSeekAgent:
         
         messages = state.get("messages", [])
         retrieved_docs = state.get("retrieved_docs", [])
+        custom_system_prompt = state.get("system_prompt")
         
         # Build context from retrieved documents
         context = ""
@@ -228,12 +236,17 @@ class OneSeekAgent:
         chat_messages = []
         
         # System message with context
-        system_content = (
-            "You are a helpful AI assistant. "
-            "Use the following retrieved context to enhance your answers. "
-            "If the context is relevant, incorporate it naturally into your response. "
-            "If the context is not relevant, answer based on your knowledge."
-        )
+        # Use custom system prompt if provided, otherwise use default
+        if custom_system_prompt:
+            system_content = custom_system_prompt
+        else:
+            system_content = (
+                "You are a helpful AI assistant. "
+                "Use the following retrieved context to enhance your answers. "
+                "If the context is relevant, incorporate it naturally into your response. "
+                "If the context is not relevant, answer based on your knowledge."
+            )
+        
         if context:
             system_content += f"\n\n{context}"
         
@@ -269,13 +282,14 @@ class OneSeekAgent:
             "steps": steps
         }
     
-    def run(self, messages: List[Dict[str, str]]) -> Dict[str, Any]:
+    def run(self, messages: List[Dict[str, str]], system_prompt: Optional[str] = None) -> Dict[str, Any]:
         """Run the agent workflow (non-streaming)"""
         initial_state: AgentState = {
             "messages": messages,
             "retrieved_docs": [],
             "steps": [],
-            "final_response": ""
+            "final_response": "",
+            "system_prompt": system_prompt
         }
         
         # Execute the graph
@@ -287,7 +301,7 @@ class OneSeekAgent:
             "steps": final_state.get("steps", [])
         }
     
-    def run_with_streaming(self, messages: List[Dict[str, str]]) -> Dict[str, Any]:
+    def run_with_streaming(self, messages: List[Dict[str, str]], system_prompt: Optional[str] = None) -> Dict[str, Any]:
         """Run the agent workflow with streaming support"""
         tokens = []
         steps_list = []
@@ -304,7 +318,8 @@ class OneSeekAgent:
             "messages": messages,
             "retrieved_docs": [],
             "steps": [],
-            "final_response": ""
+            "final_response": "",
+            "system_prompt": system_prompt
         }
         
         # Run retrieve node

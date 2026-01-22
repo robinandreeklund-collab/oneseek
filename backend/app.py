@@ -43,6 +43,9 @@ class ChatRequest(BaseModel):
     """Request model for /chat endpoint"""
     messages: List[Message]
     stream: Optional[bool] = True  # Streaming is default
+    system_prompt: Optional[str] = None  # Custom system prompt from frontend
+    temperature: Optional[float] = None  # Model temperature
+    model: Optional[str] = None  # Model selection
 
 
 class RetrievedDoc(BaseModel):
@@ -98,13 +101,13 @@ async def chat(request: ChatRequest):
         if request.stream:
             # Return streaming response in AI SDK format
             return StreamingResponse(
-                stream_chat_response(messages),
+                stream_chat_response(messages, request.system_prompt),
                 media_type="text/plain; charset=utf-8"
             )
         else:
             # Non-streaming response (legacy support)
             agent = get_agent()
-            result = agent.run(messages)
+            result = agent.run(messages, system_prompt=request.system_prompt)
             
             retrieved_docs = [
                 RetrievedDoc(**doc) for doc in result.get("retrieved", [])
@@ -123,7 +126,7 @@ async def chat(request: ChatRequest):
         )
 
 
-async def stream_chat_response(messages: List[Dict[str, str]]) -> AsyncIterator[str]:
+async def stream_chat_response(messages: List[Dict[str, str]], system_prompt: Optional[str] = None) -> AsyncIterator[str]:
     """
     Stream chat response in Vercel AI SDK compatible format
     
@@ -134,7 +137,7 @@ async def stream_chat_response(messages: List[Dict[str, str]]) -> AsyncIterator[
         agent = get_agent()
         
         # Run agent to get result with streaming
-        result = await asyncio.to_thread(agent.run_with_streaming, messages)
+        result = await asyncio.to_thread(agent.run_with_streaming, messages, system_prompt=system_prompt)
         
         # Send metadata about steps and retrieved docs first (as annotations)
         metadata = {
