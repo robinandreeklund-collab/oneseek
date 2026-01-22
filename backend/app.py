@@ -12,6 +12,7 @@ from typing import List, Dict, Any, Optional, AsyncIterator
 import uvicorn
 import json
 import asyncio
+import os
 from agent import get_agent
 
 app = FastAPI(
@@ -129,19 +130,55 @@ async def stream_chat_response(messages: List[Dict[str, str]]) -> AsyncIterator[
     
     Streams text tokens and metadata for the frontend.
     Uses newline-delimited JSON format expected by AI SDK.
+    
+    IMPORTANT: This generator MUST yield something immediately to start
+    the streaming response, preventing FastAPI from returning HTML error pages.
     """
+    agent = None
+    result = None
+    
     try:
-        # Get agent instance
-        agent = get_agent()
+        # Get agent instance (might fail if vLLM is not available)
+        try:
+            agent = get_agent()
+        except Exception as agent_error:
+            # Agent initialization failed - yield error immediately
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"=" * 80)
+            print(f"AGENT INITIALIZATION ERROR:")
+            print(f"Error: {str(agent_error)}")
+            print(f"Traceback:")
+            print(error_details)
+            print(f"=" * 80)
+            
+            yield f"0:I apologize, but I'm unable to connect to the AI model. Please ensure vLLM is running on {os.getenv('VLLM_URL', 'http://localhost:8000/v1')}.\n"
+            yield "d:\n"
+            return
         
-        # Run agent to get result with streaming
-        result = await asyncio.to_thread(agent.run_with_streaming, messages)
+        # Run agent to get result with streaming (might fail during execution)
+        try:
+            result = await asyncio.to_thread(agent.run_with_streaming, messages)
+        except Exception as run_error:
+            # Execution failed - yield error
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"=" * 80)
+            print(f"AGENT EXECUTION ERROR:")
+            print(f"Error: {str(run_error)}")
+            print(f"Traceback:")
+            print(error_details)
+            print(f"=" * 80)
+            
+            yield f"0:I apologize, but I encountered an error while processing your request: {str(run_error)}\n"
+            yield "d:\n"
+            return
         
         # Validate result has expected structure
         if not isinstance(result, dict):
             error_msg = f"Invalid result type from agent: {type(result)}"
             print(error_msg)
-            yield f"0:I apologize, but I encountered an error processing your request.\n"
+            yield f"0:I apologize, but I received an unexpected response format from the AI.\n"
             yield "d:\n"
             return
         
@@ -196,11 +233,12 @@ async def stream_chat_response(messages: List[Dict[str, str]]) -> AsyncIterator[
         yield "d:\n"
         
     except Exception as e:
+        # Catch-all for any unexpected errors
         # Log the error for debugging
         import traceback
         error_details = traceback.format_exc()
         print(f"=" * 80)
-        print(f"STREAMING ERROR:")
+        print(f"UNEXPECTED STREAMING ERROR:")
         print(f"Error type: {type(e).__name__}")
         print(f"Error message: {str(e)}")
         print(f"Full traceback:")
@@ -209,12 +247,13 @@ async def stream_chat_response(messages: List[Dict[str, str]]) -> AsyncIterator[
         
         # Send error as plain text token (not JSON encoded)
         try:
-            error_text = f"I apologize, but I encountered an error: {str(e)}"
+            error_text = f"I apologize, but I encountered an unexpected error: {str(e)}"
             yield f"0:{error_text}\n"
             yield "d:\n"
         except:
-            # Last resort - just close the stream
-            pass
+            # Last resort - yield something to prevent HTML error page
+            yield "0:Error\n"
+            yield "d:\n"
 
 
 @app.get("/config")
