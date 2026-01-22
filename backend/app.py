@@ -91,18 +91,19 @@ async def chat(request: ChatRequest):
     Accepts a list of messages and returns an AI response enhanced with
     RAG context from Vespa. Streams the response by default for better UX.
     """
-    try:
-        # Convert Pydantic models to dicts for the agent
-        messages = [msg.dict() for msg in request.messages]
-        
-        if request.stream:
-            # Return streaming response in AI SDK format
-            return StreamingResponse(
-                stream_chat_response(messages),
-                media_type="text/plain; charset=utf-8"
-            )
-        else:
-            # Non-streaming response (legacy support)
+    # Convert Pydantic models to dicts for the agent
+    messages = [msg.dict() for msg in request.messages]
+    
+    if request.stream:
+        # Return streaming response in AI SDK format
+        # Note: Errors must be handled within the stream itself
+        return StreamingResponse(
+            stream_chat_response(messages),
+            media_type="text/plain; charset=utf-8"
+        )
+    else:
+        # Non-streaming response (legacy support)
+        try:
             agent = get_agent()
             result = agent.run(messages)
             
@@ -115,12 +116,11 @@ async def chat(request: ChatRequest):
                 retrieved=retrieved_docs,
                 steps=result.get("steps", [])
             )
-    
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error processing chat request: {str(e)}"
-        )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error processing chat request: {str(e)}"
+            )
 
 
 async def stream_chat_response(messages: List[Dict[str, str]]) -> AsyncIterator[str]:
@@ -131,6 +131,7 @@ async def stream_chat_response(messages: List[Dict[str, str]]) -> AsyncIterator[
     Uses newline-delimited JSON format expected by AI SDK.
     """
     try:
+        # Get agent instance
         agent = get_agent()
         
         # Run agent to get result with streaming
@@ -138,7 +139,11 @@ async def stream_chat_response(messages: List[Dict[str, str]]) -> AsyncIterator[
         
         # Validate result has expected structure
         if not isinstance(result, dict):
-            raise ValueError(f"Expected dict from agent, got {type(result)}")
+            error_msg = f"Invalid result type from agent: {type(result)}"
+            print(error_msg)
+            yield f"0:I apologize, but I encountered an error processing your request.\n"
+            yield "d:\n"
+            return
         
         # Send metadata about steps and retrieved docs first (as annotations)
         metadata = {
@@ -148,8 +153,12 @@ async def stream_chat_response(messages: List[Dict[str, str]]) -> AsyncIterator[
         
         # Stream annotations/data first
         if metadata["steps"] or metadata["retrieved"]:
-            # Send as data annotation (AI SDK format)
-            yield f"2:{json.dumps([metadata])}\n"
+            try:
+                # Send as data annotation (AI SDK format)
+                yield f"2:{json.dumps([metadata])}\n"
+            except Exception as meta_error:
+                print(f"Error sending metadata: {meta_error}")
+                # Continue without metadata
         
         # Get tokens list
         tokens = result.get("tokens", [])
@@ -161,19 +170,27 @@ async def stream_chat_response(messages: List[Dict[str, str]]) -> AsyncIterator[
                 # Escape special characters for the stream format
                 escaped_content = content.replace('\n', '\\n').replace('\r', '\\r')
                 yield f"0:{escaped_content}\n"
+            else:
+                # No content at all - send a fallback message
+                yield f"0:I apologize, but I was unable to generate a response.\n"
         else:
             # Stream LLM response tokens as text chunks
             # Format: "0:token_text\n" where 0 indicates text chunk
             for token in tokens:
-                # Escape token if needed, but don't double-encode
-                if isinstance(token, str):
-                    # Escape special characters for the stream format
-                    escaped_token = token.replace('\n', '\\n').replace('\r', '\\r')
-                    yield f"0:{escaped_token}\n"
-                else:
-                    # If token is not a string, convert to string first
-                    yield f"0:{str(token)}\n"
-                await asyncio.sleep(0.001)  # Small delay for smoother streaming
+                try:
+                    # Escape token if needed, but don't double-encode
+                    if isinstance(token, str):
+                        # Escape special characters for the stream format
+                        escaped_token = token.replace('\n', '\\n').replace('\r', '\\r')
+                        yield f"0:{escaped_token}\n"
+                    else:
+                        # If token is not a string, convert to string first
+                        yield f"0:{str(token)}\n"
+                    await asyncio.sleep(0.001)  # Small delay for smoother streaming
+                except Exception as token_error:
+                    print(f"Error streaming token: {token_error}")
+                    # Skip this token and continue
+                    continue
         
         # Send final done message
         yield "d:\n"
@@ -181,12 +198,23 @@ async def stream_chat_response(messages: List[Dict[str, str]]) -> AsyncIterator[
     except Exception as e:
         # Log the error for debugging
         import traceback
-        print(f"Streaming error: {e}")
-        print(traceback.format_exc())
+        error_details = traceback.format_exc()
+        print(f"=" * 80)
+        print(f"STREAMING ERROR:")
+        print(f"Error type: {type(e).__name__}")
+        print(f"Error message: {str(e)}")
+        print(f"Full traceback:")
+        print(error_details)
+        print(f"=" * 80)
         
-        # Send error in AI SDK format
-        error_msg = f"Error: {str(e)}"
-        yield f"3:{json.dumps(error_msg)}\n"
+        # Send error as plain text token (not JSON encoded)
+        try:
+            error_text = f"I apologize, but I encountered an error: {str(e)}"
+            yield f"0:{error_text}\n"
+            yield "d:\n"
+        except:
+            # Last resort - just close the stream
+            pass
 
 
 @app.get("/config")
