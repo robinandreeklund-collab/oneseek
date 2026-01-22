@@ -45,7 +45,6 @@ export default function ChatTopbar({
 
   const currentModel = chatOptions && chatOptions.selectedModel;
   const [tokenLimit, setTokenLimit] = React.useState<number>(4096);
-  const [error, setError] = React.useState<string | undefined>(undefined);
 
   const fetchData = async () => {
     if (!hasMounted) {

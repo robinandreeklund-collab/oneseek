@@ -74,15 +74,15 @@ export default function ChatBottombar({
             <div className="text-xs text-muted-foreground absolute right-14 px-0 text-right">
               {tokenCount > tokenLimit ? (
                 <span className="text-red-700">
-                  {tokenCount} token{tokenCount == 1 ? "" : "s"}
+                  {tokenCount} token{tokenCount === 1 ? "" : "s"}
                 </span>
               ) : (
                 <span>
-                  {tokenCount} token{tokenCount == 1 ? "" : "s"}
+                  {tokenCount} token{tokenCount === 1 ? "" : "s"}
                 </span>
               )}
             </div>
-            {!isLoading ? (
+            {!isLoading && (
               <Button
                 size="icon"
                 className="absolute bottom-1.5 md:bottom-2 md:right-2 right-2 z-100"

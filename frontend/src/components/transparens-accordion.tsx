@@ -44,7 +44,7 @@ export function TransparensAccordion({
       <CollapsibleTrigger className="flex w-full items-center justify-between px-4 py-2 text-sm font-medium hover:bg-muted/40 transition-colors">
         <span className="flex items-center gap-2">
           <FileText className="h-4 w-4" />
-          Källor &amp; steg
+          Källor & steg
           {retrieved.length > 0 && (
             <span className="text-xs text-muted-foreground">
               ({retrieved.length} dokument)
@@ -124,7 +124,7 @@ export function TransparensAccordion({
             </div>
           </div>
         )}
-      </Collapsible Content>
+      </CollapsibleContent>
     </Collapsible>
   );
 }
