@@ -91,18 +91,19 @@ async def chat(request: ChatRequest):
     Accepts a list of messages and returns an AI response enhanced with
     RAG context from Vespa. Streams the response by default for better UX.
     """
-    try:
-        # Convert Pydantic models to dicts for the agent
-        messages = [msg.dict() for msg in request.messages]
-        
-        if request.stream:
-            # Return streaming response in AI SDK format
-            return StreamingResponse(
-                stream_chat_response(messages),
-                media_type="text/plain; charset=utf-8"
-            )
-        else:
-            # Non-streaming response (legacy support)
+    # Convert Pydantic models to dicts for the agent
+    messages = [msg.dict() for msg in request.messages]
+    
+    if request.stream:
+        # Return streaming response in AI SDK format
+        # All errors are handled inside the generator to avoid HTML error pages
+        return StreamingResponse(
+            stream_chat_response(messages),
+            media_type="text/plain; charset=utf-8"
+        )
+    else:
+        # Non-streaming response (legacy support)
+        try:
             agent = get_agent()
             result = agent.run(messages)
             
@@ -115,12 +116,11 @@ async def chat(request: ChatRequest):
                 retrieved=retrieved_docs,
                 steps=result.get("steps", [])
             )
-    
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error processing chat request: {str(e)}"
-        )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error processing chat request: {str(e)}"
+            )
 
 
 async def stream_chat_response(messages: List[Dict[str, str]]) -> AsyncIterator[str]:
