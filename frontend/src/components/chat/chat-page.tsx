@@ -43,9 +43,13 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
     },
     onFinish: (message, { data }) => {
       // Extract source metadata from stream data
+      console.log("onFinish called with data:", data);
       if (data && Array.isArray(data)) {
+        console.log("Data is array with length:", data.length);
         for (const item of data) {
+          console.log("Processing item:", item);
           if (item.retrieved && Array.isArray(item.retrieved)) {
+            console.log("Found retrieved sources:", item.retrieved.length);
             setMessageSources((prev) => ({
               ...prev,
               [message.id]: item.retrieved.map((source: any) => ({
