@@ -15,13 +15,15 @@ load_dotenv()
 def tavily_search(query: str, max_results: int = 5) -> List[Dict[str, Any]]:
     """
     Search the web using Tavily API - a paid, robust, and highly accurate search platform.
+    Uses advanced search depth and includes AI-generated answer summary.
+    Searches are geographically focused on Sweden for relevant local results.
     
     Args:
         query: The search query
         max_results: Maximum number of results to return (default: 5)
         
     Returns:
-        List of search results with title, content, and URL
+        List of search results including AI summary and web results with title, content, URL, and score
     """
     try:
         from tavily import TavilyClient
@@ -36,9 +38,27 @@ def tavily_search(query: str, max_results: int = 5) -> List[Dict[str, Any]]:
             }]
         
         client = TavilyClient(api_key=api_key)
-        response = client.search(query=query, max_results=max_results)
+        response = client.search(
+            query=query,
+            max_results=max_results,
+            include_answer="advanced",
+            search_depth="advanced",
+            country="sweden"
+        )
         
         results = []
+        
+        # Include Tavily's advanced LLM-generated answer if available
+        if response.get("answer"):
+            results.append({
+                "title": "Tavily AI Summary",
+                "content": response.get("answer"),
+                "url": "",
+                "score": 1.0,
+                "is_ai_summary": True
+            })
+        
+        # Add search results
         for item in response.get("results", []):
             results.append({
                 "title": item.get("title", ""),
