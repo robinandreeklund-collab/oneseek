@@ -45,28 +45,19 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
   
   // Watch for data changes and extract sources
   React.useEffect(() => {
-    console.log("useChat data changed:", data);
     if (data && Array.isArray(data) && data.length > 0) {
-      console.log("Processing data array with", data.length, "items");
-      
       // Get the most recent assistant message
       const lastAssistantMessage = messages.filter(m => m.role === 'assistant').slice(-1)[0];
       if (!lastAssistantMessage) {
-        console.log("No assistant message found yet");
         return;
       }
       
-      console.log("Last assistant message ID:", lastAssistantMessage.id);
-      
       // Process all data items to find sources
       for (const item of data) {
-        console.log("Data item:", item);
         if (item && typeof item === 'object' && item.retrieved && Array.isArray(item.retrieved) && item.retrieved.length > 0) {
-          console.log("Found", item.retrieved.length, "sources in data");
           setMessageSources((prev) => {
             // Only set if not already set for this message
             if (!prev[lastAssistantMessage.id]) {
-              console.log("Setting sources for message:", lastAssistantMessage.id);
               return {
                 ...prev,
                 [lastAssistantMessage.id]: item.retrieved.map((source: any) => ({
