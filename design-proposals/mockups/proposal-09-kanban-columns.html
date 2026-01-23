@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Proposal 09: Kanban Columns</title>
+    <style>
+        :root {
+            --background: hsl(0, 0%, 100%);
+            --foreground: hsl(240, 10%, 3.9%);
+            --primary: hsl(240, 5.9%, 10%);
+            --muted: hsl(240, 4.8%, 95.9%);
+            --muted-foreground: hsl(240, 3.8%, 46.1%);
+            --border: hsl(240, 5.9%, 90%);
+            --radius: 1rem;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--muted);
+            color: var(--foreground);
+            padding: 2rem;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header {
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            background: white;
+            padding: 1rem;
+            border-radius: var(--radius);
+        }
+        .header h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.5rem; }
+        .header p { color: var(--muted-foreground); font-size: 0.875rem; }
+        .board {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+        }
+        .column {
+            background: white;
+            border-radius: var(--radius);
+            padding: 1rem;
+            min-height: 500px;
+        }
+        .column-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 2px solid var(--border);
+        }
+        .column-title {
+            font-weight: 600;
+            font-size: 1.125rem;
+        }
+        .column-count {
+            background: var(--muted);
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            font-size: 0.875rem;
+        }
+        .pending .column-header {
+            border-bottom-color: hsl(48, 96%, 53%);
+        }
+        .processing .column-header {
+            border-bottom-color: hsl(217, 91%, 60%);
+        }
+        .complete .column-header {
+            border-bottom-color: hsl(142, 76%, 36%);
+        }
+        .card {
+            background: var(--muted);
+            padding: 1rem;
+            border-radius: calc(var(--radius) - 4px);
+            margin-bottom: 0.75rem;
+            cursor: move;
+            transition: all 0.2s;
+        }
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        .card-icon {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .card-title {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        .card-meta {
+            font-size: 0.75rem;
+            color: var(--muted-foreground);
+        }
+        .annotation {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            max-width: 300px;
+            padding: 1rem;
+            background: var(--primary);
+            color: white;
+            border-radius: var(--radius);
+            font-size: 0.875rem;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+        }
+        .annotation h3 { font-size: 1rem; margin-bottom: 0.5rem; }
+        .annotation ul { margin-left: 1.25rem; margin-top: 0.5rem; }
+        .annotation li { margin-bottom: 0.25rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Action Kanban Board</h1>
+            <p>Design Proposal 09: Kanban-style Columns - Visual workflow states</p>
+        </div>
+
+        <div class="board">
+            <div class="column pending">
+                <div class="column-header">
+                    <span class="column-title">⏳ Pending</span>
+                    <span class="column-count">1</span>
+                </div>
+                <div class="card">
+                    <div class="card-icon">🤖</div>
+                    <div class="card-title">LLM Generation</div>
+                    <div class="card-meta">Qwen2.5-14B-Instruct</div>
+                    <div class="card-meta">Waiting for processing...</div>
+                </div>
+            </div>
+
+            <div class="column processing">
+                <div class="column-header">
+                    <span class="column-title">⚡ Processing</span>
+                    <span class="column-count">1</span>
+                </div>
+                <div class="card">
+                    <div class="card-icon">⚙️</div>
+                    <div class="card-title">Data Aggregation</div>
+                    <div class="card-meta">132 sources · 27 dupes removed</div>
+                    <div class="card-meta">Progress: 75%</div>
+                </div>
+            </div>
+
+            <div class="column complete">
+                <div class="column-header">
+                    <span class="column-title">✓ Complete</span>
+                    <span class="column-count">3</span>
+                </div>
+                <div class="card">
+                    <div class="card-icon">🔍</div>
+                    <div class="card-title">Web Search</div>
+                    <div class="card-meta">127 sources found</div>
+                    <div class="card-meta">Duration: 1.2s</div>
+                </div>
+                <div class="card">
+                    <div class="card-icon">📚</div>
+                    <div class="card-title">RAG Retrieval</div>
+                    <div class="card-meta">5 documents retrieved</div>
+                    <div class="card-meta">Duration: 0.4s</div>
+                </div>
+                <div class="card">
+                    <div class="card-icon">🔌</div>
+                    <div class="card-title">API Call</div>
+                    <div class="card-meta">Semantic search</div>
+                    <div class="card-meta">Duration: 0.3s</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="annotation">
+        <h3>💡 Design Features</h3>
+        <ul>
+            <li>Visual workflow states</li>
+            <li>Cards move across columns</li>
+            <li>Clear status at a glance</li>
+            <li>Kanban methodology</li>
+            <li>Easy to scan</li>
+        </ul>
+    </div>
+</body>
+</html>

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Proposal 10: Animated Sequence</title>
+    <style>
+        :root {
+            --background: hsl(0, 0%, 100%);
+            --foreground: hsl(240, 10%, 3.9%);
+            --primary: hsl(240, 5.9%, 10%);
+            --muted: hsl(240, 4.8%, 95.9%);
+            --muted-foreground: hsl(240, 3.8%, 46.1%);
+            --border: hsl(240, 5.9%, 90%);
+            --radius: 1rem;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--background);
+            color: var(--foreground);
+            padding: 2rem;
+        }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .header {
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .header h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.5rem; }
+        .header p { color: var(--muted-foreground); font-size: 0.875rem; }
+        .sequence {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .action-card {
+            padding: 1.5rem;
+            background: white;
+            border: 2px solid var(--border);
+            border-radius: var(--radius);
+            animation: fadeInSlide 0.5s ease-out;
+        }
+        @keyframes fadeInSlide {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .action-card.active {
+            border-color: hsl(217, 91%, 60%);
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% {
+                box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+            }
+            50% {
+                box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.05);
+            }
+        }
+        .action-card.complete {
+            opacity: 0.7;
+        }
+        .action-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        .action-icon {
+            font-size: 2rem;
+        }
+        .action-info {
+            flex: 1;
+        }
+        .action-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+        }
+        .action-status {
+            font-size: 0.875rem;
+            color: var(--muted-foreground);
+            margin-top: 0.25rem;
+        }
+        .action-spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid var(--border);
+            border-top-color: hsl(217, 91%, 60%);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .action-details {
+            padding: 0.75rem;
+            background: var(--muted);
+            border-radius: calc(var(--radius) - 6px);
+            font-size: 0.875rem;
+        }
+        .annotation {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            max-width: 300px;
+            padding: 1rem;
+            background: var(--primary);
+            color: white;
+            border-radius: var(--radius);
+            font-size: 0.875rem;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+        }
+        .annotation h3 { font-size: 1rem; margin-bottom: 0.5rem; }
+        .annotation ul { margin-left: 1.25rem; margin-top: 0.5rem; }
+        .annotation li { margin-bottom: 0.25rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>✨ Live Action Stream</h1>
+            <p>Design Proposal 10: Animated Sequence - Dynamic animations for engagement</p>
+        </div>
+
+        <div class="sequence">
+            <div class="action-card complete">
+                <div class="action-header">
+                    <span class="action-icon">🔍</span>
+                    <div class="action-info">
+                        <div class="action-title">Web Search</div>
+                        <div class="action-status">✓ Completed in 1.2s</div>
+                    </div>
+                    <span style="font-size: 1.5rem; color: hsl(142, 76%, 36%);">✓</span>
+                </div>
+                <div class="action-details">
+                    Found 127 sources across 3 search APIs
+                </div>
+            </div>
+
+            <div class="action-card complete">
+                <div class="action-header">
+                    <span class="action-icon">📚</span>
+                    <div class="action-info">
+                        <div class="action-title">RAG Retrieval</div>
+                        <div class="action-status">✓ Completed in 0.4s</div>
+                    </div>
+                    <span style="font-size: 1.5rem; color: hsl(142, 76%, 36%);">✓</span>
+                </div>
+                <div class="action-details">
+                    Retrieved 5 documents with average score 0.8911
+                </div>
+            </div>
+
+            <div class="action-card active">
+                <div class="action-header">
+                    <span class="action-icon">⚙️</span>
+                    <div class="action-info">
+                        <div class="action-title">Data Aggregation</div>
+                        <div class="action-status">⏳ Processing... (75% complete)</div>
+                    </div>
+                    <div class="action-spinner"></div>
+                </div>
+                <div class="action-details">
+                    Merging 132 sources, removing duplicates...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="annotation">
+        <h3>💡 Design Features</h3>
+        <ul>
+            <li>Smooth fade-in animations</li>
+            <li>Active state pulsing</li>
+            <li>Visual progression</li>
+            <li>Engaging feedback</li>
+            <li>Modern, dynamic feel</li>
+        </ul>
+    </div>
+</body>
+</html>
