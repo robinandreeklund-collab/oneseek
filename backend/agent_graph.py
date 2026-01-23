@@ -59,9 +59,8 @@ class OneSeekGraphAgent:
         for tool in AVAILABLE_TOOLS:
             tool_name = tool.name
             
-            # Always include DuckDuckGo (no config needed)
+            # Skip DuckDuckGo due to rate limiting issues
             if tool_name == "duckduckgo_search":
-                configured_tools.append(tool)
                 continue
             
             # Check if Tavily is configured
