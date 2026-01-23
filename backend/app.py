@@ -182,20 +182,32 @@ async def stream_chat_response(
         enable_thinking: Enable thinking mode for Qwen models
         use_tools: Use multi-tool agent (True) or legacy RAG agent (False)
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     try:
         # Select appropriate agent
         if use_tools:
             agent = get_agent_graph()
+            logger.info("Using multi-tool agent")
         else:
             agent = get_agent()
+            logger.info("Using legacy RAG agent")
         
         # Run agent to get result with streaming
+        logger.info(f"Running agent with {len(messages)} messages")
         result = await asyncio.to_thread(
             agent.run_with_streaming, 
             messages, 
             system_prompt=system_prompt, 
             enable_thinking=enable_thinking
         )
+        
+        # Ensure result is valid
+        if not result:
+            raise ValueError("Agent returned empty result")
+        
+        logger.info(f"Agent result: {len(result.get('tokens', []))} tokens, {len(result.get('steps', []))} steps")
         
         # Send metadata about steps and retrieved docs first (as annotations)
         metadata = {
@@ -210,17 +222,31 @@ async def stream_chat_response(
         
         # Stream LLM response tokens as text chunks
         # Format: "0:{token_text}\n" where 0 indicates text chunk
-        for token in result.get("tokens", []):
-            yield f"0:{json.dumps(token)}\n"
-            await asyncio.sleep(0.001)  # Small delay for smoother streaming
+        tokens = result.get("tokens", [])
+        if tokens:
+            for token in tokens:
+                yield f"0:{json.dumps(token)}\n"
+                await asyncio.sleep(0.001)  # Small delay for smoother streaming
+        else:
+            # If no tokens were streamed, send the full content as one chunk
+            content = result.get("content", "")
+            if content:
+                logger.warning(f"No tokens, sending full content: {len(content)} chars")
+                yield f"0:{json.dumps(content)}\n"
         
         # Send final done message
         yield "d:\n"
+        logger.info("Streaming completed successfully")
         
     except Exception as e:
-        # Send error in AI SDK format
-        error_msg = f"Error: {str(e)}"
+        # Send error in AI SDK format with more detail
+        import traceback
+        error_detail = traceback.format_exc()
+        error_msg = f"Error: {str(e)}\n\nDetails:\n{error_detail}"
+        logger.error(f"Streaming error: {error_msg}")
         yield f"3:{json.dumps(error_msg)}\n"
+        # Also send done to close the stream properly
+        yield "d:\n"
 
 
 @app.get("/config")
