@@ -24,6 +24,7 @@ interface MessageSources {
 
 export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
   const [messageSources, setMessageSources] = React.useState<MessageSources>({});
+  const processedDataRef = React.useRef<Set<string>>(new Set());
 
   const {
     messages,
@@ -52,12 +53,21 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
         return;
       }
       
+      // Create a unique key for this data + message combination
+      const dataKey = `${lastAssistantMessage.id}-${JSON.stringify(data)}`;
+      
+      // Skip if we've already processed this data for this message
+      if (processedDataRef.current.has(dataKey)) {
+        return;
+      }
+      
       // Process all data items to find sources
       for (const item of data) {
         if (item && typeof item === 'object' && item.retrieved && Array.isArray(item.retrieved) && item.retrieved.length > 0) {
           setMessageSources((prev) => {
             // Only set if not already set for this message
             if (!prev[lastAssistantMessage.id]) {
+              processedDataRef.current.add(dataKey);
               return {
                 ...prev,
                 [lastAssistantMessage.id]: item.retrieved.map((source: any) => ({
