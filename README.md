@@ -67,12 +67,19 @@ vllm serve Qwen/Qwen2.5-14B-Instruct-AWQ \
   --quantization awq \
   --max-model-len 8192 \
   --gpu-memory-utilization 0.92 \
+  --enable-auto-tool-choice \
+  --tool-call-parser hermes \
   --host 0.0.0.0 --port 8000
 ```
 
+**OBS:** Flaggorna `--enable-auto-tool-choice` och `--tool-call-parser hermes` är **nödvändiga** för att multi-tool sökning ska fungera!
+
 Alternativt snabb modell:
 ```bash
-vllm serve meta-llama/Llama-3.1-8B-Instruct --port 8000
+vllm serve meta-llama/Llama-3.1-8B-Instruct \
+  --enable-auto-tool-choice \
+  --tool-call-parser hermes \
+  --port 8000
 ```
 
 ### 3. Setup Vespa Cloud & Search Tools

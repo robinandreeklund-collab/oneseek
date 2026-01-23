@@ -2,6 +2,30 @@
 
 This document describes the new LangGraph-based multi-tool search integration for OneSeek.ai.
 
+## ⚠️ Important: vLLM Configuration Required
+
+**The multi-tool search requires vLLM to be started with tool calling support:**
+
+```bash
+vllm serve Qwen/Qwen2.5-14B-Instruct-AWQ \
+  --dtype auto \
+  --quantization awq \
+  --max-model-len 8192 \
+  --gpu-memory-utilization 0.92 \
+  --enable-auto-tool-choice \
+  --tool-call-parser hermes \
+  --host 0.0.0.0 --port 8000
+```
+
+**Required flags:**
+- `--enable-auto-tool-choice` - Enables automatic tool calling
+- `--tool-call-parser hermes` - Uses Hermes format for tool calls (works with Qwen models)
+
+**Without these flags, you'll get an error:**
+```
+Error code: 400 - "auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set
+```
+
 ## Overview
 
 OneSeek now supports three powerful search tools that can be used simultaneously:
@@ -256,6 +280,24 @@ Potential additions:
 - Check that `use_tools=true` in request
 - Verify environment variable `USE_TOOLS` is not set to "false"
 - Query must require external information
+
+### vLLM tool calling error (400 Bad Request)
+
+**Error message:**
+```
+Error code: 400 - "auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set
+```
+
+**Solution:**
+Restart vLLM with the required flags:
+```bash
+vllm serve YOUR_MODEL \
+  --enable-auto-tool-choice \
+  --tool-call-parser hermes \
+  [other flags...]
+```
+
+The `hermes` parser works with most models including Qwen, Llama, and Mistral.
 
 ### DuckDuckGo errors
 
