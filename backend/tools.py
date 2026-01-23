@@ -300,5 +300,167 @@ def browse_page(url: str) -> Dict[str, Any]:
         }
 
 
+@tool
+def smhi_weather_forecast(location: str) -> Dict[str, Any]:
+    """
+    Get real-time weather forecast from SMHI (Swedish Meteorological and Hydrological Institute) for any location in Sweden.
+    SMHI is the official weather authority in Sweden and provides accurate, authoritative forecasts.
+    
+    Args:
+        location: Swedish city or location name (e.g., "Stockholm", "Göteborg", "Tidaholm")
+        
+    Returns:
+        Dictionary with forecast information including temperature, weather description, and source URL
+    """
+    try:
+        import requests
+        from datetime import datetime
+        
+        # Simplified coordinate lookup for major Swedish cities
+        # In production, you'd use a geocoding service
+        city_coords = {
+            "stockholm": (59.3293, 18.0686),
+            "göteborg": (57.7089, 11.9746),
+            "gothenburg": (57.7089, 11.9746),
+            "malmö": (55.6050, 13.0038),
+            "malmo": (55.6050, 13.0038),
+            "uppsala": (59.8586, 17.6389),
+            "västerås": (59.6099, 16.5448),
+            "vasteras": (59.6099, 16.5448),
+            "örebro": (59.2753, 15.2134),
+            "orebro": (59.2753, 15.2134),
+            "linköping": (58.4108, 15.6214),
+            "linkoping": (58.4108, 15.6214),
+            "helsingborg": (56.0465, 12.6945),
+            "jönköping": (57.7826, 14.1618),
+            "jonkoping": (57.7826, 14.1618),
+            "norrköping": (58.5877, 16.1924),
+            "norrkoping": (58.5877, 16.1924),
+            "lund": (55.7047, 13.1910),
+            "umeå": (63.8258, 20.2630),
+            "umea": (63.8258, 20.2630),
+            "gävle": (60.6749, 17.1413),
+            "gavle": (60.6749, 17.1413),
+            "borås": (57.7210, 12.9401),
+            "boras": (57.7210, 12.9401),
+            "eskilstuna": (59.3667, 16.5077),
+            "södertälje": (59.1955, 17.6256),
+            "sodertalje": (59.1955, 17.6256),
+            "karlstad": (59.3793, 13.5036),
+            "täby": (59.4439, 18.0687),
+            "taby": (59.4439, 18.0687),
+            "växjö": (56.8777, 14.8091),
+            "vaxjo": (56.8777, 14.8091),
+            "halmstad": (56.6745, 12.8577),
+            "sundsvall": (62.3908, 17.3069),
+            "luleå": (65.5848, 22.1547),
+            "lulea": (65.5848, 22.1547),
+            "trollhättan": (58.2837, 12.2886),
+            "trollhattan": (58.2837, 12.2886),
+            "östersund": (63.1767, 14.6361),
+            "ostersund": (63.1767, 14.6361),
+            "borlänge": (60.4858, 15.4362),
+            "borlange": (60.4858, 15.4362),
+            "falun": (60.6066, 15.6263),
+            "kalmar": (56.6634, 16.3567),
+            "kristianstad": (56.0294, 14.1567),
+            "karlskrona": (56.1612, 15.5869),
+            "skellefteå": (64.7507, 20.9527),
+            "skelleftea": (64.7507, 20.9527),
+            "tidaholm": (58.1814, 13.9570),
+        }
+        
+        # Normalize location name
+        location_lower = location.lower().strip()
+        
+        # Try to find coordinates
+        lat, lon = city_coords.get(location_lower, (59.3293, 18.0686))  # Default to Stockholm
+        
+        # SMHI API endpoint for point forecast
+        url = f"https://opendata-download-metfcst.smhi.se/api/category/pmp3g/version/2/geotype/point/lon/{lon}/lat/{lat}/data.json"
+        
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        # Extract forecast data
+        if "timeSeries" not in data or not data["timeSeries"]:
+            return {
+                "title": "SMHI Data Unavailable",
+                "content": f"Weather forecast data not available for {location}",
+                "url": "https://opendata.smhi.se",
+                "error": True
+            }
+        
+        # Get the next few hours of forecast
+        forecasts = []
+        for i, time_point in enumerate(data["timeSeries"][:8]):  # Next 8 hours
+            valid_time = time_point.get("validTime", "")
+            parameters = {p["name"]: p["values"][0] for p in time_point.get("parameters", [])}
+            
+            temp = parameters.get("t", "N/A")  # Temperature
+            weather_symbol = parameters.get("Wsymb2", 1)  # Weather symbol code
+            
+            # Simplified weather description mapping
+            weather_descriptions = {
+                1: "Klart",
+                2: "Halvklart",
+                3: "Molnigt",
+                4: "Mulet",
+                5: "Lätt regn",
+                6: "Regn",
+                7: "Kraftigt regn",
+                8: "Lätt snö",
+                9: "Snö",
+                10: "Kraftig snö",
+                11: "Duggregn"
+            }
+            
+            weather_desc = weather_descriptions.get(int(weather_symbol), "Varierande")
+            
+            # Format time
+            try:
+                dt = datetime.fromisoformat(valid_time.replace("Z", "+00:00"))
+                time_str = dt.strftime("%H:%M")
+            except:
+                time_str = valid_time
+            
+            forecasts.append(f"{time_str}: {temp}°C, {weather_desc}")
+        
+        forecast_text = "\n".join(forecasts[:4])  # Show next 4 hours
+        
+        content = f"Väderprogn för {location.title()} från SMHI:\n\n{forecast_text}\n\nKälla: Sveriges Meteorologiska och Hydrologiska Institut (SMHI)"
+        
+        return {
+            "title": f"SMHI Väderprognos - {location.title()}",
+            "content": content,
+            "url": "https://opendata.smhi.se",
+            "error": False
+        }
+    
+    except requests.exceptions.Timeout:
+        return {
+            "title": "SMHI Timeout",
+            "content": f"Request to SMHI API timed out. Please try again.",
+            "url": "https://opendata.smhi.se",
+            "error": True
+        }
+    except requests.exceptions.HTTPError as e:
+        return {
+            "title": "SMHI API Error",
+            "content": f"Could not retrieve weather data from SMHI: {str(e)}",
+            "url": "https://opendata.smhi.se",
+            "error": True
+        }
+    except Exception as e:
+        return {
+            "title": "Weather Forecast Error",
+            "content": f"Error getting weather forecast: {str(e)}",
+            "url": "https://opendata.smhi.se",
+            "error": True
+        }
+
+
 # Export all tools for easy access
-AVAILABLE_TOOLS = [tavily_search, duckduckgo_search, vespa_search, browse_page]
+AVAILABLE_TOOLS = [tavily_search, duckduckgo_search, vespa_search, browse_page, smhi_weather_forecast]
