@@ -63,6 +63,11 @@ class OneSeekGraphAgent:
             if tool_name == "duckduckgo_search":
                 continue
             
+            # Always include browse_page (no config needed)
+            if tool_name == "browse_page":
+                configured_tools.append(tool)
+                continue
+            
             # Check if Tavily is configured
             if tool_name == "tavily_search":
                 if os.getenv("TAVILY_API_KEY"):
@@ -123,21 +128,39 @@ class OneSeekGraphAgent:
                     tool_descriptions.append("- duckduckgo_search: Free, simple, anonymous web search")
                 elif tool.name == "vespa_search":
                     tool_descriptions.append("- vespa_search: Local/cloud RAG with embeddings and hybrid searching")
+                elif tool.name == "browse_page":
+                    tool_descriptions.append("- browse_page: Fetch and read content from any webpage URL")
             
-            tools_text = "\n".join(tool_descriptions) if tool_descriptions else "No search tools available."
+            tools_text = "
+".join(tool_descriptions) if tool_descriptions else "No tools available."
             
             system_content = (
                 "You are a helpful AI assistant for OneSeek.ai. "
-                f"You have access to the following search tools:\n{tools_text}\n\n"
-                "When the user asks a question:\n"
-                "1. Determine if you need to search for information\n"
-                "2. If needed, call one or multiple tools in parallel\n"
-                "3. Use the search results to provide a comprehensive, factual answer in Swedish\n"
-                "4. Always cite your sources appropriately\n"
-                "5. If no search is needed, answer directly based on your knowledge\n\n"
+                "Du svarar ALLTID på flytande svenska (Swedish). "
+                f"You have access to the following tools:
+{tools_text}
+
+"
+                "When the user asks a question:
+"
+                "1. Determine if you need to search for information or browse specific pages
+"
+                "2. If needed, call one or multiple tools IN PARALLEL for efficiency
+"
+                "3. You can combine web search with browse_page to read specific articles
+"
+                "4. Use the results to provide a comprehensive, factual answer IN SWEDISH
+"
+                "5. Always cite your sources with URLs
+"
+                "6. If no search is needed, answer directly based on your knowledge
+
+"
                 "Important: Do NOT show your thinking process or internal reasoning to the user. "
-                "Only provide the final answer with source citations.\n\n"
-                "Provide transparent, well-sourced responses."
+                "Only provide the final answer with source citations.
+
+"
+                "Var transparent och ge välgrundade svar på svenska (Be transparent and provide well-sourced responses in Swedish)."
             )
         
         # Add thinking instructions if enabled
@@ -206,21 +229,39 @@ class OneSeekGraphAgent:
                     tool_descriptions.append("- duckduckgo_search: Free, simple, anonymous web search")
                 elif tool.name == "vespa_search":
                     tool_descriptions.append("- vespa_search: Local/cloud RAG with embeddings and hybrid searching")
+                elif tool.name == "browse_page":
+                    tool_descriptions.append("- browse_page: Fetch and read content from any webpage URL")
             
-            tools_text = "\n".join(tool_descriptions) if tool_descriptions else "No search tools available."
+            tools_text = "
+".join(tool_descriptions) if tool_descriptions else "No tools available."
             
             system_content = (
                 "You are a helpful AI assistant for OneSeek.ai. "
-                f"You have access to the following search tools:\n{tools_text}\n\n"
-                "When the user asks a question:\n"
-                "1. Determine if you need to search for information\n"
-                "2. If needed, call one or multiple tools in parallel\n"
-                "3. Use the search results to provide a comprehensive, factual answer in Swedish\n"
-                "4. Always cite your sources appropriately\n"
-                "5. If no search is needed, answer directly based on your knowledge\n\n"
+                "Du svarar ALLTID på flytande svenska (Swedish). "
+                f"You have access to the following tools:
+{tools_text}
+
+"
+                "When the user asks a question:
+"
+                "1. Determine if you need to search for information or browse specific pages
+"
+                "2. If needed, call one or multiple tools IN PARALLEL for efficiency
+"
+                "3. You can combine web search with browse_page to read specific articles
+"
+                "4. Use the results to provide a comprehensive, factual answer IN SWEDISH
+"
+                "5. Always cite your sources with URLs
+"
+                "6. If no search is needed, answer directly based on your knowledge
+
+"
                 "Important: Do NOT show your thinking process or internal reasoning to the user. "
-                "Only provide the final answer with source citations.\n\n"
-                "Provide transparent, well-sourced responses."
+                "Only provide the final answer with source citations.
+
+"
+                "Var transparent och ge välgrundade svar på svenska (Be transparent and provide well-sourced responses in Swedish)."
             )
         
         # Add thinking instructions if enabled

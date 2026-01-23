@@ -196,5 +196,89 @@ def vespa_search(query: str, max_results: int = 6) -> List[Dict[str, Any]]:
         }]
 
 
+@tool
+def browse_page(url: str) -> Dict[str, Any]:
+    """
+    Browse and extract content from a webpage URL.
+    Useful for reading articles, documentation, or any web content.
+    
+    Args:
+        url: The URL of the webpage to browse
+        
+    Returns:
+        Dictionary with title, content (text), and url
+    """
+    try:
+        import requests
+        from bs4 import BeautifulSoup
+        
+        # Add headers to avoid being blocked
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Extract title
+        title = soup.find('title')
+        title_text = title.get_text().strip() if title else "No title"
+        
+        # Remove script and style elements
+        for script in soup(["script", "style"]):
+            script.decompose()
+        
+        # Get text content
+        text = soup.get_text()
+        
+        # Clean up text - remove extra whitespace
+        lines = (line.strip() for line in text.splitlines())
+        chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+        text_content = ' '.join(chunk for chunk in chunks if chunk)
+        
+        # Limit content length to avoid token overflow
+        max_length = 3000
+        if len(text_content) > max_length:
+            text_content = text_content[:max_length] + "..."
+        
+        return {
+            "title": title_text,
+            "content": text_content,
+            "url": url,
+            "error": False
+        }
+    
+    except ImportError:
+        return {
+            "title": "Missing Dependencies",
+            "content": "Required packages (requests, beautifulsoup4) not installed. Run: pip install requests beautifulsoup4",
+            "url": url,
+            "error": True
+        }
+    except requests.exceptions.Timeout:
+        return {
+            "title": "Timeout Error",
+            "content": f"Request to {url} timed out after 10 seconds",
+            "url": url,
+            "error": True
+        }
+    except requests.exceptions.HTTPError as e:
+        return {
+            "title": "HTTP Error",
+            "content": f"HTTP error occurred: {str(e)}",
+            "url": url,
+            "error": True
+        }
+    except Exception as e:
+        return {
+            "title": "Browse Error",
+            "content": f"Error browsing page: {str(e)}",
+            "url": url,
+            "error": True
+        }
+
+
 # Export all tools for easy access
-AVAILABLE_TOOLS = [tavily_search, duckduckgo_search, vespa_search]
+AVAILABLE_TOOLS = [tavily_search, duckduckgo_search, vespa_search, browse_page]
