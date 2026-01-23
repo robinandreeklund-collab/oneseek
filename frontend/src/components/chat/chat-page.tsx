@@ -11,12 +11,20 @@ import { v4 as uuidv4 } from "uuid";
 import { ChatLayout } from "@/components/chat/chat-layout";
 import { ChatOptions } from "@/components/chat/chat-options";
 import { basePath } from "@/lib/utils";
+import { Source } from "@/components/chat/sources-sidebar";
 
 interface ChatPageProps {
   chatId: string;
   setChatId: React.Dispatch<React.SetStateAction<string>>;
 }
+
+interface MessageSources {
+  [messageId: string]: Source[];
+}
+
 export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
+  const [messageSources, setMessageSources] = React.useState<MessageSources>({});
+
   const {
     messages,
     input,
@@ -26,11 +34,32 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
     error,
     stop,
     setMessages,
+    data,
   } = useChat({
     api: basePath + "/api/chat",
     streamMode: "stream-data",
     onError: (error) => {
       toast.error("Something went wrong: " + error);
+    },
+    onFinish: (message, { data }) => {
+      // Extract source metadata from stream data
+      if (data && Array.isArray(data)) {
+        for (const item of data) {
+          if (item.retrieved && Array.isArray(item.retrieved)) {
+            setMessageSources((prev) => ({
+              ...prev,
+              [message.id]: item.retrieved.map((source: any) => ({
+                title: source.title || "Untitled",
+                content: source.content || "",
+                url: source.url,
+                relevance: source.relevance,
+                source: source.source,
+              })),
+            }));
+            break;
+          }
+        }
+      }
     },
   });
   const [chatOptions, setChatOptions] = useLocalStorageState<ChatOptions>(
@@ -104,6 +133,7 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
         stop={stop}
         navCollapsedSize={10}
         defaultLayout={[30, 160]}
+        messageSources={messageSources}
       />
     </main>
   );
