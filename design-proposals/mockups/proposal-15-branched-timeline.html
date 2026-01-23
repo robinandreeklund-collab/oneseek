@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proposal 15: Branched Timeline</title>
+    <style>
+        :root {
+            --background: hsl(0, 0%, 100%);
+            --foreground: hsl(240, 10%, 3.9%);
+            --primary: hsl(240, 5.9%, 10%);
+            --muted: hsl(240, 4.8%, 95.9%);
+            --muted-foreground: hsl(240, 3.8%, 46.1%);
+            --border: hsl(240, 5.9%, 90%);
+            --radius: 1rem;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--background);
+            color: var(--foreground);
+            padding: 2rem;
+        }
+        .header {
+            margin-bottom: 2rem;
+        }
+        .header h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.5rem; }
+        .header p { color: var(--muted-foreground); font-size: 0.875rem; }
+        .timeline-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            position: relative;
+            padding: 2rem 0;
+        }
+        .main-line {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: var(--border);
+            transform: translateX(-50%);
+        }
+        .timeline-item {
+            position: relative;
+            margin-bottom: 3rem;
+        }
+        .center-node {
+            width: 60px;
+            height: 60px;
+            background: white;
+            border: 3px solid var(--primary);
+            border-radius: 50%;
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            z-index: 10;
+        }
+        .branch-container {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+            position: relative;
+            margin-top: 4rem;
+        }
+        .branch-left, .branch-right {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .branch-card {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1rem;
+            position: relative;
+        }
+        .branch-card::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            width: 40px;
+            height: 2px;
+            background: var(--border);
+        }
+        .branch-left .branch-card::before {
+            right: -40px;
+        }
+        .branch-right .branch-card::before {
+            left: -40px;
+        }
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+        }
+        .card-content {
+            font-size: 0.813rem;
+            color: var(--muted-foreground);
+            line-height: 1.5;
+        }
+        .card-meta {
+            margin-top: 0.5rem;
+            font-size: 0.75rem;
+            color: var(--muted-foreground);
+            display: flex;
+            justify-content: space-between;
+        }
+        .branch-line {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 50%;
+            height: 2px;
+            background: var(--border);
+        }
+        .branch-line.left {
+            transform: translateX(-100%);
+        }
+        .branch-line.right {
+            transform: translateX(0);
+        }
+        .merge-node {
+            width: 40px;
+            height: 40px;
+            background: hsl(142, 76%, 95%);
+            border: 2px solid hsl(142, 76%, 36%);
+            border-radius: 50%;
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            z-index: 10;
+            margin-top: 2rem;
+        }
+        .single-branch {
+            width: 48%;
+            margin: 0 auto;
+        }
+        .annotation {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            max-width: 350px;
+            padding: 1rem;
+            background: var(--primary);
+            color: white;
+            border-radius: var(--radius);
+            font-size: 0.875rem;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+            z-index: 100;
+        }
+        .annotation h3 { font-size: 1rem; margin-bottom: 0.5rem; }
+        .annotation ul { margin-left: 1.25rem; margin-top: 0.5rem; }
+        .annotation li { margin-bottom: 0.25rem; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🌿 Branched Timeline</h1>
+        <p>Design Proposal 15: Git-style visualization with branching paths for parallel operations</p>
+    </div>
+
+    <div class="timeline-container">
+        <div class="main-line"></div>
+
+        <!-- Start Node -->
+        <div class="timeline-item">
+            <div class="center-node">🚀</div>
+        </div>
+
+        <!-- First Branch: Parallel Searches -->
+        <div class="timeline-item">
+            <div class="branch-container">
+                <div class="branch-left">
+                    <div class="branch-card">
+                        <div class="card-header">🔍 Web Search - Brave</div>
+                        <div class="card-content">
+                            Query: "AI safety research 2026"
+                        </div>
+                        <div class="card-meta">
+                            <span>45 sources</span>
+                            <span>0.87s</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="branch-right">
+                    <div class="branch-card">
+                        <div class="card-header">🔍 Web Search - Google</div>
+                        <div class="card-content">
+                            Query: "AI safety research 2026"
+                        </div>
+                        <div class="card-meta">
+                            <span>52 sources</span>
+                            <span>1.02s</span>
+                        </div>
+                    </div>
+                    <div class="branch-card" style="margin-left: 2rem; margin-top: 0.5rem;">
+                        <div class="card-header">🔍 Web Search - Bing</div>
+                        <div class="card-content">
+                            Query: "AI safety research 2026"
+                        </div>
+                        <div class="card-meta">
+                            <span>30 sources</span>
+                            <span>0.95s</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="merge-node" style="margin-top: 10rem;">🔀</div>
+        </div>
+
+        <!-- Merge Result -->
+        <div class="timeline-item" style="margin-top: 12rem;">
+            <div class="single-branch">
+                <div class="branch-card">
+                    <div class="card-header">⚙️ Data Aggregation</div>
+                    <div class="card-content">
+                        Merged 127 sources from 3 APIs, removed 27 duplicates
+                    </div>
+                    <div class="card-meta">
+                        <span>105 unique sources</span>
+                        <span>0.18s</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Second Branch: RAG + API -->
+        <div class="timeline-item">
+            <div class="branch-container">
+                <div class="branch-left">
+                    <div class="branch-card">
+                        <div class="card-header">📚 RAG Retrieval</div>
+                        <div class="card-content">
+                            Retrieved 5 documents from Vespa vector DB
+                        </div>
+                        <div class="card-meta">
+                            <span>Score: 0.8911</span>
+                            <span>0.45s</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="branch-right">
+                    <div class="branch-card">
+                        <div class="card-header">🔌 Semantic Search API</div>
+                        <div class="card-content">
+                            POST /v1/query to semantic-search.com
+                        </div>
+                        <div class="card-meta">
+                            <span>200 OK</span>
+                            <span>0.31s</span>
+                        </div>
+                    </div>
+                    <div class="branch-card" style="margin-left: 2rem; margin-top: 0.5rem;">
+                        <div class="card-header">📚 Query Expansion</div>
+                        <div class="card-content">
+                            Retrieved 8 additional documents
+                        </div>
+                        <div class="card-meta">
+                            <span>5 terms</span>
+                            <span>0.52s</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="merge-node" style="margin-top: 10rem;">🔀</div>
+        </div>
+
+        <!-- Final Processing -->
+        <div class="timeline-item" style="margin-top: 12rem;">
+            <div class="single-branch">
+                <div class="branch-card">
+                    <div class="card-header">📊 Citation Analysis</div>
+                    <div class="card-content">
+                        Analyzing citation networks across all retrieved documents
+                    </div>
+                    <div class="card-meta">
+                        <span>245 documents</span>
+                        <span>0.35s</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Generation -->
+        <div class="timeline-item">
+            <div class="single-branch">
+                <div class="branch-card">
+                    <div class="card-header">🤖 Response Generation</div>
+                    <div class="card-content">
+                        Streaming from Qwen2.5-14B with retrieved context
+                    </div>
+                    <div class="card-meta">
+                        <span>156/300 tokens</span>
+                        <span>47 tok/s</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- End Node -->
+        <div class="timeline-item">
+            <div class="center-node">✓</div>
+        </div>
+    </div>
+
+    <div class="annotation">
+        <h3>💡 Design Features</h3>
+        <ul>
+            <li>Git-style branching visualization</li>
+            <li>Parallel operations shown as branches</li>
+            <li>Merge points where data combines</li>
+            <li>Clear workflow progression</li>
+            <li>Visual clarity for complex flows</li>
+            <li>Ideal for concurrent processing</li>
+        </ul>
+    </div>
+</body>
+</html>

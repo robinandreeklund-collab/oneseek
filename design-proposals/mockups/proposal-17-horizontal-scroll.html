@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proposal 17: Horizontal Scroll</title>
+    <style>
+        :root {
+            --background: hsl(0, 0%, 100%);
+            --foreground: hsl(240, 10%, 3.9%);
+            --primary: hsl(240, 5.9%, 10%);
+            --muted: hsl(240, 4.8%, 95.9%);
+            --muted-foreground: hsl(240, 3.8%, 46.1%);
+            --border: hsl(240, 5.9%, 90%);
+            --radius: 1rem;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--background);
+            color: var(--foreground);
+            padding: 2rem;
+        }
+        .header {
+            margin-bottom: 2rem;
+        }
+        .header h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.5rem; }
+        .header p { color: var(--muted-foreground); font-size: 0.875rem; }
+        .container {
+            max-width: 100%;
+            margin: 0 auto;
+        }
+        .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            font-size: 0.875rem;
+            color: var(--muted-foreground);
+        }
+        .breadcrumb-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .breadcrumb-item.active {
+            color: var(--foreground);
+            font-weight: 600;
+        }
+        .carousel-container {
+            position: relative;
+            padding: 0 4rem;
+        }
+        .carousel-wrapper {
+            overflow-x: auto;
+            scroll-behavior: smooth;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border) transparent;
+        }
+        .carousel-wrapper::-webkit-scrollbar {
+            height: 8px;
+        }
+        .carousel-wrapper::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .carousel-wrapper::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 4px;
+        }
+        .carousel {
+            display: flex;
+            gap: 2rem;
+            padding: 2rem 0;
+        }
+        .step-card {
+            min-width: 400px;
+            max-width: 400px;
+            background: white;
+            border: 2px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            scroll-snap-align: center;
+            transition: all 0.3s ease;
+        }
+        .step-card.active {
+            border-color: var(--primary);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+            transform: scale(1.05);
+        }
+        .step-number {
+            width: 48px;
+            height: 48px;
+            background: var(--muted);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+        .step-card.active .step-number {
+            background: var(--primary);
+            color: white;
+        }
+        .step-icon {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+        }
+        .step-title {
+            font-weight: 600;
+            font-size: 1.125rem;
+            margin-bottom: 0.75rem;
+        }
+        .step-description {
+            font-size: 0.875rem;
+            color: var(--muted-foreground);
+            line-height: 1.6;
+            margin-bottom: 1rem;
+        }
+        .step-details {
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+        }
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+        }
+        .detail-label {
+            color: var(--muted-foreground);
+        }
+        .detail-value {
+            font-weight: 600;
+        }
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.375rem;
+            padding: 0.25rem 0.75rem;
+            background: hsl(142, 76%, 95%);
+            color: hsl(142, 76%, 36%);
+            border-radius: 0.5rem;
+            font-size: 0.813rem;
+            font-weight: 600;
+        }
+        .nav-button {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 48px;
+            height: 48px;
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 1.25rem;
+            z-index: 10;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            transition: all 0.2s ease;
+        }
+        .nav-button:hover {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+        .nav-button.prev {
+            left: 1rem;
+        }
+        .nav-button.next {
+            right: 1rem;
+        }
+        .progress-dots {
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-top: 2rem;
+        }
+        .dot {
+            width: 8px;
+            height: 8px;
+            background: var(--border);
+            border-radius: 50%;
+            transition: all 0.2s ease;
+        }
+        .dot.active {
+            background: var(--primary);
+            width: 24px;
+            border-radius: 4px;
+        }
+        .annotation {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            max-width: 350px;
+            padding: 1rem;
+            background: var(--primary);
+            color: white;
+            border-radius: var(--radius);
+            font-size: 0.875rem;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+            z-index: 100;
+        }
+        .annotation h3 { font-size: 1rem; margin-bottom: 0.5rem; }
+        .annotation ul { margin-left: 1.25rem; margin-top: 0.5rem; }
+        .annotation li { margin-bottom: 0.25rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>↔️ Horizontal Scroll</h1>
+            <p>Design Proposal 17: Horizontal carousel of steps with navigation arrows</p>
+        </div>
+
+        <div class="breadcrumb">
+            <div class="breadcrumb-item">Search</div>
+            <span>→</span>
+            <div class="breadcrumb-item active">Retrieval</div>
+            <span>→</span>
+            <div class="breadcrumb-item">Processing</div>
+            <span>→</span>
+            <div class="breadcrumb-item">Generation</div>
+        </div>
+
+        <div class="carousel-container">
+            <button class="nav-button prev">←</button>
+            <button class="nav-button next">→</button>
+
+            <div class="carousel-wrapper">
+                <div class="carousel">
+                    <div class="step-card">
+                        <div class="step-number">1</div>
+                        <div class="step-icon">🔍</div>
+                        <div class="step-title">Web Search</div>
+                        <div class="step-description">
+                            Queried multiple search APIs (Brave, Google, Bing) to find relevant sources for the query "AI safety research 2026"
+                        </div>
+                        <div class="step-details">
+                            <div class="detail-row">
+                                <span class="detail-label">APIs Used:</span>
+                                <span class="detail-value">3</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Sources Found:</span>
+                                <span class="detail-value">127</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Duration:</span>
+                                <span class="detail-value">1.24s</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Status:</span>
+                                <span class="status-badge">✓ Complete</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="step-card active">
+                        <div class="step-number">2</div>
+                        <div class="step-icon">📚</div>
+                        <div class="step-title">RAG Retrieval</div>
+                        <div class="step-description">
+                            Retrieved relevant documents from Vespa vector database using semantic search with query embeddings
+                        </div>
+                        <div class="step-details">
+                            <div class="detail-row">
+                                <span class="detail-label">Documents:</span>
+                                <span class="detail-value">5 retrieved</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Avg Score:</span>
+                                <span class="detail-value">0.8911</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Duration:</span>
+                                <span class="detail-value">0.45s</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Status:</span>
+                                <span class="status-badge">✓ Complete</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="step-card">
+                        <div class="step-number">3</div>
+                        <div class="step-icon">🔌</div>
+                        <div class="step-title">API Calls</div>
+                        <div class="step-description">
+                            Made semantic search API calls to external services for additional context and validation
+                        </div>
+                        <div class="step-details">
+                            <div class="detail-row">
+                                <span class="detail-label">Endpoint:</span>
+                                <span class="detail-value">semantic-search.com</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Status Code:</span>
+                                <span class="detail-value">200 OK</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Response Size:</span>
+                                <span class="detail-value">15.3 KB</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Duration:</span>
+                                <span class="detail-value">0.31s</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="step-card">
+                        <div class="step-number">4</div>
+                        <div class="step-icon">⚙️</div>
+                        <div class="step-title">Data Processing</div>
+                        <div class="step-description">
+                            Aggregated and processed data from all sources, removing duplicates and ranking by relevance
+                        </div>
+                        <div class="step-details">
+                            <div class="detail-row">
+                                <span class="detail-label">Input Sources:</span>
+                                <span class="detail-value">132</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Duplicates:</span>
+                                <span class="detail-value">27 removed</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Unique Sources:</span>
+                                <span class="detail-value">105</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Duration:</span>
+                                <span class="detail-value">0.18s</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="step-card">
+                        <div class="step-number">5</div>
+                        <div class="step-icon">📊</div>
+                        <div class="step-title">Citation Analysis</div>
+                        <div class="step-description">
+                            Analyzed citation networks across all retrieved documents to identify authoritative sources
+                        </div>
+                        <div class="step-details">
+                            <div class="detail-row">
+                                <span class="detail-label">Documents:</span>
+                                <span class="detail-value">245</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Citations:</span>
+                                <span class="detail-value">1,847 links</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Duration:</span>
+                                <span class="detail-value">0.35s</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Status:</span>
+                                <span class="status-badge">✓ Complete</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="step-card">
+                        <div class="step-number">6</div>
+                        <div class="step-icon">🤖</div>
+                        <div class="step-title">Response Generation</div>
+                        <div class="step-description">
+                            Streaming response from Qwen2.5-14B language model using all retrieved context
+                        </div>
+                        <div class="step-details">
+                            <div class="detail-row">
+                                <span class="detail-label">Model:</span>
+                                <span class="detail-value">Qwen2.5-14B</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Tokens:</span>
+                                <span class="detail-value">156/300</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Speed:</span>
+                                <span class="detail-value">47 tok/s</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">ETA:</span>
+                                <span class="detail-value">3 seconds</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="progress-dots">
+                <div class="dot"></div>
+                <div class="dot active"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="annotation">
+        <h3>💡 Design Features</h3>
+        <ul>
+            <li>Horizontal carousel layout</li>
+            <li>Navigation arrows for browsing</li>
+            <li>Current step centered & highlighted</li>
+            <li>Breadcrumb trail at top</li>
+            <li>Snap-to-step scrolling</li>
+            <li>Step-by-step guided view</li>
+        </ul>
+    </div>
+</body>
+</html>

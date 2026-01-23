@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proposal 11: Inspector Panel</title>
+    <style>
+        :root {
+            --background: hsl(0, 0%, 100%);
+            --foreground: hsl(240, 10%, 3.9%);
+            --primary: hsl(240, 5.9%, 10%);
+            --muted: hsl(240, 4.8%, 95.9%);
+            --muted-foreground: hsl(240, 3.8%, 46.1%);
+            --border: hsl(240, 5.9%, 90%);
+            --radius: 1rem;
+            --code-bg: hsl(220, 13%, 18%);
+            --code-fg: hsl(210, 15%, 90%);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--background);
+            color: var(--foreground);
+            padding: 2rem;
+        }
+        .header {
+            margin-bottom: 2rem;
+        }
+        .header h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.5rem; }
+        .header p { color: var(--muted-foreground); font-size: 0.875rem; }
+        .inspector-container {
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            background: white;
+        }
+        .inspector-header {
+            background: var(--muted);
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .inspector-tabs {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .tab {
+            padding: 0.5rem 1rem;
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        .tab.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+        .inspector-body {
+            padding: 1rem;
+            max-height: 600px;
+            overflow-y: auto;
+            font-family: 'Monaco', 'Menlo', monospace;
+        }
+        .section {
+            margin-bottom: 1.5rem;
+        }
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem;
+            background: var(--muted);
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        .section-header:hover {
+            background: hsl(240, 4.8%, 92%);
+        }
+        .collapse-icon {
+            transition: transform 0.2s;
+        }
+        .section.collapsed .collapse-icon {
+            transform: rotate(-90deg);
+        }
+        .section-content {
+            margin-left: 1.5rem;
+            padding: 0.75rem;
+            background: var(--code-bg);
+            color: var(--code-fg);
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            font-size: 0.813rem;
+            line-height: 1.6;
+        }
+        .section.collapsed .section-content {
+            display: none;
+        }
+        .json-key { color: hsl(207, 82%, 66%); }
+        .json-string { color: hsl(95, 38%, 62%); }
+        .json-number { color: hsl(29, 54%, 61%); }
+        .json-boolean { color: hsl(286, 60%, 67%); }
+        .json-null { color: hsl(5, 74%, 59%); }
+        .copy-btn {
+            padding: 0.25rem 0.5rem;
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 0.25rem;
+            cursor: pointer;
+            font-size: 0.75rem;
+        }
+        .copy-btn:hover {
+            background: var(--muted);
+        }
+        .annotation {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            max-width: 350px;
+            padding: 1rem;
+            background: var(--primary);
+            color: white;
+            border-radius: var(--radius);
+            font-size: 0.875rem;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+        }
+        .annotation h3 { font-size: 1rem; margin-bottom: 0.5rem; }
+        .annotation ul { margin-left: 1.25rem; margin-top: 0.5rem; }
+        .annotation li { margin-bottom: 0.25rem; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔍 Inspector Panel</h1>
+        <p>Design Proposal 11: Developer-tool style interface with JSON view and syntax highlighting</p>
+    </div>
+
+    <div class="inspector-container">
+        <div class="inspector-header">
+            <div class="inspector-tabs">
+                <button class="tab active">Actions</button>
+                <button class="tab">Network</button>
+                <button class="tab">Console</button>
+                <button class="tab">Timeline</button>
+            </div>
+            <button class="copy-btn">📋 Copy All</button>
+        </div>
+
+        <div class="inspector-body">
+            <div class="section">
+                <div class="section-header">
+                    <span class="collapse-icon">▼</span>
+                    <span>🔍 Web Search (1.24s)</span>
+                </div>
+                <div class="section-content">
+<pre>{
+  <span class="json-key">"type"</span>: <span class="json-string">"web_search"</span>,
+  <span class="json-key">"query"</span>: <span class="json-string">"AI safety research 2026"</span>,
+  <span class="json-key">"timestamp"</span>: <span class="json-string">"2026-01-23T12:34:56.789Z"</span>,
+  <span class="json-key">"duration_ms"</span>: <span class="json-number">1240</span>,
+  <span class="json-key">"status"</span>: <span class="json-string">"completed"</span>,
+  <span class="json-key">"results"</span>: {
+    <span class="json-key">"total_sources"</span>: <span class="json-number">127</span>,
+    <span class="json-key">"apis_queried"</span>: [<span class="json-string">"brave"</span>, <span class="json-string">"google"</span>, <span class="json-string">"bing"</span>],
+    <span class="json-key">"cached"</span>: <span class="json-boolean">false</span>
+  }
+}</pre>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-header">
+                    <span class="collapse-icon">▼</span>
+                    <span>📚 RAG Retrieval (0.45s)</span>
+                </div>
+                <div class="section-content">
+<pre>{
+  <span class="json-key">"type"</span>: <span class="json-string">"rag_retrieval"</span>,
+  <span class="json-key">"query_embedding"</span>: <span class="json-string">"[0.123, 0.456, ...]"</span>,
+  <span class="json-key">"timestamp"</span>: <span class="json-string">"2026-01-23T12:34:57.123Z"</span>,
+  <span class="json-key">"duration_ms"</span>: <span class="json-number">450</span>,
+  <span class="json-key">"results"</span>: {
+    <span class="json-key">"documents_retrieved"</span>: <span class="json-number">5</span>,
+    <span class="json-key">"avg_relevance_score"</span>: <span class="json-number">0.8911</span>,
+    <span class="json-key">"source"</span>: <span class="json-string">"vespa"</span>,
+    <span class="json-key">"cache_hit"</span>: <span class="json-boolean">false</span>
+  },
+  <span class="json-key">"documents"</span>: [
+    {
+      <span class="json-key">"id"</span>: <span class="json-string">"doc_789"</span>,
+      <span class="json-key">"score"</span>: <span class="json-number">0.95</span>,
+      <span class="json-key">"title"</span>: <span class="json-string">"Advances in Constitutional AI"</span>
+    }
+  ]
+}</pre>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-header">
+                    <span class="collapse-icon">▼</span>
+                    <span>🔌 API Call - Semantic Search (0.31s)</span>
+                </div>
+                <div class="section-content">
+<pre>{
+  <span class="json-key">"type"</span>: <span class="json-string">"api_call"</span>,
+  <span class="json-key">"endpoint"</span>: <span class="json-string">"https://api.semantic-search.com/v1/query"</span>,
+  <span class="json-key">"method"</span>: <span class="json-string">"POST"</span>,
+  <span class="json-key">"timestamp"</span>: <span class="json-string">"2026-01-23T12:34:58.456Z"</span>,
+  <span class="json-key">"duration_ms"</span>: <span class="json-number">310</span>,
+  <span class="json-key">"status_code"</span>: <span class="json-number">200</span>,
+  <span class="json-key">"request_size_bytes"</span>: <span class="json-number">2048</span>,
+  <span class="json-key">"response_size_bytes"</span>: <span class="json-number">15360</span>,
+  <span class="json-key">"headers"</span>: {
+    <span class="json-key">"Content-Type"</span>: <span class="json-string">"application/json"</span>,
+    <span class="json-key">"X-RateLimit-Remaining"</span>: <span class="json-string">"4983"</span>
+  }
+}</pre>
+                </div>
+            </div>
+
+            <div class="section collapsed">
+                <div class="section-header">
+                    <span class="collapse-icon">▼</span>
+                    <span>⚙️ Data Aggregation (0.18s)</span>
+                </div>
+                <div class="section-content">
+<pre>{
+  <span class="json-key">"type"</span>: <span class="json-string">"data_processing"</span>,
+  <span class="json-key">"operation"</span>: <span class="json-string">"merge_and_deduplicate"</span>,
+  <span class="json-key">"input_sources"</span>: <span class="json-number">132</span>,
+  <span class="json-key">"duplicates_removed"</span>: <span class="json-number">27</span>,
+  <span class="json-key">"output_count"</span>: <span class="json-number">105</span>
+}</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="annotation">
+        <h3>💡 Design Features</h3>
+        <ul>
+            <li>Developer-tool inspired interface</li>
+            <li>Raw JSON data with syntax highlighting</li>
+            <li>Collapsible sections for organization</li>
+            <li>Copy-to-clipboard functionality</li>
+            <li>Multiple tabs for different views</li>
+            <li>Technical transparency for power users</li>
+        </ul>
+    </div>
+</body>
+</html>

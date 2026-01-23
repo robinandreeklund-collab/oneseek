@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proposal 20: Minimal Indicator</title>
+    <style>
+        :root {
+            --background: hsl(0, 0%, 100%);
+            --foreground: hsl(240, 10%, 3.9%);
+            --primary: hsl(240, 5.9%, 10%);
+            --muted: hsl(240, 4.8%, 95.9%);
+            --muted-foreground: hsl(240, 3.8%, 46.1%);
+            --border: hsl(240, 5.9%, 90%);
+            --radius: 1rem;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--background);
+            color: var(--foreground);
+            min-height: 100vh;
+            position: relative;
+        }
+        .indicator-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, 
+                hsl(217, 91%, 60%) 0%, 
+                hsl(217, 91%, 60%) 25%,
+                hsl(142, 76%, 36%) 25%,
+                hsl(142, 76%, 36%) 50%,
+                hsl(48, 96%, 53%) 50%,
+                hsl(48, 96%, 53%) 75%,
+                hsl(280, 65%, 60%) 75%,
+                hsl(280, 65%, 60%) 100%
+            );
+            cursor: pointer;
+            z-index: 1000;
+            transition: height 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        .indicator-bar:hover {
+            height: 6px;
+        }
+        .indicator-bar.expanded {
+            height: auto;
+            background: white;
+            border-bottom: 1px solid var(--border);
+        }
+        .bar-content {
+            display: none;
+            padding: 1.5rem;
+        }
+        .indicator-bar.expanded .bar-content {
+            display: block;
+        }
+        .bar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+        .bar-title {
+            font-weight: 600;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .close-btn {
+            width: 32px;
+            height: 32px;
+            border: 1px solid var(--border);
+            background: white;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+        .close-btn:hover {
+            background: var(--muted);
+        }
+        .progress-overview {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .progress-item {
+            padding: 1rem;
+            background: var(--muted);
+            border-radius: var(--radius);
+            text-align: center;
+        }
+        .progress-icon {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .progress-label {
+            font-size: 0.813rem;
+            color: var(--muted-foreground);
+            margin-bottom: 0.25rem;
+        }
+        .progress-value {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+        .actions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1rem;
+        }
+        .action-card {
+            padding: 1rem;
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 0.875rem;
+        }
+        .action-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+        .action-icon {
+            font-size: 1rem;
+        }
+        .action-time {
+            font-size: 0.75rem;
+            color: var(--muted-foreground);
+        }
+        .action-description {
+            color: var(--muted-foreground);
+            font-size: 0.813rem;
+            line-height: 1.5;
+            margin-bottom: 0.75rem;
+        }
+        .action-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 0.75rem;
+            border-top: 1px solid var(--border);
+            font-size: 0.75rem;
+        }
+        .status-badge {
+            padding: 0.125rem 0.5rem;
+            background: hsl(142, 76%, 95%);
+            color: hsl(142, 76%, 36%);
+            border-radius: 0.375rem;
+            font-weight: 600;
+        }
+        .main-content {
+            padding: 3rem 2rem 2rem 2rem;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        .demo-header {
+            margin-bottom: 2rem;
+        }
+        .demo-header h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.5rem; }
+        .demo-header p { color: var(--muted-foreground); font-size: 0.875rem; }
+        .chat-section {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 2rem;
+        }
+        .chat-message {
+            margin-bottom: 1.5rem;
+        }
+        .message-label {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+        }
+        .message-text {
+            line-height: 1.6;
+            font-size: 0.875rem;
+        }
+        .hint-box {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--primary);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 2rem;
+            font-size: 0.813rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            z-index: 999;
+            animation: bounce 2s infinite;
+        }
+        @keyframes bounce {
+            0%, 100% { transform: translateX(-50%) translateY(0); }
+            50% { transform: translateX(-50%) translateY(-5px); }
+        }
+        .annotation {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            max-width: 350px;
+            padding: 1rem;
+            background: var(--primary);
+            color: white;
+            border-radius: var(--radius);
+            font-size: 0.875rem;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+            z-index: 100;
+        }
+        .annotation h3 { font-size: 1rem; margin-bottom: 0.5rem; }
+        .annotation ul { margin-left: 1.25rem; margin-top: 0.5rem; }
+        .annotation li { margin-bottom: 0.25rem; }
+    </style>
+</head>
+<body>
+    <!-- Minimal Indicator Bar -->
+    <div class="indicator-bar">
+        <div class="bar-content">
+            <div class="bar-header">
+                <div class="bar-title">
+                    <span>🔍</span>
+                    <span>Model Actions Overview</span>
+                </div>
+                <button class="close-btn">✕</button>
+            </div>
+
+            <div class="progress-overview">
+                <div class="progress-item">
+                    <div class="progress-icon">🔍</div>
+                    <div class="progress-label">Searches</div>
+                    <div class="progress-value">4 / 4</div>
+                </div>
+                <div class="progress-item">
+                    <div class="progress-icon">📚</div>
+                    <div class="progress-label">Retrievals</div>
+                    <div class="progress-value">2 / 2</div>
+                </div>
+                <div class="progress-item">
+                    <div class="progress-icon">🔌</div>
+                    <div class="progress-label">API Calls</div>
+                    <div class="progress-value">3 / 3</div>
+                </div>
+                <div class="progress-item">
+                    <div class="progress-icon">⚙️</div>
+                    <div class="progress-label">Processing</div>
+                    <div class="progress-value">5 / 5</div>
+                </div>
+            </div>
+
+            <div class="actions-grid">
+                <div class="action-card">
+                    <div class="action-header">
+                        <span><span class="action-icon">🔍</span> Web Search</span>
+                        <span class="action-time">12:34:56</span>
+                    </div>
+                    <div class="action-description">
+                        Queried 3 APIs (Brave, Google, Bing) for "AI safety research 2026" and found 127 sources
+                    </div>
+                    <div class="action-meta">
+                        <span>Duration: 1.24s</span>
+                        <span class="status-badge">✓ Complete</span>
+                    </div>
+                </div>
+
+                <div class="action-card">
+                    <div class="action-header">
+                        <span><span class="action-icon">📚</span> RAG Retrieval</span>
+                        <span class="action-time">12:34:59</span>
+                    </div>
+                    <div class="action-description">
+                        Retrieved 5 documents from Vespa with avg score 0.8911
+                    </div>
+                    <div class="action-meta">
+                        <span>Duration: 0.45s</span>
+                        <span class="status-badge">✓ Complete</span>
+                    </div>
+                </div>
+
+                <div class="action-card">
+                    <div class="action-header">
+                        <span><span class="action-icon">🔌</span> API Call</span>
+                        <span class="action-time">12:34:58</span>
+                    </div>
+                    <div class="action-description">
+                        POST to semantic-search.com/v1/query (200 OK, 15.3 KB)
+                    </div>
+                    <div class="action-meta">
+                        <span>Duration: 0.31s</span>
+                        <span class="status-badge">✓ Complete</span>
+                    </div>
+                </div>
+
+                <div class="action-card">
+                    <div class="action-header">
+                        <span><span class="action-icon">⚙️</span> Aggregation</span>
+                        <span class="action-time">12:35:00</span>
+                    </div>
+                    <div class="action-description">
+                        Merged 132 sources, removed 27 duplicates
+                    </div>
+                    <div class="action-meta">
+                        <span>Duration: 0.18s</span>
+                        <span class="status-badge">✓ Complete</span>
+                    </div>
+                </div>
+
+                <div class="action-card">
+                    <div class="action-header">
+                        <span><span class="action-icon">📊</span> Analysis</span>
+                        <span class="action-time">12:35:05</span>
+                    </div>
+                    <div class="action-description">
+                        Citation analysis across 245 documents
+                    </div>
+                    <div class="action-meta">
+                        <span>Duration: 0.35s</span>
+                        <span class="status-badge">✓ Complete</span>
+                    </div>
+                </div>
+
+                <div class="action-card">
+                    <div class="action-header">
+                        <span><span class="action-icon">🤖</span> Generation</span>
+                        <span class="action-time">12:35:02</span>
+                    </div>
+                    <div class="action-description">
+                        Streaming from Qwen2.5-14B (156/300 tokens @ 47 tok/s)
+                    </div>
+                    <div class="action-meta">
+                        <span>ETA: 3s</span>
+                        <span class="status-badge">✓ Complete</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="hint-box">
+        ↑ Click the colored bar above to expand ↑
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="main-content">
+        <div class="demo-header">
+            <h1>📊 Minimal Indicator</h1>
+            <p>Design Proposal 20: Unobtrusive thin bar with quick status, click to expand for full details</p>
+        </div>
+
+        <div class="chat-section">
+            <div class="chat-message">
+                <div class="message-label">You</div>
+                <div class="message-text">
+                    What are the latest developments in AI safety research?
+                </div>
+            </div>
+
+            <div class="chat-message">
+                <div class="message-label">Assistant</div>
+                <div class="message-text">
+                    Based on recent research from 2026, there have been several significant developments in AI safety:
+                    <br><br>
+                    <strong>Constitutional AI</strong> approaches have shown promising results in alignment research. Major institutions have published new frameworks for creating safer AI systems through constitutional methods.
+                    <br><br>
+                    <strong>Mechanistic Interpretability</strong> has made substantial progress, with researchers successfully identifying specific circuits within large language models.
+                    <br><br>
+                    <strong>Scalable Oversight</strong> techniques have been refined, including recursive reward modeling and debate-based approaches.
+                </div>
+            </div>
+
+            <div class="chat-message">
+                <div class="message-label">You</div>
+                <div class="message-text">
+                    Tell me more about constitutional AI frameworks
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="annotation">
+        <h3>💡 Design Features</h3>
+        <ul>
+            <li>Minimal 4px indicator bar at top</li>
+            <li>Color-coded by activity type</li>
+            <li>Click to expand to full view</li>
+            <li>Completely unobtrusive by default</li>
+            <li>Quick status at a glance</li>
+            <li>Progressive disclosure design</li>
+        </ul>
+    </div>
+</body>
+</html>

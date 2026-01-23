@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proposal 14: Grid Layout</title>
+    <style>
+        :root {
+            --background: hsl(0, 0%, 100%);
+            --foreground: hsl(240, 10%, 3.9%);
+            --primary: hsl(240, 5.9%, 10%);
+            --muted: hsl(240, 4.8%, 95.9%);
+            --muted-foreground: hsl(240, 3.8%, 46.1%);
+            --border: hsl(240, 5.9%, 90%);
+            --radius: 1rem;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--muted);
+            color: var(--foreground);
+            padding: 2rem;
+        }
+        .header {
+            margin-bottom: 2rem;
+        }
+        .header h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.5rem; }
+        .header p { color: var(--muted-foreground); font-size: 0.875rem; }
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .grid-card {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.25rem;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            cursor: pointer;
+        }
+        .grid-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+        }
+        .card-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+        }
+        .icon-search { background: hsl(217, 91%, 95%); }
+        .icon-retrieval { background: hsl(142, 76%, 95%); }
+        .icon-api { background: hsl(280, 65%, 95%); }
+        .icon-processing { background: hsl(48, 96%, 95%); }
+        .icon-generation { background: hsl(340, 75%, 95%); }
+        .card-title {
+            font-weight: 600;
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        .card-description {
+            font-size: 0.875rem;
+            color: var(--muted-foreground);
+            line-height: 1.5;
+            margin-bottom: 1rem;
+        }
+        .card-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.813rem;
+            padding-top: 0.75rem;
+            border-top: 1px solid var(--border);
+        }
+        .card-duration {
+            color: var(--muted-foreground);
+        }
+        .card-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 500;
+        }
+        .status-badge {
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.375rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .badge-complete {
+            background: hsl(142, 76%, 95%);
+            color: hsl(142, 76%, 36%);
+        }
+        .badge-processing {
+            background: hsl(48, 96%, 95%);
+            color: hsl(48, 96%, 33%);
+            animation: pulse-badge 2s infinite;
+        }
+        @keyframes pulse-badge {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        .card-details {
+            margin-top: 0.75rem;
+            padding-top: 0.75rem;
+            border-top: 1px solid var(--border);
+            font-size: 0.813rem;
+            color: var(--muted-foreground);
+        }
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.25rem;
+        }
+        .annotation {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            max-width: 350px;
+            padding: 1rem;
+            background: var(--primary);
+            color: white;
+            border-radius: var(--radius);
+            font-size: 0.875rem;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+            z-index: 100;
+        }
+        .annotation h3 { font-size: 1rem; margin-bottom: 0.5rem; }
+        .annotation ul { margin-left: 1.25rem; margin-top: 0.5rem; }
+        .annotation li { margin-bottom: 0.25rem; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎨 Grid Layout</h1>
+        <p>Design Proposal 14: Masonry-style grid of action cards with responsive layout</p>
+    </div>
+
+    <div class="grid-container">
+        <div class="grid-card">
+            <div class="card-icon icon-search">🔍</div>
+            <div class="card-title">Web Search</div>
+            <div class="card-description">
+                Queried 3 search APIs (Brave, Google, Bing) for "AI safety research 2026"
+            </div>
+            <div class="card-details">
+                <div class="detail-row">
+                    <span>Sources found:</span>
+                    <strong>127</strong>
+                </div>
+                <div class="detail-row">
+                    <span>Cache:</span>
+                    <span>Miss</span>
+                </div>
+            </div>
+            <div class="card-meta">
+                <span class="card-duration">1.24s</span>
+                <span class="status-badge badge-complete">✓ Complete</span>
+            </div>
+        </div>
+
+        <div class="grid-card">
+            <div class="card-icon icon-retrieval">📚</div>
+            <div class="card-title">RAG Retrieval</div>
+            <div class="card-description">
+                Retrieved documents from Vespa vector database using semantic search
+            </div>
+            <div class="card-details">
+                <div class="detail-row">
+                    <span>Documents:</span>
+                    <strong>5</strong>
+                </div>
+                <div class="detail-row">
+                    <span>Avg score:</span>
+                    <strong>0.8911</strong>
+                </div>
+            </div>
+            <div class="card-meta">
+                <span class="card-duration">0.45s</span>
+                <span class="status-badge badge-complete">✓ Complete</span>
+            </div>
+        </div>
+
+        <div class="grid-card">
+            <div class="card-icon icon-api">🔌</div>
+            <div class="card-title">Semantic Search API</div>
+            <div class="card-description">
+                POST request to semantic-search.com/v1/query endpoint
+            </div>
+            <div class="card-details">
+                <div class="detail-row">
+                    <span>Status:</span>
+                    <strong>200 OK</strong>
+                </div>
+                <div class="detail-row">
+                    <span>Response:</span>
+                    <span>15.3 KB</span>
+                </div>
+            </div>
+            <div class="card-meta">
+                <span class="card-duration">0.31s</span>
+                <span class="status-badge badge-complete">✓ Complete</span>
+            </div>
+        </div>
+
+        <div class="grid-card">
+            <div class="card-icon icon-processing">⚙️</div>
+            <div class="card-title">Data Aggregation</div>
+            <div class="card-description">
+                Merging sources from multiple APIs and removing duplicate entries
+            </div>
+            <div class="card-details">
+                <div class="detail-row">
+                    <span>Input sources:</span>
+                    <strong>132</strong>
+                </div>
+                <div class="detail-row">
+                    <span>Duplicates:</span>
+                    <span>27 removed</span>
+                </div>
+            </div>
+            <div class="card-meta">
+                <span class="card-duration">0.18s</span>
+                <span class="status-badge badge-complete">✓ Complete</span>
+            </div>
+        </div>
+
+        <div class="grid-card">
+            <div class="card-icon icon-search">🔍</div>
+            <div class="card-title">Follow-up Search</div>
+            <div class="card-description">
+                Additional query for "Constitutional AI frameworks" to enrich context
+            </div>
+            <div class="card-details">
+                <div class="detail-row">
+                    <span>Sources:</span>
+                    <strong>89</strong>
+                </div>
+                <div class="detail-row">
+                    <span>APIs:</span>
+                    <span>2 used</span>
+                </div>
+            </div>
+            <div class="card-meta">
+                <span class="card-duration">0.98s</span>
+                <span class="status-badge badge-complete">✓ Complete</span>
+            </div>
+        </div>
+
+        <div class="grid-card">
+            <div class="card-icon icon-generation">🤖</div>
+            <div class="card-title">Response Generation</div>
+            <div class="card-description">
+                Streaming tokens from Qwen2.5-14B language model with retrieved context
+            </div>
+            <div class="card-details">
+                <div class="detail-row">
+                    <span>Progress:</span>
+                    <strong>156/300 tokens</strong>
+                </div>
+                <div class="detail-row">
+                    <span>Speed:</span>
+                    <span>47 tok/s</span>
+                </div>
+            </div>
+            <div class="card-meta">
+                <span class="card-duration">ETA: 3s</span>
+                <span class="status-badge badge-processing">⏳ Streaming</span>
+            </div>
+        </div>
+
+        <div class="grid-card">
+            <div class="card-icon icon-retrieval">📚</div>
+            <div class="card-title">Query Expansion</div>
+            <div class="card-description">
+                Retrieved additional documents using expanded query terms
+            </div>
+            <div class="card-details">
+                <div class="detail-row">
+                    <span>Documents:</span>
+                    <strong>8</strong>
+                </div>
+                <div class="detail-row">
+                    <span>Expansion:</span>
+                    <span>5 terms</span>
+                </div>
+            </div>
+            <div class="card-meta">
+                <span class="card-duration">0.52s</span>
+                <span class="status-badge badge-complete">✓ Complete</span>
+            </div>
+        </div>
+
+        <div class="grid-card">
+            <div class="card-icon icon-processing">📊</div>
+            <div class="card-title">Citation Analysis</div>
+            <div class="card-description">
+                Analyzing citation networks across retrieved documents
+            </div>
+            <div class="card-details">
+                <div class="detail-row">
+                    <span>Documents:</span>
+                    <strong>245</strong>
+                </div>
+                <div class="detail-row">
+                    <span>Links found:</span>
+                    <span>1,847</span>
+                </div>
+            </div>
+            <div class="card-meta">
+                <span class="card-duration">0.35s</span>
+                <span class="status-badge badge-complete">✓ Complete</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="annotation">
+        <h3>💡 Design Features</h3>
+        <ul>
+            <li>Masonry-style responsive grid</li>
+            <li>Visual grouping by action type</li>
+            <li>Hover effects for interaction</li>
+            <li>Dashboard-like overview</li>
+            <li>Color-coded icons</li>
+            <li>Click to expand details</li>
+        </ul>
+    </div>
+</body>
+</html>

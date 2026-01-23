@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proposal 16: Nested Accordion</title>
+    <style>
+        :root {
+            --background: hsl(0, 0%, 100%);
+            --foreground: hsl(240, 10%, 3.9%);
+            --primary: hsl(240, 5.9%, 10%);
+            --muted: hsl(240, 4.8%, 95.9%);
+            --muted-foreground: hsl(240, 3.8%, 46.1%);
+            --border: hsl(240, 5.9%, 90%);
+            --radius: 1rem;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--background);
+            color: var(--foreground);
+            padding: 2rem;
+        }
+        .header {
+            margin-bottom: 2rem;
+        }
+        .header h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.5rem; }
+        .header p { color: var(--muted-foreground); font-size: 0.875rem; }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        .accordion-container {
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: white;
+            overflow: hidden;
+        }
+        .controls {
+            padding: 0.75rem 1rem;
+            background: var(--muted);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .controls-title {
+            font-weight: 600;
+            font-size: 0.875rem;
+        }
+        .controls-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .control-btn {
+            padding: 0.25rem 0.75rem;
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-size: 0.813rem;
+        }
+        .control-btn:hover {
+            background: var(--background);
+        }
+        .category {
+            border-bottom: 1px solid var(--border);
+        }
+        .category:last-child {
+            border-bottom: none;
+        }
+        .category-header {
+            padding: 1rem;
+            background: var(--muted);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-weight: 600;
+            transition: background 0.15s ease;
+        }
+        .category-header:hover {
+            background: hsl(240, 4.8%, 92%);
+        }
+        .category-title {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 1rem;
+        }
+        .category-icon {
+            font-size: 1.25rem;
+        }
+        .category-badge {
+            background: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.375rem;
+            font-size: 0.813rem;
+            font-weight: 500;
+        }
+        .expand-icon {
+            transition: transform 0.2s ease;
+        }
+        .category.collapsed .expand-icon {
+            transform: rotate(-90deg);
+        }
+        .category-content {
+            max-height: 1000px;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+        .category.collapsed .category-content {
+            max-height: 0;
+        }
+        .action-item {
+            border-top: 1px solid var(--border);
+        }
+        .action-header {
+            padding: 0.75rem 1rem 0.75rem 2.5rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: background 0.15s ease;
+        }
+        .action-header:hover {
+            background: var(--muted);
+        }
+        .action-title {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 500;
+            font-size: 0.875rem;
+        }
+        .action-time {
+            font-size: 0.75rem;
+            color: var(--muted-foreground);
+        }
+        .action-details {
+            padding: 0 1rem 0.75rem 2.5rem;
+            font-size: 0.875rem;
+            color: var(--muted-foreground);
+            line-height: 1.6;
+        }
+        .action-item.collapsed .action-details {
+            display: none;
+        }
+        .detail-row {
+            display: flex;
+            margin-bottom: 0.25rem;
+        }
+        .detail-label {
+            font-weight: 500;
+            min-width: 120px;
+            color: var(--foreground);
+        }
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.25rem 0.5rem;
+            background: hsl(142, 76%, 95%);
+            color: hsl(142, 76%, 36%);
+            border-radius: 0.375rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .annotation {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            max-width: 350px;
+            padding: 1rem;
+            background: var(--primary);
+            color: white;
+            border-radius: var(--radius);
+            font-size: 0.875rem;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+        }
+        .annotation h3 { font-size: 1rem; margin-bottom: 0.5rem; }
+        .annotation ul { margin-left: 1.25rem; margin-top: 0.5rem; }
+        .annotation li { margin-bottom: 0.25rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📁 Nested Accordion</h1>
+            <p>Design Proposal 16: Multi-level collapsible sections with category headers</p>
+        </div>
+
+        <div class="accordion-container">
+            <div class="controls">
+                <div class="controls-title">Model Actions</div>
+                <div class="controls-buttons">
+                    <button class="control-btn">Expand All</button>
+                    <button class="control-btn">Collapse All</button>
+                </div>
+            </div>
+
+            <!-- Search Category -->
+            <div class="category">
+                <div class="category-header">
+                    <div class="category-title">
+                        <span class="category-icon">🔍</span>
+                        <span>Search Operations</span>
+                        <span class="category-badge">4 actions</span>
+                    </div>
+                    <span class="expand-icon">▼</span>
+                </div>
+                <div class="category-content">
+                    <div class="action-item">
+                        <div class="action-header">
+                            <div class="action-title">
+                                <span>Web Search - Brave API</span>
+                            </div>
+                            <span class="action-time">12:34:56</span>
+                        </div>
+                        <div class="action-details">
+                            <div class="detail-row">
+                                <span class="detail-label">Query:</span>
+                                <span>"AI safety research 2026"</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Results:</span>
+                                <span>45 sources found</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Duration:</span>
+                                <span>0.87s</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Status:</span>
+                                <span class="status-indicator">✓ Complete</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="action-item">
+                        <div class="action-header">
+                            <div class="action-title">
+                                <span>Web Search - Google API</span>
+                            </div>
+                            <span class="action-time">12:34:57</span>
+                        </div>
+                        <div class="action-details">
+                            <div class="detail-row">
+                                <span class="detail-label">Query:</span>
+                                <span>"AI safety research 2026"</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Results:</span>
+                                <span>52 sources found</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Duration:</span>
+                                <span>1.02s</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Status:</span>
+                                <span class="status-indicator">✓ Complete</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="action-item">
+                        <div class="action-header">
+                            <div class="action-title">
+                                <span>Web Search - Bing API</span>
+                            </div>
+                            <span class="action-time">12:34:58</span>
+                        </div>
+                        <div class="action-details">
+                            <div class="detail-row">
+                                <span class="detail-label">Query:</span>
+                                <span>"AI safety research 2026"</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Results:</span>
+                                <span>30 sources found</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Duration:</span>
+                                <span>0.95s</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Status:</span>
+                                <span class="status-indicator">✓ Complete</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="action-item">
+                        <div class="action-header">
+                            <div class="action-title">
+                                <span>Follow-up Search</span>
+                            </div>
+                            <span class="action-time">12:35:01</span>
+                        </div>
+                        <div class="action-details">
+                            <div class="detail-row">
+                                <span class="detail-label">Query:</span>
+                                <span>"Constitutional AI frameworks"</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Results:</span>
+                                <span>89 sources found</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Duration:</span>
+                                <span>0.98s</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Status:</span>
+                                <span class="status-indicator">✓ Complete</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Retrieval Category -->
+            <div class="category">
+                <div class="category-header">
+                    <div class="category-title">
+                        <span class="category-icon">📚</span>
+                        <span>Retrieval Operations</span>
+                        <span class="category-badge">2 actions</span>
+                    </div>
+                    <span class="expand-icon">▼</span>
+                </div>
+                <div class="category-content">
+                    <div class="action-item">
+                        <div class="action-header">
+                            <div class="action-title">
+                                <span>RAG Retrieval - Vespa</span>
+                            </div>
+                            <span class="action-time">12:34:59</span>
+                        </div>
+                        <div class="action-details">
+                            <div class="detail-row">
+                                <span class="detail-label">Documents:</span>
+                                <span>5 retrieved</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Avg Score:</span>
+                                <span>0.8911</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Source:</span>
+                                <span>Vespa vector database</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Duration:</span>
+                                <span>0.45s</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Status:</span>
+                                <span class="status-indicator">✓ Complete</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="action-item">
+                        <div class="action-header">
+                            <div class="action-title">
+                                <span>Query Expansion Retrieval</span>
+                            </div>
+                            <span class="action-time">12:35:03</span>
+                        </div>
+                        <div class="action-details">
+                            <div class="detail-row">
+                                <span class="detail-label">Documents:</span>
+                                <span>8 additional documents</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Expansion:</span>
+                                <span>5 query terms added</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Duration:</span>
+                                <span>0.52s</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Status:</span>
+                                <span class="status-indicator">✓ Complete</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Processing Category -->
+            <div class="category collapsed">
+                <div class="category-header">
+                    <div class="category-title">
+                        <span class="category-icon">⚙️</span>
+                        <span>Processing Operations</span>
+                        <span class="category-badge">3 actions</span>
+                    </div>
+                    <span class="expand-icon">▼</span>
+                </div>
+                <div class="category-content">
+                    <div class="action-item">
+                        <div class="action-header">
+                            <div class="action-title">
+                                <span>Data Aggregation</span>
+                            </div>
+                            <span class="action-time">12:35:00</span>
+                        </div>
+                        <div class="action-details">
+                            <div class="detail-row">
+                                <span class="detail-label">Operation:</span>
+                                <span>Merge and deduplicate</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Input:</span>
+                                <span>132 sources</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Output:</span>
+                                <span>105 unique sources</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Duration:</span>
+                                <span>0.18s</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="annotation">
+        <h3>💡 Design Features</h3>
+        <ul>
+            <li>Multi-level collapsible sections</li>
+            <li>Category-based organization</li>
+            <li>Expand/collapse all controls</li>
+            <li>Nested action items</li>
+            <li>Maintains scroll position</li>
+            <li>Hierarchical information structure</li>
+        </ul>
+    </div>
+</body>
+</html>
