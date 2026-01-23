@@ -42,11 +42,41 @@ class OneSeekGraphAgent:
             max_tokens=int(os.getenv("MAX_TOKENS", "2048"))
         )
         
-        # Bind tools to LLM
-        self.llm_with_tools = self.llm.bind_tools(AVAILABLE_TOOLS)
+        # Filter tools to only include configured ones
+        self.available_tools = self._get_configured_tools()
+        
+        # Bind only configured tools to LLM
+        self.llm_with_tools = self.llm.bind_tools(self.available_tools)
         
         # Build the graph
         self.graph = self._build_graph()
+    
+    def _get_configured_tools(self):
+        """Get list of tools that are properly configured"""
+        from tools import AVAILABLE_TOOLS
+        configured_tools = []
+        
+        for tool in AVAILABLE_TOOLS:
+            tool_name = tool.name
+            
+            # Always include DuckDuckGo (no config needed)
+            if tool_name == "duckduckgo_search":
+                configured_tools.append(tool)
+                continue
+            
+            # Check if Tavily is configured
+            if tool_name == "tavily_search":
+                if os.getenv("TAVILY_API_KEY"):
+                    configured_tools.append(tool)
+                continue
+            
+            # Check if Vespa is configured
+            if tool_name == "vespa_search":
+                if os.getenv("VESPA_URL") and os.getenv("VESPA_CERT_PATH") and os.getenv("VESPA_KEY_PATH"):
+                    configured_tools.append(tool)
+                continue
+        
+        return configured_tools
     
     def _build_graph(self) -> StateGraph:
         """Build the LangGraph workflow with conditional tool calling"""
@@ -54,7 +84,7 @@ class OneSeekGraphAgent:
         
         # Add nodes
         workflow.add_node("agent", self._agent_node)
-        workflow.add_node("tools", ToolNode(AVAILABLE_TOOLS))
+        workflow.add_node("tools", ToolNode(self.available_tools))
         
         # Add edges
         workflow.set_entry_point("agent")
@@ -85,18 +115,29 @@ class OneSeekGraphAgent:
         if system_prompt:
             system_content = system_prompt
         else:
+            # Build tool descriptions dynamically based on configured tools
+            tool_descriptions = []
+            for tool in self.available_tools:
+                if tool.name == "tavily_search":
+                    tool_descriptions.append("- tavily_search: Paid, robust, accurate web search with concise summaries")
+                elif tool.name == "duckduckgo_search":
+                    tool_descriptions.append("- duckduckgo_search: Free, simple, anonymous web search")
+                elif tool.name == "vespa_search":
+                    tool_descriptions.append("- vespa_search: Local/cloud RAG with embeddings and hybrid searching")
+            
+            tools_text = "\n".join(tool_descriptions) if tool_descriptions else "No search tools available."
+            
             system_content = (
                 "You are a helpful AI assistant for OneSeek.ai. "
-                "You have access to multiple search tools:\n"
-                "- tavily_search: Paid, robust, accurate web search with concise summaries\n"
-                "- duckduckgo_search: Free, simple, anonymous web search\n"
-                "- vespa_search: Local/cloud RAG with embeddings and hybrid searching\n\n"
+                f"You have access to the following search tools:\n{tools_text}\n\n"
                 "When the user asks a question:\n"
                 "1. Determine if you need to search for information\n"
                 "2. If needed, call one or multiple tools in parallel\n"
                 "3. Use the search results to provide a comprehensive, factual answer in Swedish\n"
                 "4. Always cite your sources appropriately\n"
                 "5. If no search is needed, answer directly based on your knowledge\n\n"
+                "Important: Do NOT show your thinking process or internal reasoning to the user. "
+                "Only provide the final answer with source citations.\n\n"
                 "Provide transparent, well-sourced responses."
             )
         
@@ -157,18 +198,29 @@ class OneSeekGraphAgent:
         if system_prompt:
             system_content = system_prompt
         else:
+            # Build tool descriptions dynamically based on configured tools
+            tool_descriptions = []
+            for tool in self.available_tools:
+                if tool.name == "tavily_search":
+                    tool_descriptions.append("- tavily_search: Paid, robust, accurate web search with concise summaries")
+                elif tool.name == "duckduckgo_search":
+                    tool_descriptions.append("- duckduckgo_search: Free, simple, anonymous web search")
+                elif tool.name == "vespa_search":
+                    tool_descriptions.append("- vespa_search: Local/cloud RAG with embeddings and hybrid searching")
+            
+            tools_text = "\n".join(tool_descriptions) if tool_descriptions else "No search tools available."
+            
             system_content = (
                 "You are a helpful AI assistant for OneSeek.ai. "
-                "You have access to multiple search tools:\n"
-                "- tavily_search: Paid, robust, accurate web search with concise summaries\n"
-                "- duckduckgo_search: Free, simple, anonymous web search\n"
-                "- vespa_search: Local/cloud RAG with embeddings and hybrid searching\n\n"
+                f"You have access to the following search tools:\n{tools_text}\n\n"
                 "When the user asks a question:\n"
                 "1. Determine if you need to search for information\n"
                 "2. If needed, call one or multiple tools in parallel\n"
                 "3. Use the search results to provide a comprehensive, factual answer in Swedish\n"
                 "4. Always cite your sources appropriately\n"
                 "5. If no search is needed, answer directly based on your knowledge\n\n"
+                "Important: Do NOT show your thinking process or internal reasoning to the user. "
+                "Only provide the final answer with source citations.\n\n"
                 "Provide transparent, well-sourced responses."
             )
         
@@ -341,7 +393,7 @@ class OneSeekGraphAgent:
             steps_list.append("Executing tools...")
             callback("step", "Executing tools...")
             
-            tool_node = ToolNode(AVAILABLE_TOOLS)
+            tool_node = ToolNode(self.available_tools)
             tool_result = tool_node.invoke(current_state)
             
             # Add tool messages to state
