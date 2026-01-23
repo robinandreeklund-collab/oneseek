@@ -150,19 +150,15 @@ export default function ChatList({ messages, isLoading, messageSources }: ChatLi
                   <div className="relative flex w-full min-w-0 flex-col">
                     <div className="font-semibold pb-2">Assistant</div>
                     {/* Show source badge if sources exist for this message */}
-                    {(() => {
-                      const hasSources = messageSources && messageSources[message.id];
-                      console.log(`Message ${message.id}: hasSources =`, hasSources, "sources:", messageSources?.[message.id]);
-                      return hasSources && (
-                        <SourceBadge
-                          sourceCount={messageSources[message.id].length}
-                          onClick={() => {
-                            setSelectedSources(messageSources[message.id]);
-                            setSidebarOpen(true);
-                          }}
-                        />
-                      );
-                    })()}
+                    {messageSources && messageSources[message.id] && (
+                      <SourceBadge
+                        sourceCount={messageSources[message.id].length}
+                        onClick={() => {
+                          setSelectedSources(messageSources[message.id]);
+                          setSidebarOpen(true);
+                        }}
+                      />
+                    )}
                     <div className="flex-col gap-1 md:gap-3">
                       <span className="whitespace-pre-wrap">
                         {/* Check if the message content contains a code block */}

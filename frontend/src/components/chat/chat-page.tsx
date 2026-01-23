@@ -41,41 +41,50 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
     onError: (error) => {
       toast.error("Something went wrong: " + error);
     },
-    onFinish: (message, options) => {
-      // Extract source metadata from stream data
-      console.log("onFinish called for message:", message.id);
-      console.log("onFinish options:", options);
-      console.log("onFinish data from options:", options?.data);
-      
-      // The data is in options.data, which should be an array
-      const streamData = options?.data;
-      if (streamData && Array.isArray(streamData)) {
-        console.log("Stream data is array with length:", streamData.length);
-        // Iterate through the data array
-        for (const item of streamData) {
-          console.log("Processing stream data item:", item);
-          // Check if this item has the retrieved sources
-          if (item && typeof item === 'object' && item.retrieved && Array.isArray(item.retrieved)) {
-            console.log("Found retrieved sources:", item.retrieved.length);
-            setMessageSources((prev) => ({
-              ...prev,
-              [message.id]: item.retrieved.map((source: any) => ({
-                title: source.title || "Untitled",
-                content: source.content || "",
-                url: source.url,
-                relevance: source.relevance,
-                source: source.source,
-              })),
-            }));
-            console.log("Sources set for message:", message.id);
-            break;
-          }
-        }
-      } else {
-        console.log("No stream data or not an array. streamData:", streamData);
-      }
-    },
   });
+  
+  // Watch for data changes and extract sources
+  React.useEffect(() => {
+    console.log("useChat data changed:", data);
+    if (data && Array.isArray(data) && data.length > 0) {
+      console.log("Processing data array with", data.length, "items");
+      
+      // Get the most recent assistant message
+      const lastAssistantMessage = messages.filter(m => m.role === 'assistant').slice(-1)[0];
+      if (!lastAssistantMessage) {
+        console.log("No assistant message found yet");
+        return;
+      }
+      
+      console.log("Last assistant message ID:", lastAssistantMessage.id);
+      
+      // Process all data items to find sources
+      for (const item of data) {
+        console.log("Data item:", item);
+        if (item && typeof item === 'object' && item.retrieved && Array.isArray(item.retrieved) && item.retrieved.length > 0) {
+          console.log("Found", item.retrieved.length, "sources in data");
+          setMessageSources((prev) => {
+            // Only set if not already set for this message
+            if (!prev[lastAssistantMessage.id]) {
+              console.log("Setting sources for message:", lastAssistantMessage.id);
+              return {
+                ...prev,
+                [lastAssistantMessage.id]: item.retrieved.map((source: any) => ({
+                  title: source.title || "Untitled",
+                  content: source.content || "",
+                  url: source.url,
+                  relevance: source.relevance,
+                  source: source.source,
+                })),
+              };
+            }
+            return prev;
+          });
+          break;
+        }
+      }
+    }
+  }, [data, messages]);
   const [chatOptions, setChatOptions] = useLocalStorageState<ChatOptions>(
     "chatOptions",
     {
