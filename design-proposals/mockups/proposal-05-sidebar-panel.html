@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proposal 05: Sidebar Panel</title>
+    <style>
+        :root {
+            --background: hsl(0, 0%, 100%);
+            --foreground: hsl(240, 10%, 3.9%);
+            --primary: hsl(240, 5.9%, 10%);
+            --muted: hsl(240, 4.8%, 95.9%);
+            --muted-foreground: hsl(240, 3.8%, 46.1%);
+            --border: hsl(240, 5.9%, 90%);
+            --radius: 1rem;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--muted);
+            color: var(--foreground);
+            height: 100vh;
+            overflow: hidden;
+        }
+        .layout {
+            display: flex;
+            height: 100%;
+        }
+        .main-content {
+            flex: 1;
+            padding: 2rem;
+            overflow-y: auto;
+            background: var(--background);
+        }
+        .header h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.5rem; }
+        .header p { color: var(--muted-foreground); font-size: 0.875rem; margin-bottom: 2rem; }
+        .chat-message {
+            padding: 1rem;
+            background: var(--muted);
+            border-radius: var(--radius);
+            margin-bottom: 1rem;
+        }
+        .sidebar {
+            width: 350px;
+            background: white;
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            box-shadow: -4px 0 12px rgba(0, 0, 0, 0.05);
+        }
+        .sidebar-header {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .sidebar-title {
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .live-indicator {
+            width: 8px;
+            height: 8px;
+            background: hsl(142, 76%, 36%);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .sidebar-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0.5rem;
+        }
+        .activity-item {
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            background: var(--muted);
+            border-radius: calc(var(--radius) - 6px);
+            border-left: 3px solid var(--border);
+            font-size: 0.875rem;
+        }
+        .activity-item.search { border-left-color: hsl(217, 91%, 60%); }
+        .activity-item.retrieval { border-left-color: hsl(142, 76%, 36%); }
+        .activity-item.api { border-left-color: hsl(280, 65%, 60%); }
+        .activity-item.processing { border-left-color: hsl(48, 96%, 53%); }
+        .activity-header {
+            display: flex;
+            justify-content: space-between;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+        .activity-time {
+            font-size: 0.75rem;
+            color: var(--muted-foreground);
+        }
+        .activity-content {
+            font-size: 0.75rem;
+            color: var(--muted-foreground);
+            margin-top: 0.25rem;
+        }
+        .annotation {
+            position: fixed;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            max-width: 400px;
+            padding: 1rem;
+            background: var(--primary);
+            color: white;
+            border-radius: var(--radius);
+            font-size: 0.875rem;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+            z-index: 100;
+        }
+        .annotation h3 { font-size: 1rem; margin-bottom: 0.5rem; }
+        .annotation ul { margin-left: 1.25rem; margin-top: 0.5rem; }
+        .annotation li { margin-bottom: 0.25rem; }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <div class="main-content">
+            <div class="header">
+                <h1>💬 Chat Interface</h1>
+                <p>Design Proposal 05: Sidebar Panel - Always-visible activity monitor</p>
+            </div>
+            <div class="chat-message">
+                <strong>You:</strong> What are the latest developments in AI safety research?
+            </div>
+            <div class="chat-message">
+                <strong>Assistant:</strong> Based on recent research from 2026, there have been several significant developments in AI safety...
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-title">
+                    <span class="live-indicator"></span>
+                    <span>Live Activity</span>
+                </div>
+                <button style="background: none; border: none; cursor: pointer; font-size: 1.25rem;">✕</button>
+            </div>
+            <div class="sidebar-content">
+                <div class="activity-item search">
+                    <div class="activity-header">
+                        <span>🔍 Web Search</span>
+                        <span class="activity-time">12:34:56</span>
+                    </div>
+                    <div class="activity-content">
+                        Found 127 sources across 3 APIs
+                    </div>
+                    <div class="activity-content">
+                        Duration: 1.2s · Status: ✓ Complete
+                    </div>
+                </div>
+
+                <div class="activity-item retrieval">
+                    <div class="activity-header">
+                        <span>📚 RAG Retrieval</span>
+                        <span class="activity-time">12:34:57</span>
+                    </div>
+                    <div class="activity-content">
+                        Retrieved 5 documents from Vespa
+                    </div>
+                    <div class="activity-content">
+                        Avg score: 0.8911 · Status: ✓ Complete
+                    </div>
+                </div>
+
+                <div class="activity-item api">
+                    <div class="activity-header">
+                        <span>🔌 API Call</span>
+                        <span class="activity-time">12:34:58</span>
+                    </div>
+                    <div class="activity-content">
+                        Semantic search API request
+                    </div>
+                    <div class="activity-content">
+                        Status: 200 OK · Duration: 0.3s
+                    </div>
+                </div>
+
+                <div class="activity-item processing">
+                    <div class="activity-header">
+                        <span>⚙️ Aggregation</span>
+                        <span class="activity-time">12:34:59</span>
+                    </div>
+                    <div class="activity-content">
+                        Merging 132 sources, removed 27 dupes
+                    </div>
+                    <div class="activity-content">
+                        Progress: 75% · Status: ⏳ Processing
+                    </div>
+                </div>
+
+                <div class="activity-item processing">
+                    <div class="activity-header">
+                        <span>🤖 Generation</span>
+                        <span class="activity-time">12:35:02</span>
+                    </div>
+                    <div class="activity-content">
+                        Streaming from Qwen2.5-14B
+                    </div>
+                    <div class="activity-content">
+                        156/300 tokens · 47 tok/s · ETA: 3s
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="annotation">
+        <h3>💡 Design Features</h3>
+        <ul>
+            <li>Persistent sidebar visibility</li>
+            <li>Doesn't interfere with chat</li>
+            <li>Live activity stream</li>
+            <li>Compact, scannable format</li>
+            <li>Collapsible panel option</li>
+        </ul>
+    </div>
+</body>
+</html>

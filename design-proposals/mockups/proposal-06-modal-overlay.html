@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Proposal 06: Modal Overlay</title>
+    <style>
+        :root {
+            --background: hsl(0, 0%, 100%);
+            --foreground: hsl(240, 10%, 3.9%);
+            --primary: hsl(240, 5.9%, 10%);
+            --muted: hsl(240, 4.8%, 95.9%);
+            --muted-foreground: hsl(240, 3.8%, 46.1%);
+            --border: hsl(240, 5.9%, 90%);
+            --radius: 1rem;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--background);
+            color: var(--foreground);
+            padding: 2rem;
+        }
+        .modal-backdrop {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+        .modal {
+            background: white;
+            border-radius: var(--radius);
+            max-width: 900px;
+            max-height: 90vh;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+        }
+        .modal-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--muted-foreground);
+        }
+        .modal-toolbar {
+            padding: 1rem 1.5rem;
+            background: var(--muted);
+            display: flex;
+            gap: 0.5rem;
+        }
+        .tool-btn {
+            padding: 0.5rem 1rem;
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: calc(var(--radius) - 6px);
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+        .modal-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+        }
+        .detail-section {
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            background: var(--muted);
+            border-radius: calc(var(--radius) - 4px);
+        }
+        .section-title {
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 150px 1fr;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+        }
+        .detail-label {
+            font-weight: 600;
+        }
+        .annotation {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            max-width: 300px;
+            padding: 1rem;
+            background: var(--primary);
+            color: white;
+            border-radius: var(--radius);
+            font-size: 0.875rem;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+        }
+        .annotation h3 { font-size: 1rem; margin-bottom: 0.5rem; }
+        .annotation ul { margin-left: 1.25rem; margin-top: 0.5rem; }
+        .annotation li { margin-bottom: 0.25rem; }
+    </style>
+</head>
+<body>
+    <div class="modal-backdrop">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title">🔍 Action Details Inspector</div>
+                <button class="close-btn">✕</button>
+            </div>
+            <div class="modal-toolbar">
+                <button class="tool-btn">📥 Export JSON</button>
+                <button class="tool-btn">📋 Copy All</button>
+                <button class="tool-btn">🔍 Search</button>
+                <button class="tool-btn">⚡ Filter</button>
+            </div>
+            <div class="modal-content">
+                <div class="detail-section">
+                    <div class="section-title">🔍 Web Search</div>
+                    <div class="detail-grid">
+                        <div class="detail-label">Query</div>
+                        <div>"latest AI safety research 2026"</div>
+                        <div class="detail-label">Sources Found</div>
+                        <div>127 results</div>
+                        <div class="detail-label">API Endpoints</div>
+                        <div>3 (google.com, bing.com, duckduckgo.com)</div>
+                        <div class="detail-label">Duration</div>
+                        <div>1.24 seconds</div>
+                        <div class="detail-label">Timestamp</div>
+                        <div>2026-01-23 12:34:56</div>
+                        <div class="detail-label">Status</div>
+                        <div>✓ Complete</div>
+                    </div>
+                </div>
+                
+                <div class="detail-section">
+                    <div class="section-title">📚 RAG Retrieval</div>
+                    <div class="detail-grid">
+                        <div class="detail-label">Source</div>
+                        <div>Vespa Cloud Knowledge Base</div>
+                        <div class="detail-label">Documents</div>
+                        <div>5 retrieved</div>
+                        <div class="detail-label">Average Score</div>
+                        <div>0.8911</div>
+                        <div class="detail-label">Search Type</div>
+                        <div>Hybrid (BM25 + Semantic)</div>
+                        <div class="detail-label">Duration</div>
+                        <div>0.42 seconds</div>
+                        <div class="detail-label">Status</div>
+                        <div>✓ Complete</div>
+                    </div>
+                </div>
+
+                <div class="detail-section">
+                    <div class="section-title">⚙️ Data Processing</div>
+                    <div class="detail-grid">
+                        <div class="detail-label">Total Sources</div>
+                        <div>132 items</div>
+                        <div class="detail-label">Duplicates</div>
+                        <div>27 removed</div>
+                        <div class="detail-label">Unique Sources</div>
+                        <div>105 final</div>
+                        <div class="detail-label">Progress</div>
+                        <div>75% complete</div>
+                        <div class="detail-label">Status</div>
+                        <div>⏳ Processing</div>
+                    </div>
+                </div>
+
+                <div class="detail-section">
+                    <div class="section-title">🤖 LLM Generation</div>
+                    <div class="detail-grid">
+                        <div class="detail-label">Model</div>
+                        <div>Qwen/Qwen2.5-14B-Instruct-AWQ</div>
+                        <div class="detail-label">Tokens</div>
+                        <div>156 / ~300 estimated</div>
+                        <div class="detail-label">Speed</div>
+                        <div>47 tokens/second</div>
+                        <div class="detail-label">Context Length</div>
+                        <div>2,134 tokens</div>
+                        <div class="detail-label">ETA</div>
+                        <div>~3 seconds remaining</div>
+                        <div class="detail-label">Status</div>
+                        <div>⏳ Streaming</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="annotation">
+        <h3>💡 Design Features</h3>
+        <ul>
+            <li>Full-screen detailed view</li>
+            <li>Export & copy functionality</li>
+            <li>Search within actions</li>
+            <li>Complete transparency</li>
+            <li>Clean, organized layout</li>
+        </ul>
+    </div>
+</body>
+</html>
