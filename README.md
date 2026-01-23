@@ -1,10 +1,11 @@
-# OneSeek.ai MVP v0.2 – Lokal AI-chat med RAG & Transparens
+# OneSeek.ai MVP v0.3 – Lokal AI-chat med Multi-Tool Search & Transparens
 
 **OneSeek.ai** är en agent-plattform i tidig MVP-fas med fokus på:
 - Lokal LLM-inference via vLLM (på RTX 5090)
+- **Multi-tool web search** med Tavily, DuckDuckGo och Vespa (NYTT!)
 - Snygg ChatGPT-liknande frontend
 - Retrieval-Augmented Generation (RAG) via Vespa Cloud
-- Agent-flöde med LangGraph (hämta kontext → berika prompt → generera svar)
+- Agent-flöde med LangGraph (tool calling → parallel execution → berikad prompt → generera svar)
 - Full transparens: visa retrieved källor, steg och metadata i UI
 
 Målet är att bygga mot en unik plattform med **debatt/compare mellan modeller**, **blockchain-logging för verifierbarhet** och **multi-step agenter** – men denna MVP är minimal och körbar lokalt.
@@ -18,13 +19,15 @@ Denna guide täcker allt från installation av Python och Node.js till att köra
 ---
 
 ## Funktioner i denna MVP
+- **Multi-tool web search** (NYTT v0.3!): Tavily, DuckDuckGo och Vespa söker samtidigt för bästa resultat
+- **Parallel tool execution**: Agenten kan köra flera sökverktyg samtidigt (2-5× snabbare)
 - **Streaming chat** med lokal LLM – token-by-token response i realtid (aktiverat som default)
 - **RAG-berikning**: Hämtar relevanta snippets från Vespa Cloud innan svar genereras
 - **Transparens i UI**: Accordion med källor, retrieved docs och processing steps
-- **Enkel backend** med FastAPI + LangGraph för orkestrering
+- **LangGraph-orkestrering**: Intelligent tool-calling workflow med conditional edges
 - **Progressiv visning**: Steps och källor visas live under generering
 - **Cancel-support**: Avbryt requests mitt i streaming
-- Inga externa API:er krävs för core (bara vLLM + Vespa Cloud dev-tier)
+- **Backward compatible**: Gamla RAG-only läget fungerar fortfarande
 
 ## Tech Stack
 - **Inference**: vLLM (lokal på NVIDIA RTX 5090)
@@ -72,21 +75,30 @@ Alternativt snabb modell:
 vllm serve meta-llama/Llama-3.1-8B-Instruct --port 8000
 ```
 
-### 3. Setup Vespa Cloud
+### 3. Setup Vespa Cloud & Search Tools
 
 1. Gå till https://console.vespa-cloud.com → skapa konto & tenant (t.ex. "oneseek-mvp")
 2. Hämta data-plane cert & key från Console → Security
-3. I `backend/` – kopiera `.env.example` till `.env` och fyll i:
+3. (Valfritt) Skaffa Tavily API key från https://tavily.com/ för bästa web search
+4. I `backend/` – kopiera `.env.example` till `.env` och fyll i:
 
 ```bash
+# vLLM Configuration
+VLLM_URL=http://localhost:8000/v1
+VLLM_MODEL=Qwen/Qwen2.5-14B-Instruct-AWQ
+
+# Vespa Cloud (för RAG)
 VESPA_URL=https://ditt-app.ditt-tenant.vespa-cloud.net
 VESPA_CERT_PATH=/path/to/certificate.pem
 VESPA_KEY_PATH=/path/to/private-key.pem
-VLLM_URL=http://localhost:8000/v1
-VLLM_MODEL=Qwen/Qwen2.5-14B-Instruct-AWQ
+
+# Tavily API (valfritt - för premium web search)
+TAVILY_API_KEY=your-api-key-here
 ```
 
-4. Deploya schema & feed testdata:
+**OBS:** DuckDuckGo fungerar utan konfiguration! Tavily och Vespa är valfria.
+
+5. Deploya schema & feed testdata (om du använder Vespa):
 ```bash
 cd backend
 pip install -r requirements.txt
@@ -112,21 +124,30 @@ npm run dev    # eller yarn dev
 
 Öppna http://localhost:3000
 
-Skriv en fråga som matchar din testdata (t.ex. "Vad säger experter om AI-risker?") → svaret ska nu vara berikat med källor från Vespa.
+Skriv en fråga och få svar berikade med web search! Exempel:
+- "Vad är de senaste nyheterna om AI?"
+- "Förklara quantum computing för en nybörjare"
+- "Vilka AI-risker diskuteras nu?"
+
+Agenten väljer automatiskt rätt verktyg och kan söka i flera källor samtidigt!
 
 ## Projektstruktur
 
 ```
 oneseek/
 ├── backend/
-│   ├── app.py               # FastAPI-server
-│   ├── agent.py             # LangGraph-definition
-│   ├── deploy_vespa.py      # Vespa Cloud deploy & feed
+│   ├── app.py                    # FastAPI-server med multi-tool support
+│   ├── agent.py                  # Legacy LangGraph RAG agent
+│   ├── agent_graph.py            # NEW: Multi-tool LangGraph agent
+│   ├── tools.py                  # NEW: Search tool definitions
+│   ├── deploy_vespa.py           # Vespa Cloud deploy & feed
+│   ├── test_integration.py       # NEW: Integration tests
+│   ├── INTEGRATION_GUIDE.md      # NEW: Detailed documentation
 │   ├── requirements.txt
 │   ├── .env.example
 │   ├── Dockerfile
 │   └── README.md
-├── frontend/                # Next.js (baserat på yoziru/nextjs-vllm-ui)
+├── frontend/                     # Next.js (baserat på yoziru/nextjs-vllm-ui)
 │   ├── src/
 │   │   ├── app/
 │   │   ├── components/
@@ -175,30 +196,52 @@ docker-compose down
 ### Backend (http://localhost:8001)
 
 - `GET /` - Health check
-- `GET /health` - Detaljerad health check med konfiguration
-- `GET /config` - Visa aktuell konfiguration
-- `POST /chat` - Main chat endpoint
+- `GET /health` - Detaljerad health check med tool availability
+- `GET /config` - Visa aktuell konfiguration och tools
+- `POST /chat` - Main chat endpoint med multi-tool search
 
-Exempel:
+Exempel med nya features:
 ```bash
+# Standard request med alla tools aktiverade
+curl -X POST http://localhost:8001/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {"role": "user", "content": "Vad är de senaste AI-nyheterna?"}
+    ],
+    "use_tools": true,
+    "stream": true
+  }'
+
+# Legacy mode (endast Vespa RAG)
 curl -X POST http://localhost:8001/chat \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [
       {"role": "user", "content": "Vad är AI-risker?"}
-    ]
+    ],
+    "use_tools": false
   }'
 ```
 
 ## Roadmap – nästa steg
 
+- [x] Multi-tool web search (Tavily, DuckDuckGo, Vespa) ✅ v0.3
+- [x] Parallel tool execution med LangGraph ✅ v0.3
+- [x] Streaming responses från vLLM till frontend ✅ v0.2
 - [ ] Lägg till multi-LLM compare/debatt (parallella noder i LangGraph)
 - [ ] Blockchain-logging (hasha steg → Sepolia testnet)
-- [ ] Verktyg/tools i agenten (web search, code exec, etc.)
+- [ ] Fler verktyg: X/Twitter search, code execution, calculator
 - [ ] Användarnycklar & rate limiting
 - [ ] Deploy till cloud (Railway/Fly.io för backend, Vercel för frontend)
-- [ ] Streaming responses från vLLM till frontend
-- [ ] Bättre felhantering och retry-logik
+- [ ] Bättre felhantering och retry-logik med exponential backoff
+
+## Dokumentation
+
+- [📖 QUICKSTART.md](QUICKSTART.md) - Nybörjarguide för installation
+- [🔧 backend/INTEGRATION_GUIDE.md](backend/INTEGRATION_GUIDE.md) - Detaljerad guide för multi-tool integration
+- [🏗️ ARCHITECTURE.md](ARCHITECTURE.md) - Systemarkitektur och data flow
+- [🐛 TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Vanliga problem och lösningar
 
 ## Licens
 
