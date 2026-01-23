@@ -108,16 +108,10 @@ class OneSeekGraphAgent:
         
         return workflow.compile()
     
-    def _agent_node(self, state: AgentState) -> Dict[str, Any]:
-        """Agent node - decides whether to use tools or provide final answer"""
-        messages = state["messages"]
-        system_prompt = state.get("system_prompt")
-        enable_thinking = state.get("enable_thinking", False)
-        steps = state.get("steps", [])
-        
-        # Build system message
-        if system_prompt:
-            system_content = system_prompt
+    def _build_system_prompt(self, custom_prompt: Optional[str] = None, enable_thinking: bool = False) -> str:
+        """Build system prompt with tool descriptions - extracted to avoid duplication"""
+        if custom_prompt:
+            system_content = custom_prompt
         else:
             # Build tool descriptions dynamically based on configured tools
             tool_descriptions = []
@@ -138,39 +132,21 @@ class OneSeekGraphAgent:
             system_content = (
                 "You are a helpful AI assistant for OneSeek.ai. "
                 "Du svarar ALLTID på flytande svenska (Swedish). "
-                f"You have access to the following tools:
-{tools_text}
-
-"
-                "When the user asks a question:
-"
-                "1. Determine if you need to search for information or browse specific pages
-"
-                "2. For weather questions about locations in Sweden, ALWAYS use smhi_weather_forecast for accurate, real-time data
-"
-                "3. If needed, call one or multiple tools IN PARALLEL for efficiency
-"
-                "4. You can combine web search with browse_page to read specific articles
-"
-                "5. The browse_page tool automatically chunks large pages into semantic sections with overlap
-"
-                "   - Small pages return 1 chunk, large pages return multiple chunks
-"
-                "   - When you receive multiple chunks from browse_page, analyze ALL chunks to get complete understanding
-"
-                "   - The chunks are designed for parallel processing - vLLM batches them for throughput
-"
-                "6. Use the results to provide a comprehensive, factual answer IN SWEDISH
-"
-                "7. Always cite your sources with URLs
-"
-                "8. If no search is needed, answer directly based on your knowledge
-
-"
+                f"You have access to the following tools:\n{tools_text}\n\n"
+                "When the user asks a question:\n"
+                "1. Determine if you need to search for information or browse specific pages\n"
+                "2. For weather questions about locations in Sweden, ALWAYS use smhi_weather_forecast for accurate, real-time data\n"
+                "3. If needed, call one or multiple tools IN PARALLEL for efficiency\n"
+                "4. You can combine web search with browse_page to read specific articles\n"
+                "5. The browse_page tool automatically chunks large pages into semantic sections with overlap\n"
+                "   - Small pages return 1 chunk, large pages return multiple chunks\n"
+                "   - When you receive multiple chunks from browse_page, analyze ALL chunks to get complete understanding\n"
+                "   - The chunks are designed for parallel processing - vLLM batches them for throughput\n"
+                "6. Use the results to provide a comprehensive, factual answer IN SWEDISH\n"
+                "7. Always cite your sources with URLs\n"
+                "8. If no search is needed, answer directly based on your knowledge\n\n"
                 "Important: Do NOT show your thinking process or internal reasoning to the user. "
-                "Only provide the final answer with source citations.
-
-"
+                "Only provide the final answer with source citations.\n\n"
                 "Var transparent och ge välgrundade svar på svenska (Be transparent and provide well-sourced responses in Swedish)."
             )
         
@@ -181,6 +157,18 @@ class OneSeekGraphAgent:
                 "Think in Swedish and show your reasoning in <think> tags.\n\n"
                 + system_content
             )
+        
+        return system_content
+    
+    def _agent_node(self, state: AgentState) -> Dict[str, Any]:
+        """Agent node - decides whether to use tools or provide final answer"""
+        messages = state["messages"]
+        system_prompt = state.get("system_prompt")
+        enable_thinking = state.get("enable_thinking", False)
+        steps = state.get("steps", [])
+        
+        # Build system message using helper method
+        system_content = self._build_system_prompt(system_prompt, enable_thinking)
         
         # Add system message if not already present
         chat_messages = []
@@ -227,72 +215,8 @@ class OneSeekGraphAgent:
         enable_thinking = state.get("enable_thinking", False)
         steps = state.get("steps", [])
         
-        # Build system message
-        if system_prompt:
-            system_content = system_prompt
-        else:
-            # Build tool descriptions dynamically based on configured tools
-            tool_descriptions = []
-            for tool in self.available_tools:
-                if tool.name == "tavily_search":
-                    tool_descriptions.append("- tavily_search: Paid, robust, accurate web search with concise summaries")
-                elif tool.name == "duckduckgo_search":
-                    tool_descriptions.append("- duckduckgo_search: Free, simple, anonymous web search")
-                elif tool.name == "vespa_search":
-                    tool_descriptions.append("- vespa_search: Local/cloud RAG with embeddings and hybrid searching")
-                elif tool.name == "browse_page":
-                    tool_descriptions.append("- browse_page: Fetch and read content from any webpage URL with automatic intelligent chunking for large pages")
-                elif tool.name == "smhi_weather_forecast":
-                    tool_descriptions.append("- smhi_weather_forecast: Get real-time weather forecast from SMHI for locations in Sweden")
-            
-            tools_text = "\n".join(tool_descriptions) if tool_descriptions else "No tools available."
-            
-            system_content = (
-                "You are a helpful AI assistant for OneSeek.ai. "
-                "Du svarar ALLTID på flytande svenska (Swedish). "
-                f"You have access to the following tools:
-{tools_text}
-
-"
-                "When the user asks a question:
-"
-                "1. Determine if you need to search for information or browse specific pages
-"
-                "2. For weather questions about locations in Sweden, ALWAYS use smhi_weather_forecast for accurate, real-time data
-"
-                "3. If needed, call one or multiple tools IN PARALLEL for efficiency
-"
-                "4. You can combine web search with browse_page to read specific articles
-"
-                "5. The browse_page tool automatically chunks large pages into semantic sections with overlap
-"
-                "   - Small pages return 1 chunk, large pages return multiple chunks
-"
-                "   - When you receive multiple chunks from browse_page, analyze ALL chunks to get complete understanding
-"
-                "   - The chunks are designed for parallel processing - vLLM batches them for throughput
-"
-                "6. Use the results to provide a comprehensive, factual answer IN SWEDISH
-"
-                "7. Always cite your sources with URLs
-"
-                "8. If no search is needed, answer directly based on your knowledge
-
-"
-                "Important: Do NOT show your thinking process or internal reasoning to the user. "
-                "Only provide the final answer with source citations.
-
-"
-                "Var transparent och ge välgrundade svar på svenska (Be transparent and provide well-sourced responses in Swedish)."
-            )
-        
-        # Add thinking instructions if enabled
-        if enable_thinking:
-            system_content = (
-                "Du måste tänka på svenska. Använd <think> taggar för att visa ditt resonemang på svenska. "
-                "Think in Swedish and show your reasoning in <think> tags.\n\n"
-                + system_content
-            )
+        # Build system message using helper method
+        system_content = self._build_system_prompt(system_prompt, enable_thinking)
         
         # Add system message if not already present
         chat_messages = []
