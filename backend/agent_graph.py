@@ -192,11 +192,11 @@ class OneSeekGraphAgent:
         is_final_generation = (
             last_message and 
             isinstance(last_message, ToolMessage) or
-            (isinstance(last_message, AIMessage) and not hasattr(last_message, "tool_calls"))
+            (isinstance(last_message, AIMessage) and not last_message.tool_calls)
         )
         
         # If this is final generation, stream the response
-        if is_final_generation or (last_message and not hasattr(last_message, "tool_calls")):
+        if is_final_generation or (last_message and not last_message.tool_calls):
             steps.append("Generating final response (streaming)...")
             callback("step", "Generating final response (streaming)...")
             
@@ -217,7 +217,7 @@ class OneSeekGraphAgent:
             response = self.llm_with_tools.invoke(chat_messages)
             
             # Check if tools were called
-            if hasattr(response, "tool_calls") and response.tool_calls:
+            if response.tool_calls:
                 tool_names = [tc["name"] for tc in response.tool_calls]
                 steps.append(f"Calling tools: {', '.join(tool_names)}")
                 callback("step", f"Calling tools: {', '.join(tool_names)}")

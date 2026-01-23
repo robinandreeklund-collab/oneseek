@@ -132,7 +132,6 @@ def vespa_search(query: str, max_results: int = 6) -> List[Dict[str, Any]]:
     """
     try:
         from pyvespa import Vespa
-        from langchain_community.embeddings import HuggingFaceEmbeddings
         
         vespa_url = os.getenv("VESPA_URL")
         vespa_cert = os.getenv("VESPA_CERT_PATH")
