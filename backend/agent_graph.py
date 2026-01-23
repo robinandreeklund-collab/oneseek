@@ -196,7 +196,8 @@ class OneSeekGraphAgent:
         )
         
         # If this is final generation, stream the response
-        if is_final_generation or (last_message and not last_message.tool_calls):
+        # Check if last_message is AIMessage before accessing tool_calls
+        if is_final_generation or (last_message and isinstance(last_message, AIMessage) and not last_message.tool_calls):
             steps.append("Generating final response (streaming)...")
             callback("step", "Generating final response (streaming)...")
             
