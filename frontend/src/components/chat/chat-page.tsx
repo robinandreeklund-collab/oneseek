@@ -41,14 +41,21 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
     onError: (error) => {
       toast.error("Something went wrong: " + error);
     },
-    onFinish: (message, { data }) => {
+    onFinish: (message, options) => {
       // Extract source metadata from stream data
-      console.log("onFinish called with data:", data);
-      if (data && Array.isArray(data)) {
-        console.log("Data is array with length:", data.length);
-        for (const item of data) {
-          console.log("Processing item:", item);
-          if (item.retrieved && Array.isArray(item.retrieved)) {
+      console.log("onFinish called for message:", message.id);
+      console.log("onFinish options:", options);
+      console.log("onFinish data from options:", options?.data);
+      
+      // The data is in options.data, which should be an array
+      const streamData = options?.data;
+      if (streamData && Array.isArray(streamData)) {
+        console.log("Stream data is array with length:", streamData.length);
+        // Iterate through the data array
+        for (const item of streamData) {
+          console.log("Processing stream data item:", item);
+          // Check if this item has the retrieved sources
+          if (item && typeof item === 'object' && item.retrieved && Array.isArray(item.retrieved)) {
             console.log("Found retrieved sources:", item.retrieved.length);
             setMessageSources((prev) => ({
               ...prev,
@@ -60,9 +67,12 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
                 source: source.source,
               })),
             }));
+            console.log("Sources set for message:", message.id);
             break;
           }
         }
+      } else {
+        console.log("No stream data or not an array. streamData:", streamData);
       }
     },
   });
