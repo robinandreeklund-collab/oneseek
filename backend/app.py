@@ -228,11 +228,17 @@ async def stream_chat_response(
                 yield f"0:{json.dumps(token)}\n"
                 await asyncio.sleep(0.001)  # Small delay for smoother streaming
         else:
-            # If no tokens were streamed, send the full content as one chunk
+            # If no tokens were streamed, send the full content in smaller chunks
+            # to ensure proper frontend parsing
             content = result.get("content", "")
             if content:
                 logger.warning(f"No tokens, sending full content: {len(content)} chars")
-                yield f"0:{json.dumps(content)}\n"
+                # Split content into smaller chunks for better streaming compatibility
+                chunk_size = 100  # Send in chunks of 100 chars
+                for i in range(0, len(content), chunk_size):
+                    chunk = content[i:i + chunk_size]
+                    yield f"0:{json.dumps(chunk)}\n"
+                    await asyncio.sleep(0.001)
         
         # Send final done message
         yield "d:\n"
