@@ -53,10 +53,12 @@ class ChatRequest(BaseModel):
 
 
 class RetrievedDoc(BaseModel):
-    """Retrieved document from Vespa"""
+    """Retrieved document from search tools"""
     title: str
     content: str
+    url: Optional[str] = None
     relevance: Optional[float] = None
+    source: Optional[str] = None  # Which tool provided this result
 
 
 class ChatResponse(BaseModel):
@@ -210,9 +212,11 @@ async def stream_chat_response(
         logger.info(f"Agent result: {len(result.get('tokens', []))} tokens, {len(result.get('steps', []))} steps")
         
         # Send metadata about steps and retrieved docs first (as annotations)
+        retrieved_docs = result.get("retrieved", [])
         metadata = {
             "steps": result.get("steps", []),
-            "retrieved": result.get("retrieved", [])
+            "retrieved": retrieved_docs,
+            "source_count": len(retrieved_docs)  # Count for frontend display
         }
         
         # Stream annotations/data first
