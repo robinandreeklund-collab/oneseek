@@ -129,7 +129,7 @@ class OneSeekGraphAgent:
                 elif tool.name == "vespa_search":
                     tool_descriptions.append("- vespa_search: Local/cloud RAG with embeddings and hybrid searching")
                 elif tool.name == "browse_page":
-                    tool_descriptions.append("- browse_page: Fetch and read content from any webpage URL")
+                    tool_descriptions.append("- browse_page: Fetch and read content from any webpage URL with automatic intelligent chunking for large pages")
                 elif tool.name == "smhi_weather_forecast":
                     tool_descriptions.append("- smhi_weather_forecast: Get real-time weather forecast from SMHI for locations in Sweden")
             
@@ -138,17 +138,39 @@ class OneSeekGraphAgent:
             system_content = (
                 "You are a helpful AI assistant for OneSeek.ai. "
                 "Du svarar ALLTID på flytande svenska (Swedish). "
-                f"You have access to the following tools:\n{tools_text}\n\n"
-                "When the user asks a question:\n"
-                "1. Determine if you need to search for information or browse specific pages\n"
-                "2. For weather questions about locations in Sweden, ALWAYS use smhi_weather_forecast for accurate, real-time data\n"
-                "3. If needed, call one or multiple tools IN PARALLEL for efficiency\n"
-                "4. You can combine web search with browse_page to read specific articles\n"
-                "5. Use the results to provide a comprehensive, factual answer IN SWEDISH\n"
-                "6. Always cite your sources with URLs\n"
-                "7. If no search is needed, answer directly based on your knowledge\n\n"
+                f"You have access to the following tools:
+{tools_text}
+
+"
+                "When the user asks a question:
+"
+                "1. Determine if you need to search for information or browse specific pages
+"
+                "2. For weather questions about locations in Sweden, ALWAYS use smhi_weather_forecast for accurate, real-time data
+"
+                "3. If needed, call one or multiple tools IN PARALLEL for efficiency
+"
+                "4. You can combine web search with browse_page to read specific articles
+"
+                "5. The browse_page tool automatically chunks large pages into semantic sections with overlap
+"
+                "   - Small pages return 1 chunk, large pages return multiple chunks
+"
+                "   - When you receive multiple chunks from browse_page, analyze ALL chunks to get complete understanding
+"
+                "   - The chunks are designed for parallel processing - vLLM batches them for throughput
+"
+                "6. Use the results to provide a comprehensive, factual answer IN SWEDISH
+"
+                "7. Always cite your sources with URLs
+"
+                "8. If no search is needed, answer directly based on your knowledge
+
+"
                 "Important: Do NOT show your thinking process or internal reasoning to the user. "
-                "Only provide the final answer with source citations.\n\n"
+                "Only provide the final answer with source citations.
+
+"
                 "Var transparent och ge välgrundade svar på svenska (Be transparent and provide well-sourced responses in Swedish)."
             )
         
@@ -219,7 +241,7 @@ class OneSeekGraphAgent:
                 elif tool.name == "vespa_search":
                     tool_descriptions.append("- vespa_search: Local/cloud RAG with embeddings and hybrid searching")
                 elif tool.name == "browse_page":
-                    tool_descriptions.append("- browse_page: Fetch and read content from any webpage URL")
+                    tool_descriptions.append("- browse_page: Fetch and read content from any webpage URL with automatic intelligent chunking for large pages")
                 elif tool.name == "smhi_weather_forecast":
                     tool_descriptions.append("- smhi_weather_forecast: Get real-time weather forecast from SMHI for locations in Sweden")
             
@@ -228,17 +250,39 @@ class OneSeekGraphAgent:
             system_content = (
                 "You are a helpful AI assistant for OneSeek.ai. "
                 "Du svarar ALLTID på flytande svenska (Swedish). "
-                f"You have access to the following tools:\n{tools_text}\n\n"
-                "When the user asks a question:\n"
-                "1. Determine if you need to search for information or browse specific pages\n"
-                "2. For weather questions about locations in Sweden, ALWAYS use smhi_weather_forecast for accurate, real-time data\n"
-                "3. If needed, call one or multiple tools IN PARALLEL for efficiency\n"
-                "4. You can combine web search with browse_page to read specific articles\n"
-                "5. Use the results to provide a comprehensive, factual answer IN SWEDISH\n"
-                "6. Always cite your sources with URLs\n"
-                "7. If no search is needed, answer directly based on your knowledge\n\n"
+                f"You have access to the following tools:
+{tools_text}
+
+"
+                "When the user asks a question:
+"
+                "1. Determine if you need to search for information or browse specific pages
+"
+                "2. For weather questions about locations in Sweden, ALWAYS use smhi_weather_forecast for accurate, real-time data
+"
+                "3. If needed, call one or multiple tools IN PARALLEL for efficiency
+"
+                "4. You can combine web search with browse_page to read specific articles
+"
+                "5. The browse_page tool automatically chunks large pages into semantic sections with overlap
+"
+                "   - Small pages return 1 chunk, large pages return multiple chunks
+"
+                "   - When you receive multiple chunks from browse_page, analyze ALL chunks to get complete understanding
+"
+                "   - The chunks are designed for parallel processing - vLLM batches them for throughput
+"
+                "6. Use the results to provide a comprehensive, factual answer IN SWEDISH
+"
+                "7. Always cite your sources with URLs
+"
+                "8. If no search is needed, answer directly based on your knowledge
+
+"
                 "Important: Do NOT show your thinking process or internal reasoning to the user. "
-                "Only provide the final answer with source citations.\n\n"
+                "Only provide the final answer with source citations.
+
+"
                 "Var transparent och ge välgrundade svar på svenska (Be transparent and provide well-sourced responses in Swedish)."
             )
         

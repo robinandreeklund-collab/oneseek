@@ -217,20 +217,26 @@ def vespa_search(query: str, max_results: int = 6) -> List[Dict[str, Any]]:
 
 
 @tool
-def browse_page(url: str) -> Dict[str, Any]:
+def browse_page(url: str, max_chunk_size: int = 6000, overlap_sentences: int = 2) -> List[Dict[str, Any]]:
     """
-    Browse and extract content from a webpage URL.
-    Useful for reading articles, documentation, or any web content.
+    Browse and extract content from a webpage URL with automatic intelligent chunking for large pages.
+    For pages exceeding max_chunk_size, the content is split into semantic chunks with sentence-level overlap.
+    This allows the agent to process large documents in parallel for better throughput.
     
     Args:
         url: The URL of the webpage to browse
+        max_chunk_size: Maximum characters per chunk (default: 6000). Chunks try to stay under this limit.
+        overlap_sentences: Number of sentences to overlap between chunks for context continuity (default: 2)
         
     Returns:
-        Dictionary with title, content (text), and url
+        List of chunks, each with title, content, url, chunk_id, and instructions.
+        For small pages: returns single-item list.
+        For large pages: returns multiple chunks that can be processed in parallel.
     """
     try:
         import requests
         from bs4 import BeautifulSoup
+        import re
         
         # Add headers to avoid being blocked
         headers = {
@@ -255,49 +261,116 @@ def browse_page(url: str) -> Dict[str, Any]:
         
         # Clean up text - remove extra whitespace
         lines = (line.strip() for line in text.splitlines())
-        chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-        text_content = ' '.join(chunk for chunk in chunks if chunk)
+        phrases = (phrase.strip() for line in lines for phrase in line.split("  "))
+        text_content = ' '.join(phrase for phrase in phrases if phrase)
         
-        # Limit content length to avoid token overflow
-        max_length = 3000
-        if len(text_content) > max_length:
-            text_content = text_content[:max_length] + "..."
+        # If content fits within max_chunk_size, return as single chunk
+        if len(text_content) <= max_chunk_size:
+            return [{
+                "title": title_text,
+                "content": text_content,
+                "url": url,
+                "chunk_id": "1/1",
+                "instructions": "This is the complete page content.",
+                "error": False
+            }]
         
-        return {
+        # Large page: split into semantic chunks with overlap
+        # Split text into sentences for semantic chunking
+        sentences = re.split(r'(?<=[.!?])\s+', text_content)
+        
+        chunks = []
+        current_chunk = []
+        current_length = 0
+        min_chunk_size = max_chunk_size // 2  # Ensure chunks aren't too small
+        
+        for i, sentence in enumerate(sentences):
+            sentence_length = len(sentence)
+            
+            # Add sentence to current chunk
+            current_chunk.append(sentence)
+            current_length += sentence_length + 1  # +1 for space
+            
+            # Check if we should finalize this chunk
+            should_finalize = (
+                current_length >= min_chunk_size and 
+                current_length + sentence_length > max_chunk_size
+            ) or i == len(sentences) - 1
+            
+            if should_finalize and current_chunk:
+                # Create chunk text
+                chunk_text = ' '.join(current_chunk)
+                chunk_number = len(chunks) + 1
+                
+                chunks.append({
+                    "title": f"{title_text} (Part {chunk_number})",
+                    "content": chunk_text,
+                    "url": url,
+                    "chunk_id": f"{chunk_number}/TBD",  # Will update total later
+                    "instructions": f"This is part {chunk_number} of a large document. Analyze this section and combine insights with other chunks.",
+                    "error": False
+                })
+                
+                # Prepare next chunk with overlap
+                # Keep last N sentences for context
+                if i < len(sentences) - 1:  # Not the last sentence
+                    current_chunk = current_chunk[-overlap_sentences:] if len(current_chunk) > overlap_sentences else current_chunk
+                    current_length = sum(len(s) + 1 for s in current_chunk)
+                else:
+                    current_chunk = []
+                    current_length = 0
+        
+        # Update chunk_id with actual total count
+        total_chunks = len(chunks)
+        for chunk in chunks:
+            chunk_num = chunk["chunk_id"].split("/")[0]
+            chunk["chunk_id"] = f"{chunk_num}/{total_chunks}"
+        
+        return chunks if chunks else [{
             "title": title_text,
-            "content": text_content,
+            "content": "Content extraction resulted in empty text.",
             "url": url,
+            "chunk_id": "1/1",
+            "instructions": "Page appears to be empty or content could not be extracted.",
             "error": False
-        }
+        }]
     
     except ImportError:
-        return {
+        return [{
             "title": "Missing Dependencies",
             "content": "Required packages (requests, beautifulsoup4) not installed. Run: pip install requests beautifulsoup4",
             "url": url,
+            "chunk_id": "1/1",
+            "instructions": "Error occurred",
             "error": True
-        }
+        }]
     except requests.exceptions.Timeout:
-        return {
+        return [{
             "title": "Timeout Error",
             "content": f"Request to {url} timed out after 10 seconds",
             "url": url,
+            "chunk_id": "1/1",
+            "instructions": "Error occurred",
             "error": True
-        }
+        }]
     except requests.exceptions.HTTPError as e:
-        return {
+        return [{
             "title": "HTTP Error",
             "content": f"HTTP error occurred: {str(e)}",
             "url": url,
+            "chunk_id": "1/1",
+            "instructions": "Error occurred",
             "error": True
-        }
+        }]
     except Exception as e:
-        return {
+        return [{
             "title": "Browse Error",
             "content": f"Error browsing page: {str(e)}",
             "url": url,
+            "chunk_id": "1/1",
+            "instructions": "Error occurred",
             "error": True
-        }
+        }]
 
 
 @tool
