@@ -225,17 +225,13 @@ class OneSeekGraphAgent:
         
         chat_messages.extend(messages)
         
-        # Check if this is a final generation (no tool calls in last message)
+        # Check if this is a final generation (after tools have been called)
+        # Final generation happens when the last message is a ToolMessage (tools just executed)
         last_message = messages[-1] if messages else None
-        is_final_generation = (
-            last_message and 
-            isinstance(last_message, ToolMessage) or
-            (isinstance(last_message, AIMessage) and not last_message.tool_calls)
-        )
+        is_after_tool_execution = last_message and isinstance(last_message, ToolMessage)
         
-        # If this is final generation, stream the response
-        # Check if last_message is AIMessage before accessing tool_calls
-        if is_final_generation or (last_message and isinstance(last_message, AIMessage) and not last_message.tool_calls):
+        # If we're after tool execution, stream the final response
+        if is_after_tool_execution:
             steps.append("Generating final response (streaming)...")
             callback("step", "Generating final response (streaming)...")
             
@@ -249,10 +245,11 @@ class OneSeekGraphAgent:
             response = AIMessage(content=full_content)
             steps.append("Response generated successfully")
         else:
-            # Not final generation, check for tool calls
+            # First pass or need to check for tool calls
             steps.append("Analyzing query and determining if tools are needed...")
             callback("step", "Analyzing query and determining if tools are needed...")
             
+            # IMPORTANT: Use llm_with_tools to allow tool calling
             response = self.llm_with_tools.invoke(chat_messages)
             
             # Check if tools were called
