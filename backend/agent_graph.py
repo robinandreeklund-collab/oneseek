@@ -278,6 +278,9 @@ class OneSeekGraphAgent:
     def run_with_streaming(self, messages: List[Dict[str, str]], system_prompt: Optional[str] = None, 
                           enable_thinking: Optional[bool] = False) -> Dict[str, Any]:
         """Run the agent workflow with streaming support"""
+        import logging
+        logger = logging.getLogger(__name__)
+        
         tokens = []
         steps_list = []
         retrieved_docs = []
@@ -285,8 +288,10 @@ class OneSeekGraphAgent:
         def callback(event_type: str, content: Any):
             if event_type == "token":
                 tokens.append(content)
+                logger.debug(f"Token collected: {content[:50] if len(content) > 50 else content}")
             elif event_type == "step":
                 steps_list.append(content)
+                logger.info(f"Step: {content}")
         
         # Convert dict messages to LangChain messages
         lc_messages = []
@@ -298,6 +303,8 @@ class OneSeekGraphAgent:
                 lc_messages.append(HumanMessage(content=content))
             elif role == "assistant":
                 lc_messages.append(AIMessage(content=content))
+        
+        logger.info(f"Starting workflow with {len(lc_messages)} messages")
         
         # Run the graph with streaming
         # This is a simplified version - in a full implementation, you'd stream through the graph
@@ -314,17 +321,23 @@ class OneSeekGraphAgent:
         
         while iteration < max_iterations:
             iteration += 1
+            logger.info(f"Iteration {iteration}")
             
             # Run agent node
             agent_result = self._agent_node_streaming(current_state, callback)
             current_state["messages"] = current_state.get("messages", []) + agent_result["messages"]
             current_state["steps"] = agent_result["steps"]
             
+            last_msg = current_state["messages"][-1]
+            logger.info(f"Agent returned: {type(last_msg).__name__}, has tool_calls: {hasattr(last_msg, 'tool_calls') and bool(last_msg.tool_calls)}")
+            
             # Check if we should continue
             if self._should_continue(current_state) == "end":
+                logger.info("Workflow ending - no more tool calls")
                 break
             
             # Execute tools
+            logger.info("Executing tools...")
             steps_list.append("Executing tools...")
             callback("step", "Executing tools...")
             
@@ -351,6 +364,8 @@ class OneSeekGraphAgent:
         # Get final response
         final_message = current_state["messages"][-1]
         final_response = final_message.content if hasattr(final_message, "content") else ""
+        
+        logger.info(f"Workflow complete. Tokens collected: {len(tokens)}, Final response length: {len(final_response)}")
         
         return {
             "content": final_response,
