@@ -21,6 +21,7 @@ Denna guide täcker allt från installation av Python och Node.js till att köra
 ## Funktioner i denna MVP
 - **Multi-tool web search** (NYTT v0.3!): Tavily, DuckDuckGo och Vespa söker samtidigt för bästa resultat
 - **Parallel tool execution**: Agenten kan köra flera sökverktyg samtidigt (2-5× snabbare)
+- **DeerFlow Integration** (NYTT!): Multi-agent architecture från ByteDance's DeerFlow för deep research
 - **Streaming chat** med lokal LLM – token-by-token response i realtid (aktiverat som default)
 - **RAG-berikning**: Hämtar relevanta snippets från Vespa Cloud innan svar genereras
 - **Transparens i UI**: Accordion med källor, retrieved docs och processing steps
@@ -236,6 +237,7 @@ curl -X POST http://localhost:8001/chat \
 - [x] Multi-tool web search (Tavily, DuckDuckGo, Vespa) ✅ v0.3
 - [x] Parallel tool execution med LangGraph ✅ v0.3
 - [x] Streaming responses från vLLM till frontend ✅ v0.2
+- [x] DeerFlow integration - Multi-agent architecture ✅ deep-oneseek branch
 - [ ] Lägg till multi-LLM compare/debatt (parallella noder i LangGraph)
 - [ ] Blockchain-logging (hasha steg → Sepolia testnet)
 - [ ] Fler verktyg: X/Twitter search, code execution, calculator
@@ -247,12 +249,16 @@ curl -X POST http://localhost:8001/chat \
 
 - [📖 QUICKSTART.md](QUICKSTART.md) - Nybörjarguide för installation
 - [🔧 backend/INTEGRATION_GUIDE.md](backend/INTEGRATION_GUIDE.md) - Detaljerad guide för multi-tool integration
+- [🦌 backend/DEER_FLOW_INTEGRATION.md](backend/DEER_FLOW_INTEGRATION.md) - DeerFlow integration och multi-agent patterns
 - [🏗️ ARCHITECTURE.md](ARCHITECTURE.md) - Systemarkitektur och data flow
 - [🐛 TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Vanliga problem och lösningar
+- [📄 DEER_FLOW_ATTRIBUTION.md](DEER_FLOW_ATTRIBUTION.md) - DeerFlow license och attribution
 
 ## Licens
 
 MIT (baserat på [nextjs-vllm-ui](https://github.com/yoziru/nextjs-vllm-ui) och öppen kod från LangChain/Vespa)
+
+Integrerar arkitektoniska koncept från [ByteDance's DeerFlow](https://github.com/bytedance/deer-flow) (MIT License) - se [DEER_FLOW_ATTRIBUTION.md](DEER_FLOW_ATTRIBUTION.md) för detaljer.
 
 Skapad med ❤️ i Karlsborg, Sverige – [@r_frojd](https://github.com/r_frojd)
 
