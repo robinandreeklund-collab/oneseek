@@ -236,7 +236,6 @@ export default function ChatList({ messages, isLoading, messageSources, messageT
         onOpenChange={setToolDetailSidebarOpen}
         toolAction={selectedToolAction}
       />
-      />
     </div>
   );
 }
