@@ -27,6 +27,7 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
   const [messageSources, setMessageSources] = React.useState<MessageSources>({});
   const [messageToolActions, setMessageToolActions] = React.useState<MessageToolActions>({});
   const processedDataRef = React.useRef<Set<string>>(new Set());
+  const currentStreamingMessageIdRef = React.useRef<string | null>(null);
 
   const {
     messages,
@@ -45,6 +46,18 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
       toast.error("Something went wrong: " + error);
     },
   });
+  
+  // Track the current streaming message
+  React.useEffect(() => {
+    if (isLoading) {
+      const lastAssistantMessage = messages.filter(m => m.role === 'assistant').slice(-1)[0];
+      if (lastAssistantMessage) {
+        currentStreamingMessageIdRef.current = lastAssistantMessage.id;
+      }
+    } else {
+      currentStreamingMessageIdRef.current = null;
+    }
+  }, [isLoading, messages]);
   
   // Watch for data changes and extract sources and tool actions
   React.useEffect(() => {
@@ -92,15 +105,26 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
           });
         }
         
-        // Extract tool actions
+        // Extract tool actions - only update for the current message being streamed
         if ('tool_actions' in item && Array.isArray(item.tool_actions) && item.tool_actions.length > 0) {
           const toolActions = item.tool_actions as any[];
+          const isLiveUpdate = item.live_update === true;
+          
           setMessageToolActions((prev) => {
-            // Always update tool actions to reflect latest state (for live updates)
-            return {
-              ...prev,
-              [lastAssistantMessage.id]: toolActions,
-            };
+            // Only associate tool actions with the currently streaming message
+            // This prevents tool actions from appearing on old messages
+            const targetMessageId = currentStreamingMessageIdRef.current || lastAssistantMessage.id;
+            
+            // For live updates, always update the current message's tool actions
+            // For final updates, only set if not already finalized or if it's a live update
+            if (isLiveUpdate || !prev[targetMessageId] || item.live_update === false) {
+              // Create a new state object with only the target message's tool actions
+              // Remove any stale tool actions from this update
+              const newState = { ...prev };
+              newState[targetMessageId] = toolActions;
+              return newState;
+            }
+            return prev;
           });
         }
       }
