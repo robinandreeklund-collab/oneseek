@@ -22,6 +22,7 @@ class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], operator.add]
     retrieved_docs: List[Dict[str, Any]]
     steps: List[str]
+    tool_actions: List[Dict[str, Any]]  # Track tool invocations for ActionBlock
     system_prompt: Optional[str]
     enable_thinking: Optional[bool]
 
@@ -50,6 +51,18 @@ class OneSeekGraphAgent:
         
         # Build the graph
         self.graph = self._build_graph()
+    
+    @staticmethod
+    def _map_tool_name(tool_name: str) -> tuple[str, str, str]:
+        """Map internal tool name to display name, icon, and color for ActionBlock"""
+        tool_mapping = {
+            "tavily_search": ("web_search", "🔍", "blue"),
+            "duckduckgo_search": ("web_search", "🔍", "blue"),
+            "browse_page": ("browse_page", "🌐", "green"),
+            "smhi_weather_forecast": ("smhi_api", "🌤️", "purple"),
+            "vespa_search": ("vespa_search", "📚", "gray"),
+        }
+        return tool_mapping.get(tool_name, (tool_name, "🔧", "gray"))
     
     def _get_configured_tools(self):
         """Get list of tools that are properly configured"""
@@ -281,6 +294,7 @@ class OneSeekGraphAgent:
             "messages": lc_messages,
             "retrieved_docs": [],
             "steps": [],
+            "tool_actions": [],  # Initialize tool_actions
             "system_prompt": system_prompt,
             "enable_thinking": enable_thinking
         }
@@ -307,7 +321,8 @@ class OneSeekGraphAgent:
         return {
             "content": final_response,
             "retrieved": retrieved_docs,
-            "steps": final_state.get("steps", [])
+            "steps": final_state.get("steps", []),
+            "tool_actions": final_state.get("tool_actions", [])
         }
     
     def run_with_streaming(self, messages: List[Dict[str, str]], system_prompt: Optional[str] = None, 
@@ -319,6 +334,7 @@ class OneSeekGraphAgent:
         tokens = []
         steps_list = []
         retrieved_docs = []
+        tool_actions_list = []  # Track tool invocations
         
         def callback(event_type: str, content: Any):
             if event_type == "token":
@@ -327,6 +343,9 @@ class OneSeekGraphAgent:
             elif event_type == "step":
                 steps_list.append(content)
                 logger.info(f"Step: {content}")
+            elif event_type == "tool_action":
+                tool_actions_list.append(content)
+                logger.info(f"Tool action: {content}")
         
         # Convert dict messages to LangChain messages
         lc_messages = []
@@ -347,6 +366,7 @@ class OneSeekGraphAgent:
             "messages": lc_messages,
             "retrieved_docs": [],
             "steps": [],
+            "tool_actions": [],  # Initialize tool_actions
             "system_prompt": system_prompt,
             "enable_thinking": enable_thinking
         }
@@ -376,22 +396,58 @@ class OneSeekGraphAgent:
             steps_list.append("Executing tools...")
             callback("step", "Executing tools...")
             
+            # Track tool invocations with timing
+            import time
+            tool_calls_from_last_msg = []
+            if hasattr(last_msg, 'tool_calls') and last_msg.tool_calls:
+                for tc in last_msg.tool_calls:
+                    tool_name = tc.get("name", "unknown")
+                    tool_input = tc.get("args", {})
+                    display_name, icon, color = self._map_tool_name(tool_name)
+                    
+                    # Create tool action entry (start)
+                    tool_action = {
+                        "tool_name": tool_name,
+                        "display_name": display_name,
+                        "icon": icon,
+                        "color": color,
+                        "input": tool_input,
+                        "start_time": time.time(),
+                        "status": "running"
+                    }
+                    tool_calls_from_last_msg.append(tool_action)
+                    tool_actions_list.append(tool_action)
+                    callback("tool_action", tool_action)
+            
+            # Execute tools
             tool_node = ToolNode(self.available_tools)
             tool_result = tool_node.invoke(current_state)
             
-            # Add tool messages to state
-            current_state["messages"] = current_state.get("messages", []) + tool_result["messages"]
-            
-            # Extract retrieved docs from tool messages
-            for msg in tool_result["messages"]:
-                if isinstance(msg, ToolMessage):
+            # Update tool actions with results and timing
+            for idx, msg in enumerate(tool_result["messages"]):
+                if isinstance(msg, ToolMessage) and idx < len(tool_calls_from_last_msg):
+                    tool_action = tool_calls_from_last_msg[idx]
+                    tool_action["end_time"] = time.time()
+                    tool_action["duration"] = tool_action["end_time"] - tool_action["start_time"]
+                    tool_action["status"] = "completed"
+                    
+                    # Extract output
                     try:
                         import json
                         tool_content = json.loads(msg.content) if isinstance(msg.content, str) else msg.content
+                        tool_action["output"] = tool_content
+                        
+                        # Also collect retrieved docs
                         if isinstance(tool_content, list):
                             retrieved_docs.extend(tool_content)
                     except:
-                        pass
+                        tool_action["output"] = msg.content
+                    
+                    # Update the tool action in the list
+                    callback("tool_action", tool_action)
+            
+            # Add tool messages to state
+            current_state["messages"] = current_state.get("messages", []) + tool_result["messages"]
             
             steps_list.append(f"Tools executed, retrieved {len(retrieved_docs)} documents")
             callback("step", f"Tools executed, retrieved {len(retrieved_docs)} documents")
@@ -406,7 +462,8 @@ class OneSeekGraphAgent:
             "content": final_response,
             "retrieved": retrieved_docs,
             "steps": steps_list,
-            "tokens": tokens
+            "tokens": tokens,
+            "tool_actions": tool_actions_list
         }
 
 

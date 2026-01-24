@@ -209,18 +209,20 @@ async def stream_chat_response(
         if not result:
             raise ValueError("Agent returned empty result")
         
-        logger.info(f"Agent result: {len(result.get('tokens', []))} tokens, {len(result.get('steps', []))} steps")
+        logger.info(f"Agent result: {len(result.get('tokens', []))} tokens, {len(result.get('steps', []))} steps, {len(result.get('tool_actions', []))} tool actions")
         
-        # Send metadata about steps and retrieved docs first (as annotations)
+        # Send metadata about steps, retrieved docs, and tool actions first (as annotations)
         retrieved_docs = result.get("retrieved", [])
+        tool_actions = result.get("tool_actions", [])
         metadata = {
             "steps": result.get("steps", []),
             "retrieved": retrieved_docs,
-            "source_count": len(retrieved_docs)  # Count for frontend display
+            "source_count": len(retrieved_docs),  # Count for frontend display
+            "tool_actions": tool_actions  # Include tool actions for ActionBlock
         }
         
         # Stream annotations/data first
-        if metadata["steps"] or metadata["retrieved"]:
+        if metadata["steps"] or metadata["retrieved"] or metadata["tool_actions"]:
             # Send as data annotation (AI SDK format)
             yield f"2:{json.dumps([metadata])}\n"
         
