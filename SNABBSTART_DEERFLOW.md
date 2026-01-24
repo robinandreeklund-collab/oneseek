@@ -32,22 +32,29 @@ vllm serve Qwen/Qwen2.5-14B-Instruct-AWQ \
 
 ### 2️⃣ Installera Python-dependencies
 
-**Minimal installation (rekommenderat för testing):**
+**REKOMMENDERAT: Komplett installation med alla dependencies:**
 ```bash
 cd /home/runner/work/oneseek/oneseek
-pip install -r requirements-minimal.txt
+pip install -r requirements-deerflow.txt
 ```
 
-Detta installerar bara det som behövs för att köra DeerFlow med VLLM. **Ingen databas behövs!**
+Detta installerar ALLA DeerFlow dependencies inklusive:
+- ✅ Alla LLM providers (DeepSeek, Google, OpenAI)
+- ✅ MCP (Model Context Protocol) adapters
+- ✅ RAG/Vector stores (Milvus, Qdrant)
+- ✅ Checkpoint persistence (MongoDB, PostgreSQL)
+- ✅ Search engines och research tools
 
-**Fullständig installation (om du vill ha alla features):**
+**Alternativ 1: Minimal installation (färre dependencies, kan ge "No module" fel):**
 ```bash
-# Med uv (snabbare och rekommenderat)
+pip install -r requirements-minimal.txt
+```
+Endast core packages. Vissa features fungerar inte.
+
+**Alternativ 2: Med uv (snabbaste):**
+```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync
-
-# Eller med pip
-pip install -e .
 ```
 
 ### 3️⃣ Starta DeerFlow Backend (Terminal 2)
