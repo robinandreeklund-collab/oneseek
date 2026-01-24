@@ -4,9 +4,10 @@ import { ToolAction } from "@/types/tool-action";
 interface ActionBlockProps {
   actions: ToolAction[];
   live?: boolean;
+  onToolClick?: (action: ToolAction) => void;
 }
 
-export default function ActionBlock({ actions, live = false }: ActionBlockProps) {
+export default function ActionBlock({ actions, live = false, onToolClick }: ActionBlockProps) {
   // Collapsible state
   const [open, setOpen] = useState(live ? true : false);
 
@@ -124,8 +125,9 @@ export default function ActionBlock({ actions, live = false }: ActionBlockProps)
 
             return (
               <div
-                key={idx}
-                className={`mb-3 last:mb-0 rounded-lg border ${colors.border} ${colors.bg} p-3`}
+                key={action.tool_call_id || idx}
+                className={`mb-3 last:mb-0 rounded-lg border ${colors.border} ${colors.bg} p-3 cursor-pointer hover:shadow-md transition-all duration-200 hover:scale-[1.02]`}
+                onClick={() => onToolClick && onToolClick(action)}
               >
                 <div className="flex items-start gap-3">
                   {/* Icon */}
@@ -137,6 +139,11 @@ export default function ActionBlock({ actions, live = false }: ActionBlockProps)
                       <span className={`font-semibold text-sm ${colors.text}`}>
                         {action.display_name}
                       </span>
+                      {action.iteration !== undefined && (
+                        <span className="text-xs text-muted-foreground/70 font-mono">
+                          #{action.iteration}
+                        </span>
+                      )}
                       {isRunning && (
                         <span className="inline-flex items-center gap-1">
                           <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full inline-block animate-spin"></span>
@@ -151,6 +158,13 @@ export default function ActionBlock({ actions, live = false }: ActionBlockProps)
                         </span>
                       )}
                     </div>
+
+                    {/* Click hint */}
+                    {!isRunning && (
+                      <div className="text-xs text-muted-foreground/60 italic mb-2">
+                        Click for complete details
+                      </div>
+                    )}
 
                     {/* Input parameters */}
                     {action.input && Object.keys(action.input).length > 0 && (

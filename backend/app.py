@@ -173,9 +173,9 @@ async def stream_chat_response(
     use_tools: bool = True
 ) -> AsyncIterator[str]:
     """
-    Stream chat response in Vercel AI SDK compatible format
+    Stream chat response in Vercel AI SDK compatible format with real-time tool action updates
     
-    Streams text tokens and metadata for the frontend.
+    Streams text tokens, tool actions, and metadata for the frontend in real-time.
     Uses newline-delimited JSON format expected by AI SDK.
     
     Args:
@@ -185,49 +185,125 @@ async def stream_chat_response(
         use_tools: Use multi-tool agent (True) or legacy RAG agent (False)
     """
     import logging
+    import queue
+    import threading
     logger = logging.getLogger(__name__)
     
     try:
         # Select appropriate agent
         if use_tools:
             agent = get_agent_graph()
-            logger.info("Using multi-tool agent")
+            logger.info("Using multi-tool agent with real-time streaming")
         else:
             agent = get_agent()
             logger.info("Using legacy RAG agent")
         
-        # Run agent to get result with streaming
         logger.info(f"Running agent with {len(messages)} messages")
-        result = await asyncio.to_thread(
-            agent.run_with_streaming, 
-            messages, 
-            system_prompt=system_prompt, 
-            enable_thinking=enable_thinking
-        )
         
-        # Ensure result is valid
+        # Create a queue for real-time updates
+        update_queue = queue.Queue()
+        result_container = {"result": None, "error": None}
+        
+        # Custom callback that puts updates in the queue
+        def queue_callback(event_type: str, content: Any):
+            update_queue.put((event_type, content))
+        
+        # Run agent in background thread with queue callback
+        def run_agent():
+            try:
+                # Temporarily replace the callback in run_with_streaming
+                # We need to modify run_with_streaming to accept an external callback
+                result = agent.run_with_streaming_realtime(
+                    messages,
+                    system_prompt=system_prompt,
+                    enable_thinking=enable_thinking,
+                    realtime_callback=queue_callback
+                )
+                result_container["result"] = result
+            except Exception as e:
+                result_container["error"] = e
+            finally:
+                update_queue.put(("done", None))
+        
+        thread = threading.Thread(target=run_agent, daemon=True)
+        thread.start()
+        
+        # Stream updates from queue in real-time
+        tool_actions_list = []
+        while True:
+            try:
+                event_type, content = update_queue.get(timeout=30)
+                
+                if event_type == "done":
+                    break
+                elif event_type == "tool_action":
+                    # Stream tool action update immediately
+                    tool_actions_list.append(content)
+                    metadata = {
+                        "tool_actions": tool_actions_list,
+                        "live_update": True
+                    }
+                    yield f"2:{json.dumps([metadata])}\n"
+                    await asyncio.sleep(0.001)
+                    logger.info(f"Streamed tool action: {content.get('display_name')} - {content.get('status')}")
+                    
+            except queue.Empty:
+                logger.warning("Queue timeout - no updates received")
+                break
+        
+        # Wait for thread to complete
+        thread.join(timeout=5)
+        
+        # Check for errors
+        if result_container["error"]:
+            raise result_container["error"]
+        
+        result = result_container["result"]
         if not result:
             raise ValueError("Agent returned empty result")
         
-        logger.info(f"Agent result: {len(result.get('tokens', []))} tokens, {len(result.get('steps', []))} steps, {len(result.get('tool_actions', []))} tool actions")
+        logger.info(f"Agent result: {len(result.get('tokens', []))} tokens, {len(result.get('steps', []))} steps")
         
-        # Send metadata about steps, retrieved docs, and tool actions first (as annotations)
+        # Send final metadata
         retrieved_docs = result.get("retrieved", [])
-        tool_actions = result.get("tool_actions", [])
+        final_tool_actions = result.get("tool_actions", [])
         metadata = {
             "steps": result.get("steps", []),
             "retrieved": retrieved_docs,
-            "source_count": len(retrieved_docs),  # Count for frontend display
-            "tool_actions": tool_actions  # Include tool actions for ActionBlock
+            "source_count": len(retrieved_docs),
+            "tool_actions": final_tool_actions,
+            "live_update": False
         }
         
-        # Stream annotations/data first
-        if metadata["steps"] or metadata["retrieved"] or metadata["tool_actions"]:
-            # Send as data annotation (AI SDK format)
-            yield f"2:{json.dumps([metadata])}\n"
+        yield f"2:{json.dumps([metadata])}\n"
         
-        # Stream LLM response tokens as text chunks
-        # Format: "0:{token_text}\n" where 0 indicates text chunk
+        # Stream LLM response tokens
+        tokens = result.get("tokens", [])
+        if tokens:
+            for token in tokens:
+                yield f"0:{json.dumps(token)}\n"
+                await asyncio.sleep(0.001)
+        else:
+            content = result.get("content", "")
+            if content:
+                chunk_size = 100
+                for i in range(0, len(content), chunk_size):
+                    chunk = content[i:i + chunk_size]
+                    yield f"0:{json.dumps(chunk)}\n"
+                    await asyncio.sleep(0.001)
+        
+        # Send final done message
+        yield "d:\n"
+        logger.info("Streaming completed successfully")
+        
+    except Exception as e:
+        # Send error in AI SDK format
+        import traceback
+        error_detail = traceback.format_exc()
+        error_msg = f"Error: {str(e)}\n\nDetails:\n{error_detail}"
+        logger.error(f"Streaming error: {error_msg}")
+        yield f"3:{json.dumps(error_msg)}\n"
+        yield "d:\n"
         tokens = result.get("tokens", [])
         if tokens:
             for token in tokens:

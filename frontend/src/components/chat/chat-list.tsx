@@ -11,6 +11,7 @@ import ThinkBlock from "../think-block";
 import ActionBlock from "../action-block";
 import { SourceBadge } from "./source-badge";
 import { Source, SourcesSidebar } from "./sources-sidebar";
+import { ToolActionDetailSidebar } from "./tool-action-detail-sidebar";
 import { ToolAction, MessageToolActions } from "@/types/tool-action";
 
 interface ChatListProps {
@@ -74,12 +75,19 @@ export default function ChatList({ messages, isLoading, messageSources, messageT
   const bottomRef = useRef<HTMLDivElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedSources, setSelectedSources] = useState<Source[]>([]);
+  const [toolDetailSidebarOpen, setToolDetailSidebarOpen] = useState(false);
+  const [selectedToolAction, setSelectedToolAction] = useState<ToolAction | null>(null);
   
   // Debug logging
   useEffect(() => {
     console.log("ChatList messageSources:", messageSources);
     console.log("ChatList messageToolActions:", messageToolActions);
   }, [messageSources, messageToolActions]);
+
+  const handleToolClick = (toolAction: ToolAction) => {
+    setSelectedToolAction(toolAction);
+    setToolDetailSidebarOpen(true);
+  };
 
   const scrollToBottom = () => {
     bottomRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
@@ -168,6 +176,7 @@ export default function ChatList({ messages, isLoading, messageSources, messageT
                       <ActionBlock
                         actions={messageToolActions[message.id]}
                         live={isLoading && messages.indexOf(message) === messages.length - 1}
+                        onToolClick={handleToolClick}
                       />
                     )}
                     <div className="flex-col gap-1 md:gap-3">
@@ -219,6 +228,14 @@ export default function ChatList({ messages, isLoading, messageSources, messageT
         open={sidebarOpen}
         onOpenChange={setSidebarOpen}
         sources={selectedSources}
+      />
+      
+      {/* Tool Action Detail Sidebar */}
+      <ToolActionDetailSidebar
+        open={toolDetailSidebarOpen}
+        onOpenChange={setToolDetailSidebarOpen}
+        toolAction={selectedToolAction}
+      />
       />
     </div>
   );
