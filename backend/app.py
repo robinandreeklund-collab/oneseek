@@ -187,6 +187,7 @@ async def stream_chat_response(
     import logging
     import queue
     import threading
+    import time
     logger = logging.getLogger(__name__)
     
     try:
@@ -227,7 +228,7 @@ async def stream_chat_response(
         thread.start()
         
         # Stream updates from queue in real-time
-        tool_actions_list = []
+        tool_actions_dict = {}  # Use dict to track by tool_call_id to avoid duplicates
         while True:
             try:
                 event_type, content = update_queue.get(timeout=30)
@@ -235,8 +236,12 @@ async def stream_chat_response(
                 if event_type == "done":
                     break
                 elif event_type == "tool_action":
-                    # Stream tool action update immediately
-                    tool_actions_list.append(content)
+                    # Update or add tool action by tool_call_id to avoid duplicates
+                    tool_call_id = content.get("tool_call_id", str(time.time()))
+                    tool_actions_dict[tool_call_id] = content
+                    
+                    # Convert dict to list for streaming
+                    tool_actions_list = list(tool_actions_dict.values())
                     metadata = {
                         "tool_actions": tool_actions_list,
                         "live_update": True

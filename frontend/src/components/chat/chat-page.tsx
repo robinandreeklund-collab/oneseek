@@ -51,8 +51,19 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
   React.useEffect(() => {
     if (isLoading) {
       const lastAssistantMessage = messages.filter(m => m.role === 'assistant').slice(-1)[0];
-      if (lastAssistantMessage) {
+      if (lastAssistantMessage && currentStreamingMessageIdRef.current !== lastAssistantMessage.id) {
+        // New message started streaming, update the ref
         currentStreamingMessageIdRef.current = lastAssistantMessage.id;
+        
+        // Clear tool actions for this new message to ensure fresh start
+        setMessageToolActions((prev) => {
+          const newState = { ...prev };
+          // Only clear if this is truly a new message (not already set)
+          if (!newState[lastAssistantMessage.id]) {
+            newState[lastAssistantMessage.id] = [];
+          }
+          return newState;
+        });
       }
     } else {
       currentStreamingMessageIdRef.current = null;
@@ -111,17 +122,22 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
           const isLiveUpdate = item.live_update === true;
           
           setMessageToolActions((prev) => {
-            // Only associate tool actions with the currently streaming message
-            // This prevents tool actions from appearing on old messages
-            const targetMessageId = currentStreamingMessageIdRef.current || lastAssistantMessage.id;
+            // Determine target message ID - prefer the tracked streaming message
+            const targetMessageId = currentStreamingMessageIdRef.current;
+            
+            // If no target message is being tracked, skip (shouldn't happen during streaming)
+            if (!targetMessageId) {
+              console.warn('Tool actions received but no streaming message tracked');
+              return prev;
+            }
             
             // For live updates, always update the current message's tool actions
-            // For final updates, only set if not already finalized or if it's a live update
-            if (isLiveUpdate || !prev[targetMessageId] || item.live_update === false) {
+            // For final updates, only set if this is the target message
+            if (isLiveUpdate || item.live_update === false) {
               // Create a new state object with only the target message's tool actions
-              // Remove any stale tool actions from this update
               const newState = { ...prev };
               newState[targetMessageId] = toolActions;
+              console.log(`Updated tool actions for message ${targetMessageId}:`, toolActions.length, 'actions');
               return newState;
             }
             return prev;
