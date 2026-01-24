@@ -3,7 +3,7 @@
  */
 
 export interface ToolAction {
-  tool_call_id: string;  // Unique identifier for this specific invocation
+  tool_call_id?: string;  // Unique identifier for this specific invocation (optional for backward compatibility)
   tool_name: string;
   display_name: string;
   icon: string;

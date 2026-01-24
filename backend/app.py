@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import List, Dict, Optional, AsyncIterator
+from typing import List, Dict, Optional, AsyncIterator, Any
 import uvicorn
 import json
 import asyncio
@@ -211,8 +211,6 @@ async def stream_chat_response(
         # Run agent in background thread with queue callback
         def run_agent():
             try:
-                # Temporarily replace the callback in run_with_streaming
-                # We need to modify run_with_streaming to accept an external callback
                 result = agent.run_with_streaming_realtime(
                     messages,
                     system_prompt=system_prompt,
@@ -303,37 +301,6 @@ async def stream_chat_response(
         error_msg = f"Error: {str(e)}\n\nDetails:\n{error_detail}"
         logger.error(f"Streaming error: {error_msg}")
         yield f"3:{json.dumps(error_msg)}\n"
-        yield "d:\n"
-        tokens = result.get("tokens", [])
-        if tokens:
-            for token in tokens:
-                yield f"0:{json.dumps(token)}\n"
-                await asyncio.sleep(0.001)  # Small delay for smoother streaming
-        else:
-            # If no tokens were streamed, send the full content in smaller chunks
-            # to ensure proper frontend parsing
-            content = result.get("content", "")
-            if content:
-                logger.warning(f"No tokens, sending full content: {len(content)} chars")
-                # Split content into smaller chunks for better streaming compatibility
-                chunk_size = 100  # Send in chunks of 100 chars
-                for i in range(0, len(content), chunk_size):
-                    chunk = content[i:i + chunk_size]
-                    yield f"0:{json.dumps(chunk)}\n"
-                    await asyncio.sleep(0.001)
-        
-        # Send final done message
-        yield "d:\n"
-        logger.info("Streaming completed successfully")
-        
-    except Exception as e:
-        # Send error in AI SDK format with more detail
-        import traceback
-        error_detail = traceback.format_exc()
-        error_msg = f"Error: {str(e)}\n\nDetails:\n{error_detail}"
-        logger.error(f"Streaming error: {error_msg}")
-        yield f"3:{json.dumps(error_msg)}\n"
-        # Also send done to close the stream properly
         yield "d:\n"
 
 
