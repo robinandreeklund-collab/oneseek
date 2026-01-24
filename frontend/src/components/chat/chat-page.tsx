@@ -75,11 +75,9 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
       }
     }
     
-    // Clear tracking when not loading
-    if (!isLoading) {
-      currentStreamingMessageIdRef.current = null;
-    }
-  }, [messages, isLoading]);
+    // DO NOT clear tracking when loading stops - keep the reference so final tool actions go to the right message
+    // The reference will be updated when the next new message starts
+  }, [messages]);
   
   // Watch for data changes and extract sources and tool actions
   React.useEffect(() => {
@@ -142,16 +140,12 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
               return prev;
             }
             
-            // For live updates, always update the current message's tool actions
-            // For final updates, only set if this is the target message
-            if (isLiveUpdate || item.live_update === false) {
-              // Create a new state object with only the target message's tool actions
-              const newState = { ...prev };
-              newState[targetMessageId] = toolActions;
-              console.log(`Updated tool actions for message ${targetMessageId}:`, toolActions.length, 'actions');
-              return newState;
-            }
-            return prev;
+            // ALWAYS replace tool actions for the target message (never merge with old data)
+            // This ensures each question gets its OWN tool actions and old data doesn't persist
+            const newState = { ...prev };
+            newState[targetMessageId] = toolActions;
+            console.log(`Updated tool actions for message ${targetMessageId}:`, toolActions.length, 'actions', isLiveUpdate ? '(live)' : '(final)');
+            return newState;
           });
         }
       }
