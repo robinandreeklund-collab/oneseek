@@ -12,6 +12,7 @@ import { ChatLayout } from "@/components/chat/chat-layout";
 import { ChatOptions } from "@/components/chat/chat-options";
 import { basePath } from "@/lib/utils";
 import { Source } from "@/components/chat/sources-sidebar";
+import { MessageToolActions } from "@/types/tool-action";
 
 interface ChatPageProps {
   chatId: string;
@@ -20,23 +21,6 @@ interface ChatPageProps {
 
 interface MessageSources {
   [messageId: string]: Source[];
-}
-
-interface ToolAction {
-  tool_name: string;
-  display_name: string;
-  icon: string;
-  color: string;
-  input: any;
-  output?: any;
-  start_time?: number;
-  end_time?: number;
-  duration?: number;
-  status: "running" | "completed";
-}
-
-interface MessageToolActions {
-  [messageId: string]: ToolAction[];
 }
 
 export default function ChatPage({ chatId, setChatId }: ChatPageProps) {

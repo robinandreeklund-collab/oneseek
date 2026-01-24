@@ -11,25 +11,13 @@ import ThinkBlock from "../think-block";
 import ActionBlock from "../action-block";
 import { SourceBadge } from "./source-badge";
 import { Source, SourcesSidebar } from "./sources-sidebar";
-
-interface ToolAction {
-  tool_name: string;
-  display_name: string;
-  icon: string;
-  color: string;
-  input: any;
-  output?: any;
-  start_time?: number;
-  end_time?: number;
-  duration?: number;
-  status: "running" | "completed";
-}
+import { ToolAction, MessageToolActions } from "@/types/tool-action";
 
 interface ChatListProps {
   messages: Message[];
   isLoading: boolean;
   messageSources?: { [messageId: string]: Source[] };
-  messageToolActions?: { [messageId: string]: ToolAction[] };
+  messageToolActions?: MessageToolActions;
 }
 
 const MessageToolbar = () => (

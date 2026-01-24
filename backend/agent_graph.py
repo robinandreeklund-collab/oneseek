@@ -4,6 +4,9 @@ Implements agent → tools → conditional edge → loops to final answers
 """
 
 import os
+import json
+import time
+import logging
 from typing import TypedDict, List, Dict, Any, Optional, Literal, Annotated
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
@@ -311,7 +314,6 @@ class OneSeekGraphAgent:
         for msg in final_state["messages"]:
             if isinstance(msg, ToolMessage):
                 try:
-                    import json
                     tool_result = json.loads(msg.content) if isinstance(msg.content, str) else msg.content
                     if isinstance(tool_result, list):
                         retrieved_docs.extend(tool_result)
@@ -397,7 +399,6 @@ class OneSeekGraphAgent:
             callback("step", "Executing tools...")
             
             # Track tool invocations with timing
-            import time
             tool_calls_from_last_msg = []
             if hasattr(last_msg, 'tool_calls') and last_msg.tool_calls:
                 for tc in last_msg.tool_calls:
@@ -433,7 +434,6 @@ class OneSeekGraphAgent:
                     
                     # Extract output
                     try:
-                        import json
                         tool_content = json.loads(msg.content) if isinstance(msg.content, str) else msg.content
                         tool_action["output"] = tool_content
                         

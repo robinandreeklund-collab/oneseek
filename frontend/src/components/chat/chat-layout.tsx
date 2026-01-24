@@ -5,19 +5,7 @@ import React, { useEffect, useState } from "react";
 import { Sidebar } from "../sidebar";
 import Chat, { ChatProps, ChatTopbarProps } from "./chat";
 import { Source } from "./sources-sidebar";
-
-interface ToolAction {
-  tool_name: string;
-  display_name: string;
-  icon: string;
-  color: string;
-  input: any;
-  output?: any;
-  start_time?: number;
-  end_time?: number;
-  duration?: number;
-  status: "running" | "completed";
-}
+import { MessageToolActions } from "@/types/tool-action";
 
 interface ChatLayoutProps {
   defaultLayout: number[] | undefined;
@@ -25,7 +13,7 @@ interface ChatLayoutProps {
   navCollapsedSize: number;
   chatId: string;
   messageSources?: { [messageId: string]: Source[] };
-  messageToolActions?: { [messageId: string]: ToolAction[] };
+  messageToolActions?: MessageToolActions;
 }
 
 type MergedProps = ChatLayoutProps & ChatProps & ChatTopbarProps;

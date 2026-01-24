@@ -8,19 +8,7 @@ import ChatList from "./chat-list";
 import { ChatOptions } from "./chat-options";
 import ChatTopbar from "./chat-topbar";
 import { Source } from "./sources-sidebar";
-
-interface ToolAction {
-  tool_name: string;
-  display_name: string;
-  icon: string;
-  color: string;
-  input: any;
-  output?: any;
-  start_time?: number;
-  end_time?: number;
-  duration?: number;
-  status: "running" | "completed";
-}
+import { MessageToolActions } from "@/types/tool-action";
 
 export interface ChatProps {
   chatId?: string;
@@ -36,7 +24,7 @@ export interface ChatProps {
   error: undefined | Error;
   stop: () => void;
   messageSources?: { [messageId: string]: Source[] };
-  messageToolActions?: { [messageId: string]: ToolAction[] };
+  messageToolActions?: MessageToolActions;
 }
 
 export interface ChatTopbarProps {

@@ -1,17 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-
-interface ToolAction {
-  tool_name: string;
-  display_name: string;
-  icon: string;
-  color: string;
-  input: any;
-  output?: any;
-  start_time?: number;
-  end_time?: number;
-  duration?: number;
-  status: "running" | "completed";
-}
+import { ToolAction } from "@/types/tool-action";
 
 interface ActionBlockProps {
   actions: ToolAction[];
@@ -170,7 +158,13 @@ export default function ActionBlock({ actions, live = false }: ActionBlockProps)
                         <span className="font-medium">Input: </span>
                         <span className="font-mono">
                           {Object.entries(action.input)
-                            .map(([key, value]) => `${key}="${value}"`)
+                            .map(([key, value]) => {
+                              // Handle complex values properly
+                              const formattedValue = typeof value === "object" 
+                                ? JSON.stringify(value) 
+                                : String(value);
+                              return `${key}="${formattedValue}"`;
+                            })
                             .join(", ")}
                         </span>
                       </div>
