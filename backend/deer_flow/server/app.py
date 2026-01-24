@@ -26,7 +26,6 @@ from fastapi import FastAPI, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from langchain_core.messages import AIMessageChunk, BaseMessage, ToolMessage
-from langgraph.checkpoint.mongodb import AsyncMongoDBSaver
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.store.memory import InMemoryStore
 from langgraph.types import Command
@@ -96,7 +95,7 @@ _pg_checkpointer: Optional[AsyncPostgresSaver] = None
 
 # Global MongoDB connection (initialized at startup if configured)
 _mongo_client: Optional[Any] = None
-_mongo_checkpointer: Optional[AsyncMongoDBSaver] = None
+_mongo_checkpointer: Optional[Any] = None  # AsyncMongoDBSaver when configured
 
 
 from contextlib import asynccontextmanager
@@ -169,6 +168,7 @@ async def lifespan(app):
         elif checkpoint_url.startswith("mongodb://"):
             try:
                 from motor.motor_asyncio import AsyncIOMotorClient
+                from langgraph.checkpoint.mongodb import AsyncMongoDBSaver
 
                 # MongoDB connection pool settings
                 mongo_max_pool_size = get_int_env("MONGO_MAX_POOL_SIZE", 20)
@@ -190,9 +190,15 @@ async def lifespan(app):
                 await _mongo_checkpointer.setup()
 
                 logger.info("Global MongoDB connection pool initialized successfully")
-            except ImportError:
-                logger.error("motor package not installed. Please install it with: pip install motor")
-                raise RuntimeError("MongoDB checkpoint persistence is configured but the 'motor' package is not installed. Aborting startup.")
+            except ImportError as ie:
+                if 'motor' in str(ie):
+                    logger.error("motor package not installed. Please install it with: pip install motor")
+                    raise RuntimeError("MongoDB checkpoint persistence is configured but the 'motor' package is not installed. Aborting startup.")
+                elif 'mongodb' in str(ie):
+                    logger.error("langgraph.checkpoint.mongodb not available. Please install it with: pip install langgraph-checkpoint-mongodb")
+                    raise RuntimeError("MongoDB checkpoint persistence is configured but the 'langgraph.checkpoint.mongodb' package is not installed. Aborting startup.")
+                else:
+                    raise
             except Exception as e:
                 logger.error(f"Failed to initialize MongoDB connection pool: {e}")
                 raise RuntimeError(f"MongoDB checkpoint persistence is configured but could not be initialized: {e}")
@@ -912,6 +918,15 @@ async def _astream_workflow_generator(
         # Fallback to per-request MongoDB connection if global pool not available
         elif checkpoint_url.startswith("mongodb://"):
             logger.info(f"[{safe_thread_id}] Global pool unavailable, creating per-request MongoDB connection")
+            try:
+                from langgraph.checkpoint.mongodb import AsyncMongoDBSaver
+            except ImportError:
+                logger.error("langgraph.checkpoint.mongodb not available. Please install it with: pip install langgraph-checkpoint-mongodb")
+                raise HTTPException(
+                    status_code=500,
+                    detail="MongoDB checkpoint persistence is configured but the 'langgraph.checkpoint.mongodb' package is not installed."
+                )
+            
             async with AsyncMongoDBSaver.from_conn_string(
                 checkpoint_url
             ) as checkpointer:

@@ -13,6 +13,8 @@ Detta repo innehåller nu ByteDance's DeerFlow integrerat med OneSeek's VLLM-set
 
 ## Steg-för-steg: Kom igång på 5 minuter
 
+**Ingen databas behövs!** DeerFlow fungerar direkt utan MongoDB eller PostgreSQL. Konversationer sparas inte mellan sessioner, men det behövs inga extra dependencies.
+
 ### 1️⃣ Starta VLLM (Terminal 1)
 
 ```bash
@@ -93,6 +95,23 @@ SEARCH_API=tavily
 TAVILY_API_KEY=din_nyckel_här
 ```
 
+**Valfritt: Spara konversationer (kräver databas)**
+
+Om du vill spara konversationer mellan sessioner:
+```bash
+# I .env
+LANGGRAPH_CHECKPOINT_SAVER=true
+LANGGRAPH_CHECKPOINT_DB_URL=mongodb://localhost:27017
+# eller
+LANGGRAPH_CHECKPOINT_DB_URL=postgresql://user:pass@localhost:5432/db
+
+# Du behöver också installera:
+# För MongoDB: pip install langgraph-checkpoint-mongodb motor
+# För PostgreSQL: pip install langgraph-checkpoint-postgres psycopg[binary,pool]
+```
+
+**OBS:** Detta är helt valfritt! DeerFlow fungerar utan databas.
+
 ## Alternativ: Bootstrap-skript
 
 Starta både backend och web UI samtidigt:
@@ -114,6 +133,21 @@ curl http://localhost:8000/v1/models
 
 # Borde returnera: {"object":"list","data":[...]}
 ```
+
+### ❌ "No module named 'langgraph.checkpoint.mongodb'"
+
+**Problem**: Du har aktiverat checkpoint saver men saknar MongoDB packages
+
+**Lösning**:
+```bash
+# Antingen installera MongoDB support:
+pip install langgraph-checkpoint-mongodb motor
+
+# ELLER inaktivera checkpoint saver i .env:
+LANGGRAPH_CHECKPOINT_SAVER=false
+```
+
+**Viktigt:** Checkpoint saver är **INTE** nödvändig för att köra DeerFlow! Den är bara för att spara konversationer mellan sessioner.
 
 ### ❌ "ModuleNotFoundError: No module named 'backend.deer_flow'"
 
