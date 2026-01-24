@@ -51,7 +51,7 @@ inquirerpy>=0.3.4
 # Research tools
 arxiv>=2.2.0
 wikipedia>=1.4.0
-langchain-tavily>=0.2.0
+# langchain-tavily removed - incompatible with langchain 1.x (requires langchain<0.4.0)
 
 # MCP (Model Context Protocol) - optional but included for full functionality
 mcp>=1.11.0
