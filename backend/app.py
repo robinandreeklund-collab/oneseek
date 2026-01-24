@@ -126,7 +126,8 @@ async def chat(request: ChatRequest):
         use_tools = request.use_tools if request.use_tools is not None else True
         
         if request.stream:
-            # Return streaming response in AI SDK format
+            # Return streaming response in AI SDK format with explicit flushing
+            # This ensures real-time delivery of tool actions without buffering
             return StreamingResponse(
                 stream_chat_response(
                     messages, 
@@ -134,7 +135,11 @@ async def chat(request: ChatRequest):
                     request.enable_thinking,
                     use_tools
                 ),
-                media_type="text/plain; charset=utf-8"
+                media_type="text/plain; charset=utf-8",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",  # Disable nginx buffering
+                }
             )
         else:
             # Non-streaming response (legacy support)
@@ -246,8 +251,11 @@ async def stream_chat_response(
                         "tool_actions": tool_actions_list,
                         "live_update": True
                     }
-                    yield f"2:{json.dumps([metadata])}\n"
-                    await asyncio.sleep(0.001)
+                    # Yield with newline to trigger immediate flush
+                    message = f"2:{json.dumps([metadata])}\n"
+                    yield message
+                    # Force a zero-wait to allow event loop to process and flush
+                    await asyncio.sleep(0)
                     logger.info(f"Streamed tool action: {content.get('display_name')} - {content.get('status')}")
                     
             except queue.Empty:
@@ -343,5 +351,11 @@ if __name__ == "__main__":
         "app:app",
         host="0.0.0.0",
         port=8001,
-        reload=True
+        reload=True,
+        log_level="info",
+        # Disable buffering for real-time streaming
+        timeout_keep_alive=75,
+        limit_concurrency=None,
+        # These settings help with immediate flushing
+        h11_max_incomplete_event_size=None
     )
