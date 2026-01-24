@@ -269,12 +269,14 @@ async def stream_chat_response(
         
         # Send final metadata
         retrieved_docs = result.get("retrieved", [])
-        final_tool_actions = result.get("tool_actions", [])
+        # Don't send tool_actions in final metadata - they were already streamed in real-time
+        # Using tool_actions_dict ensures we only have unique actions
+        final_tool_actions_list = list(tool_actions_dict.values())
         metadata = {
             "steps": result.get("steps", []),
             "retrieved": retrieved_docs,
             "source_count": len(retrieved_docs),
-            "tool_actions": final_tool_actions,
+            "tool_actions": final_tool_actions_list,
             "live_update": False
         }
         
