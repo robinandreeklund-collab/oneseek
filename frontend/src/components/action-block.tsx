@@ -107,7 +107,7 @@ export default function ActionBlock({ actions, live = false, onToolClick }: Acti
           }`}
         />
         <span>
-          Reviewed {actions.length} source{actions.length !== 1 ? "s" : ""}
+          Actions {actions.length} tool{actions.length !== 1 ? "s" : ""} {allCompleted ? "used" : "invoked"}
         </span>
       </button>
 
