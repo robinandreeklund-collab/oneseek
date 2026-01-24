@@ -26,11 +26,8 @@ from fastapi import FastAPI, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from langchain_core.messages import AIMessageChunk, BaseMessage, ToolMessage
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.store.memory import InMemoryStore
 from langgraph.types import Command
-from psycopg.rows import dict_row
-from psycopg_pool import AsyncConnectionPool
 
 from backend.deer_flow.config.configuration import get_recursion_limit
 from backend.deer_flow.config.loader import get_bool_env, get_int_env, get_str_env
@@ -90,8 +87,8 @@ if os.name == "nt":
 INTERNAL_SERVER_ERROR_DETAIL = "Internal Server Error"
 
 # Global connection pools (initialized at startup if configured)
-_pg_pool: Optional[AsyncConnectionPool] = None
-_pg_checkpointer: Optional[AsyncPostgresSaver] = None
+_pg_pool: Optional[Any] = None  # AsyncConnectionPool when configured
+_pg_checkpointer: Optional[Any] = None  # AsyncPostgresSaver when configured
 
 # Global MongoDB connection (initialized at startup if configured)
 _mongo_client: Optional[Any] = None
@@ -126,22 +123,26 @@ async def lifespan(app):
     else:
         # Initialize PostgreSQL connection pool
         if checkpoint_url.startswith("postgresql://"):
-            pool_min_size = get_int_env("PG_POOL_MIN_SIZE", 5)
-            pool_max_size = get_int_env("PG_POOL_MAX_SIZE", 20)
-            pool_timeout = get_int_env("PG_POOL_TIMEOUT", 60)
-
-            connection_kwargs = {
-                "autocommit": True,
-                "prepare_threshold": 0,
-                "row_factory": dict_row,
-            }
-
-            logger.info(
-                f"Initializing global PostgreSQL connection pool: "
-                f"min_size={pool_min_size}, max_size={pool_max_size}, timeout={pool_timeout}s"
-            )
-
             try:
+                from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+                from psycopg.rows import dict_row
+                from psycopg_pool import AsyncConnectionPool
+                
+                pool_min_size = get_int_env("PG_POOL_MIN_SIZE", 5)
+                pool_max_size = get_int_env("PG_POOL_MAX_SIZE", 20)
+                pool_timeout = get_int_env("PG_POOL_TIMEOUT", 60)
+
+                connection_kwargs = {
+                    "autocommit": True,
+                    "prepare_threshold": 0,
+                    "row_factory": dict_row,
+                }
+
+                logger.info(
+                    f"Initializing global PostgreSQL connection pool: "
+                    f"min_size={pool_min_size}, max_size={pool_max_size}, timeout={pool_timeout}s"
+                )
+
                 _pg_pool = AsyncConnectionPool(
                     checkpoint_url,
                     kwargs=connection_kwargs,
@@ -155,6 +156,13 @@ async def lifespan(app):
                 await _pg_checkpointer.setup()
 
                 logger.info("Global PostgreSQL connection pool initialized successfully")
+            except ImportError as ie:
+                logger.error(f"PostgreSQL packages not installed: {ie}")
+                logger.error("Please install with: pip install langgraph-checkpoint-postgres psycopg[binary,pool]")
+                raise RuntimeError(
+                    "PostgreSQL checkpoint persistence is configured but required packages are not installed. "
+                    "Install with: pip install langgraph-checkpoint-postgres psycopg[binary,pool]"
+                )
             except Exception as e:
                 logger.error(f"Failed to initialize PostgreSQL connection pool: {e}")
                 _pg_pool = None
@@ -884,6 +892,16 @@ async def _astream_workflow_generator(
         # Fallback to per-request PostgreSQL connection if global pool not available
         elif checkpoint_url.startswith("postgresql://"):
             logger.info(f"[{safe_thread_id}] Global pool unavailable, creating per-request PostgreSQL connection")
+            try:
+                from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+                from psycopg_pool import AsyncConnectionPool
+            except ImportError:
+                logger.error("PostgreSQL packages not installed. Please install with: pip install langgraph-checkpoint-postgres psycopg[binary,pool]")
+                raise HTTPException(
+                    status_code=500,
+                    detail="PostgreSQL checkpoint persistence is configured but required packages are not installed."
+                )
+            
             connection_kwargs = {
                 "autocommit": True,
                 "row_factory": "dict_row",
