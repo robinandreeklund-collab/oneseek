@@ -161,16 +161,6 @@ export default function ChatList({ messages, isLoading, messageSources, messageT
                 {message.role === "assistant" && (
                   <div className="relative flex w-full min-w-0 flex-col">
                     <div className="font-semibold pb-2">Assistant</div>
-                    {/* Show source badge if sources exist for this message */}
-                    {messageSources && messageSources[message.id] && (
-                      <SourceBadge
-                        sourceCount={messageSources[message.id].length}
-                        onClick={() => {
-                          setSelectedSources(messageSources[message.id]);
-                          setSidebarOpen(true);
-                        }}
-                      />
-                    )}
                     {/* Show ActionBlock if tool actions exist for this message */}
                     {messageToolActions && messageToolActions[message.id] && (
                       <ActionBlock
@@ -214,6 +204,18 @@ export default function ChatList({ messages, isLoading, messageSources, messageT
                           )}
                       </span>
                     </div>
+                    {/* Show source badge AFTER content if sources exist for this message */}
+                    {messageSources && messageSources[message.id] && (
+                      <div className="mt-3">
+                        <SourceBadge
+                          sourceCount={messageSources[message.id].length}
+                          onClick={() => {
+                            setSelectedSources(messageSources[message.id]);
+                            setSidebarOpen(true);
+                          }}
+                        />
+                      </div>
+                    )}
                     <MessageToolbar />
                   </div>
                 )}
