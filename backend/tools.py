@@ -540,12 +540,37 @@ def check_chunk_relevance(chunk_id: str, chunk_content: str, user_query: str) ->
         query_lower = user_query.lower()
         content_lower = chunk_content.lower()
         
+        # Special handling for structured document queries (chapters, paragraphs, sections)
+        # Look for patterns like "kapitel 1", "1 kap", "paragraf 2", "§ 2", etc.
+        structure_patterns = [
+            r'kapitel\s*(\d+)', r'kap\.?\s*(\d+)', r'(\d+)\s*kap',
+            r'paragraf\s*(\d+)', r'§\s*(\d+)', r'punkt\s*(\d+)',
+            r'avsnitt\s*(\d+)', r'stycke\s*(\d+)'
+        ]
+        
+        # Check if query is asking for a specific section/paragraph
+        is_citation_query = any(re.search(pattern, query_lower) for pattern in structure_patterns)
+        citation_boost = 0  # Initialize citation boost
+        relevant_excerpts = []  # Initialize excerpts list
+        
+        if is_citation_query:
+            # For citation queries, check if the content has matching section markers
+            for pattern in structure_patterns:
+                query_matches = re.findall(pattern, query_lower)
+                content_matches = re.findall(pattern, content_lower)
+                # If query asks for specific section numbers that appear in content
+                if query_matches and any(qm in content_matches for qm in query_matches):
+                    citation_boost = 0.5  # Strong boost for matching section numbers
+                    relevant_excerpts.append(f"Found section marker matching query in content")
+                    break
+        
         # Extract key terms from query (simple approach)
         # Remove common Swedish and English stop words
         stop_words = {
             # Swedish stop words
             'och', 'i', 'på', 'att', 'en', 'är', 'som', 'för', 'det', 'av', 
             'till', 'med', 'om', 'den', 'kan', 'vad', 'hur', 'när', 'vilka',
+            'från', 'citera', 'quote',  # Add citation-related words
             # English stop words
             'the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'is', 'of', 'and', 'or'
         }
@@ -563,7 +588,6 @@ def check_chunk_relevance(chunk_id: str, chunk_content: str, user_query: str) ->
         
         # Count how many query terms appear in chunk
         matches = 0
-        relevant_excerpts = []
         
         for word in query_words:
             if word in content_lower:
@@ -576,7 +600,11 @@ def check_chunk_relevance(chunk_id: str, chunk_content: str, user_query: str) ->
                     relevant_excerpts.append(match_contexts[0].strip())
         
         # Calculate relevance score
-        relevance_score = min(matches / len(query_words), 1.0)
+        relevance_score = min(matches / len(query_words), 1.0) if query_words else 0.5
+        
+        # Add citation boost if applicable
+        relevance_score = min(relevance_score + citation_boost, 1.0)
+        
         is_relevant = relevance_score > RELEVANCE_THRESHOLD
         
         # Deduplicate and limit excerpts
