@@ -1,20 +1,32 @@
-# OneSeek.ai MVP v0.3 – Lokal AI-chat med Multi-Tool Search & Transparens
+# OneSeek.ai + DeerFlow Integration
 
 **OneSeek.ai** är en agent-plattform i tidig MVP-fas med fokus på:
 - Lokal LLM-inference via vLLM (på RTX 5090)
-- **Multi-tool web search** med Tavily, DuckDuckGo och Vespa (NYTT!)
+- **Multi-tool web search** med Tavily, DuckDuckGo och Vespa
 - Snygg ChatGPT-liknande frontend
 - Retrieval-Augmented Generation (RAG) via Vespa Cloud
 - Agent-flöde med LangGraph (tool calling → parallel execution → berikad prompt → generera svar)
 - Full transparens: visa retrieved källor, steg och metadata i UI
 
-Målet är att bygga mot en unik plattform med **debatt/compare mellan modeller**, **blockchain-logging för verifierbarhet** och **multi-step agenter** – men denna MVP är minimal och körbar lokalt.
+**🦌 NYTT: DeerFlow Integration**
+- Komplett ByteDance DeerFlow kodbas nu tillgänglig
+- Använd DeerFlow's avancerade Web UI med din lokala VLLM
+- Multi-agent architecture (Researcher, Analyst, Reporter)
+- **→ [🚀 SNABBSTART_DEERFLOW.md - Starta DeerFlow på 5 minuter](SNABBSTART_DEERFLOW.md)**
 
 ## 🚀 Kom igång snabbt
+
+### Alternativ 1: OneSeek Original (vårt original frontend)
 
 **→ [📖 QUICKSTART.md - Komplett steg-för-steg guide för nybörjare](QUICKSTART.md)**
 
 Denna guide täcker allt från installation av Python och Node.js till att köra din första AI-chat!
+
+### Alternativ 2: DeerFlow (ByteDance's frontend - REKOMMENDERAS FÖR TEST)
+
+**→ [🦌 SNABBSTART_DEERFLOW.md - DeerFlow med VLLM på 5 minuter](SNABBSTART_DEERFLOW.md)**
+
+Testa DeerFlow's professionella Web UI med din lokala VLLM!
 
 ---
 
@@ -247,11 +259,16 @@ curl -X POST http://localhost:8001/chat \
 
 ## Dokumentation
 
+### OneSeek Original
 - [📖 QUICKSTART.md](QUICKSTART.md) - Nybörjarguide för installation
 - [🔧 backend/INTEGRATION_GUIDE.md](backend/INTEGRATION_GUIDE.md) - Detaljerad guide för multi-tool integration
-- [🦌 backend/DEER_FLOW_INTEGRATION.md](backend/DEER_FLOW_INTEGRATION.md) - DeerFlow integration och multi-agent patterns
 - [🏗️ ARCHITECTURE.md](ARCHITECTURE.md) - Systemarkitektur och data flow
 - [🐛 TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Vanliga problem och lösningar
+
+### DeerFlow Integration
+- [🦌 SNABBSTART_DEERFLOW.md](SNABBSTART_DEERFLOW.md) - Snabbstart för DeerFlow med VLLM
+- [📘 DEERFLOW_VLLM_SETUP.md](DEERFLOW_VLLM_SETUP.md) - Detaljerad setup-guide
+- [🔧 backend/DEER_FLOW_INTEGRATION.md](backend/DEER_FLOW_INTEGRATION.md) - DeerFlow integration och multi-agent patterns
 - [📄 DEER_FLOW_ATTRIBUTION.md](DEER_FLOW_ATTRIBUTION.md) - DeerFlow license och attribution
 
 ## Licens
