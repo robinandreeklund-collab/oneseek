@@ -10,6 +10,23 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Constants for chunk handling
+PREVIEW_LENGTH = 800  # Characters to show in preview for large pages
+TRUNCATION_MESSAGE = "... [content truncated, use check_chunk_relevance to filter, then get_chunk_content to retrieve full text]"
+
+# Global cache for storing full chunk content
+# Note: For production use, consider thread-safe implementation or external cache
+_chunk_content_cache = {}
+_cache_lock = None  # Can be initialized with threading.Lock() for thread safety
+
+
+def _get_chunk_cache():
+    """Get or initialize the chunk content cache"""
+    global _chunk_content_cache
+    if not isinstance(_chunk_content_cache, dict):
+        _chunk_content_cache = {}
+    return _chunk_content_cache
+
 
 @tool
 def tavily_search(query: str, max_results: int = 5) -> List[Dict[str, Any]]:
@@ -321,11 +338,10 @@ def browse_page(url: str, max_chunk_size: int = 6000, overlap_sentences: int = 2
                 # Store full content for later retrieval
                 chunk_full_contents.append(chunk_text)
                 
-                # Create preview (first 800 characters to give enough context for relevance checking)
-                preview_length = 800
-                content_preview = chunk_text[:preview_length]
-                if len(chunk_text) > preview_length:
-                    content_preview += "... [content truncated, use check_chunk_relevance to filter, then get_chunk_content to retrieve full text]"
+                # Create preview using constant
+                content_preview = chunk_text[:PREVIEW_LENGTH]
+                if len(chunk_text) > PREVIEW_LENGTH:
+                    content_preview += TRUNCATION_MESSAGE
                 
                 chunks.append({
                     "title": f"{title_text} (Part {chunk_number})",
@@ -353,11 +369,8 @@ def browse_page(url: str, max_chunk_size: int = 6000, overlap_sentences: int = 2
             chunk["chunk_id"] = f"{chunk_num}/{total_chunks}"
         
         # Store full content in a cache for retrieval (using URL as key)
-        # We'll use a simple module-level cache
-        global _chunk_content_cache
-        if '_chunk_content_cache' not in globals():
-            _chunk_content_cache = {}
-        _chunk_content_cache[url] = chunk_full_contents
+        cache = _get_chunk_cache()
+        cache[url] = chunk_full_contents
         
         return chunks if chunks else [{
             "title": title_text,
@@ -427,13 +440,11 @@ def get_chunk_content(url: str, chunk_id: str) -> Dict[str, Any]:
         - success: Boolean indicating if retrieval was successful
     """
     try:
-        # Access the global cache
-        global _chunk_content_cache
-        if '_chunk_content_cache' not in globals():
-            _chunk_content_cache = {}
+        # Access the cache using helper function
+        cache = _get_chunk_cache()
         
         # Check if we have cached content for this URL
-        if url not in _chunk_content_cache:
+        if url not in cache:
             return {
                 "chunk_id": chunk_id,
                 "content": "",
@@ -455,7 +466,7 @@ def get_chunk_content(url: str, chunk_id: str) -> Dict[str, Any]:
             }
         
         # Get the content from cache (chunks are 1-indexed)
-        cached_chunks = _chunk_content_cache[url]
+        cached_chunks = cache[url]
         if chunk_num < 1 or chunk_num > len(cached_chunks):
             return {
                 "chunk_id": chunk_id,
