@@ -9,6 +9,19 @@ import { ChatOptions } from "./chat-options";
 import ChatTopbar from "./chat-topbar";
 import { Source } from "./sources-sidebar";
 
+interface ToolAction {
+  tool_name: string;
+  display_name: string;
+  icon: string;
+  color: string;
+  input: any;
+  output?: any;
+  start_time?: number;
+  end_time?: number;
+  duration?: number;
+  status: "running" | "completed";
+}
+
 export interface ChatProps {
   chatId?: string;
   setChatId: React.Dispatch<React.SetStateAction<string>>;
@@ -23,6 +36,7 @@ export interface ChatProps {
   error: undefined | Error;
   stop: () => void;
   messageSources?: { [messageId: string]: Source[] };
+  messageToolActions?: { [messageId: string]: ToolAction[] };
 }
 
 export interface ChatTopbarProps {
@@ -43,6 +57,7 @@ export default function Chat({
   chatId,
   setChatId,
   messageSources,
+  messageToolActions,
 }: ChatProps & ChatTopbarProps) {
   return (
     <div className="flex flex-col justify-between w-full h-full  ">
@@ -59,6 +74,7 @@ export default function Chat({
         messages={messages}
         isLoading={isLoading}
         messageSources={messageSources}
+        messageToolActions={messageToolActions}
       />
 
       <ChatBottombar

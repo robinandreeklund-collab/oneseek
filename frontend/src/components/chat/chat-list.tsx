@@ -8,13 +8,28 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Message } from "ai";
 import ThinkBlock from "../think-block";
+import ActionBlock from "../action-block";
 import { SourceBadge } from "./source-badge";
 import { Source, SourcesSidebar } from "./sources-sidebar";
+
+interface ToolAction {
+  tool_name: string;
+  display_name: string;
+  icon: string;
+  color: string;
+  input: any;
+  output?: any;
+  start_time?: number;
+  end_time?: number;
+  duration?: number;
+  status: "running" | "completed";
+}
 
 interface ChatListProps {
   messages: Message[];
   isLoading: boolean;
   messageSources?: { [messageId: string]: Source[] };
+  messageToolActions?: { [messageId: string]: ToolAction[] };
 }
 
 const MessageToolbar = () => (
@@ -67,7 +82,7 @@ function processThinkTags(content: string, isLoading: boolean, message: Message 
   return [content];
 }
 
-export default function ChatList({ messages, isLoading, messageSources }: ChatListProps) {
+export default function ChatList({ messages, isLoading, messageSources, messageToolActions }: ChatListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedSources, setSelectedSources] = useState<Source[]>([]);
@@ -75,7 +90,8 @@ export default function ChatList({ messages, isLoading, messageSources }: ChatLi
   // Debug logging
   useEffect(() => {
     console.log("ChatList messageSources:", messageSources);
-  }, [messageSources]);
+    console.log("ChatList messageToolActions:", messageToolActions);
+  }, [messageSources, messageToolActions]);
 
   const scrollToBottom = () => {
     bottomRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
@@ -157,6 +173,13 @@ export default function ChatList({ messages, isLoading, messageSources }: ChatLi
                           setSelectedSources(messageSources[message.id]);
                           setSidebarOpen(true);
                         }}
+                      />
+                    )}
+                    {/* Show ActionBlock if tool actions exist for this message */}
+                    {messageToolActions && messageToolActions[message.id] && (
+                      <ActionBlock
+                        actions={messageToolActions[message.id]}
+                        live={isLoading && messages.indexOf(message) === messages.length - 1}
                       />
                     )}
                     <div className="flex-col gap-1 md:gap-3">

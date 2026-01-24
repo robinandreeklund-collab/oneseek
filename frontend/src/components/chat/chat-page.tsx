@@ -22,8 +22,26 @@ interface MessageSources {
   [messageId: string]: Source[];
 }
 
+interface ToolAction {
+  tool_name: string;
+  display_name: string;
+  icon: string;
+  color: string;
+  input: any;
+  output?: any;
+  start_time?: number;
+  end_time?: number;
+  duration?: number;
+  status: "running" | "completed";
+}
+
+interface MessageToolActions {
+  [messageId: string]: ToolAction[];
+}
+
 export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
   const [messageSources, setMessageSources] = React.useState<MessageSources>({});
+  const [messageToolActions, setMessageToolActions] = React.useState<MessageToolActions>({});
   const processedDataRef = React.useRef<Set<string>>(new Set());
 
   const {
@@ -44,7 +62,7 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
     },
   });
   
-  // Watch for data changes and extract sources
+  // Watch for data changes and extract sources and tool actions
   React.useEffect(() => {
     if (data && Array.isArray(data) && data.length > 0) {
       // Get the most recent assistant message
@@ -61,8 +79,9 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
         return;
       }
       
-      // Process all data items to find sources
+      // Process all data items to find sources and tool actions
       for (const item of data) {
+        // Extract sources
         if (item && typeof item === 'object' && item.retrieved && Array.isArray(item.retrieved) && item.retrieved.length > 0) {
           setMessageSources((prev) => {
             // Only set if not already set for this message
@@ -81,7 +100,17 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
             }
             return prev;
           });
-          break;
+        }
+        
+        // Extract tool actions
+        if (item && typeof item === 'object' && item.tool_actions && Array.isArray(item.tool_actions) && item.tool_actions.length > 0) {
+          setMessageToolActions((prev) => {
+            // Always update tool actions to reflect latest state (for live updates)
+            return {
+              ...prev,
+              [lastAssistantMessage.id]: item.tool_actions,
+            };
+          });
         }
       }
     }
@@ -158,6 +187,7 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
         navCollapsedSize={10}
         defaultLayout={[30, 160]}
         messageSources={messageSources}
+        messageToolActions={messageToolActions}
       />
     </main>
   );
