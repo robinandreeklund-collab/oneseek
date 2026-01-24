@@ -81,15 +81,21 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
       
       // Process all data items to find sources and tool actions
       for (const item of data) {
+        // Type guard to ensure item is an object with the expected properties
+        if (!item || typeof item !== 'object' || Array.isArray(item)) {
+          continue;
+        }
+        
         // Extract sources
-        if (item && typeof item === 'object' && item.retrieved && Array.isArray(item.retrieved) && item.retrieved.length > 0) {
+        if ('retrieved' in item && Array.isArray(item.retrieved) && item.retrieved.length > 0) {
+          const retrieved = item.retrieved as any[];
           setMessageSources((prev) => {
             // Only set if not already set for this message
             if (!prev[lastAssistantMessage.id]) {
               processedDataRef.current.add(dataKey);
               return {
                 ...prev,
-                [lastAssistantMessage.id]: item.retrieved.map((source: any) => ({
+                [lastAssistantMessage.id]: retrieved.map((source: any) => ({
                   title: source.title || "Untitled",
                   content: source.content || "",
                   url: source.url,
@@ -103,12 +109,13 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
         }
         
         // Extract tool actions
-        if (item && typeof item === 'object' && item.tool_actions && Array.isArray(item.tool_actions) && item.tool_actions.length > 0) {
+        if ('tool_actions' in item && Array.isArray(item.tool_actions) && item.tool_actions.length > 0) {
+          const toolActions = item.tool_actions as any[];
           setMessageToolActions((prev) => {
             // Always update tool actions to reflect latest state (for live updates)
             return {
               ...prev,
-              [lastAssistantMessage.id]: item.tool_actions,
+              [lastAssistantMessage.id]: toolActions,
             };
           });
         }
