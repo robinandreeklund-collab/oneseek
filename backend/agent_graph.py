@@ -63,6 +63,7 @@ class OneSeekGraphAgent:
             "duckduckgo_search": ("web_search", "🔍", "blue"),
             "browse_page": ("browse_page", "🌐", "green"),
             "check_chunk_relevance": ("chunk_filter", "🔎", "yellow"),
+            "get_chunk_content": ("fetch_chunk", "📄", "orange"),
             "smhi_weather_forecast": ("smhi_api", "🌤️", "purple"),
             "vespa_search": ("vespa_search", "📚", "gray"),
         }
@@ -92,8 +93,8 @@ class OneSeekGraphAgent:
                     configured_tools.append(tool)
                 continue
             
-            # browse_page, check_chunk_relevance, and smhi_weather_forecast are always available (no config needed)
-            if tool_name in ["browse_page", "check_chunk_relevance", "smhi_weather_forecast"]:
+            # browse_page, check_chunk_relevance, get_chunk_content, and smhi_weather_forecast are always available (no config needed)
+            if tool_name in ["browse_page", "check_chunk_relevance", "get_chunk_content", "smhi_weather_forecast"]:
                 configured_tools.append(tool)
                 continue
         
@@ -142,7 +143,9 @@ class OneSeekGraphAgent:
                 elif tool.name == "browse_page":
                     tool_descriptions.append("- browse_page: Fetch and read content from any webpage URL with automatic intelligent chunking for large pages")
                 elif tool.name == "check_chunk_relevance":
-                    tool_descriptions.append("- check_chunk_relevance: Check if a specific chunk is relevant to user's query (use in parallel for efficiency)")
+                    tool_descriptions.append("- check_chunk_relevance: Check if a chunk preview is relevant to user's query (use in parallel for efficiency)")
+                elif tool.name == "get_chunk_content":
+                    tool_descriptions.append("- get_chunk_content: Retrieve full content of a specific chunk after filtering with check_chunk_relevance")
                 elif tool.name == "smhi_weather_forecast":
                     tool_descriptions.append("- smhi_weather_forecast: Get real-time weather forecast from SMHI for locations in Sweden")
             
@@ -157,16 +160,22 @@ class OneSeekGraphAgent:
                 "2. For weather questions about locations in Sweden, ALWAYS use smhi_weather_forecast for accurate, real-time data\n"
                 "3. If needed, call one or multiple tools IN PARALLEL for efficiency\n"
                 "4. You can combine web search with browse_page to read specific articles\n"
-                "5. CHUNK RELEVANCE WORKFLOW (IMPORTANT for large pages):\n"
-                "   a. When browse_page returns multiple chunks (e.g., chunk_id='2/5' means 5 total chunks)\n"
-                "   b. FIRST call check_chunk_relevance IN PARALLEL on ALL chunks with the user's query\n"
-                "   c. This filters chunks BEFORE processing, avoiding token limit issues\n"
-                "   d. Only use chunks marked as relevant (is_relevant=True) for your final answer\n"
-                "   e. Cite relevant_excerpts from relevant chunks in your response\n"
-                "   f. Example: browse_page returns 5 chunks → call check_chunk_relevance 5 times in parallel → use only relevant chunks\n"
-                "6. The browse_page tool automatically chunks large pages into semantic sections with overlap\n"
-                "   - Small pages return 1 chunk, large pages return multiple chunks\n"
-                "   - Use check_chunk_relevance to filter before processing all chunks\n"
+                "5. CHUNK HANDLING WORKFLOW (CRITICAL for large pages - prevents token limit errors):\n"
+                "   a. When browse_page returns multiple chunks, you receive ONLY PREVIEWS (not full content)\n"
+                "   b. Each chunk has 'content_preview' (800 chars) and 'full_length' showing total size\n"
+                "   c. IMMEDIATELY call check_chunk_relevance IN PARALLEL on ALL chunk previews\n"
+                "   d. After filtering, call get_chunk_content IN PARALLEL for ONLY relevant chunks (is_relevant=True)\n"
+                "   e. Use the full content from get_chunk_content for your final answer\n"
+                "   f. Example workflow:\n"
+                "      - browse_page returns 5 chunks with previews (total: 30K chars)\n"
+                "      - check_chunk_relevance on all 5 previews in parallel (only ~4K chars sent)\n"
+                "      - 2 chunks marked relevant\n"
+                "      - get_chunk_content for those 2 chunks only (~12K chars)\n"
+                "      - Generate answer from relevant chunks\n"
+                "      - Result: 60% token savings, no limit errors\n"
+                "6. The browse_page tool automatically chunks large pages into semantic sections\n"
+                "   - Small pages (<6000 chars): returns full content immediately\n"
+                "   - Large pages: returns previews only, use check_chunk_relevance + get_chunk_content workflow\n"
                 "7. Use the results to provide a comprehensive, factual answer IN SWEDISH\n"
                 "8. Always cite your sources with URLs\n"
                 "9. If no search is needed, answer directly based on your knowledge\n\n"
