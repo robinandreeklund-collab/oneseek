@@ -5,14 +5,17 @@ import json
 import logging
 import uuid
 from datetime import datetime
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple, TYPE_CHECKING
 
-import psycopg
 from langgraph.store.memory import InMemoryStore
-from psycopg.rows import dict_row
-from pymongo import MongoClient
 
 from backend.deer_flow.config.loader import get_bool_env, get_str_env
+
+# Type checking imports - these are only used for type hints
+if TYPE_CHECKING:
+    import psycopg
+    from psycopg.rows import dict_row
+    from pymongo import MongoClient
 
 
 class ChatStreamManager:
@@ -25,9 +28,9 @@ class ChatStreamManager:
 
     Attributes:
         store (InMemoryStore): In-memory storage for temporary message chunks
-        mongo_client (MongoClient): MongoDB client connection
-        mongo_db (Database): MongoDB database instance
-        postgres_conn (psycopg.Connection): PostgreSQL connection
+        mongo_client (MongoClient | None): MongoDB client connection
+        mongo_db (Database | None): MongoDB database instance
+        postgres_conn (Connection | None): PostgreSQL connection
         logger (logging.Logger): Logger instance for this class
     """
 
@@ -71,11 +74,15 @@ class ChatStreamManager:
         """Initialize MongoDB connection."""
 
         try:
+            from pymongo import MongoClient
+            
             self.mongo_client = MongoClient(self.db_uri)
             self.mongo_db = self.mongo_client.checkpointing_db
             # Test connection
             self.mongo_client.admin.command("ping")
             self.logger.info("Successfully connected to MongoDB")
+        except ImportError:
+            self.logger.error("pymongo package not installed. Please install it with: pip install pymongo")
         except Exception as e:
             self.logger.error(f"Failed to connect to MongoDB: {e}")
 
@@ -83,9 +90,14 @@ class ChatStreamManager:
         """Initialize PostgreSQL connection and create table if needed."""
 
         try:
+            import psycopg
+            from psycopg.rows import dict_row
+            
             self.postgres_conn = psycopg.connect(self.db_uri, row_factory=dict_row)
             self.logger.info("Successfully connected to PostgreSQL")
             self._create_chat_streams_table()
+        except ImportError:
+            self.logger.error("psycopg package not installed. Please install it with: pip install psycopg[binary]")
         except Exception as e:
             self.logger.error(f"Failed to connect to PostgreSQL: {e}")
 
