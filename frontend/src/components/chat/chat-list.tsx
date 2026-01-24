@@ -8,13 +8,17 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Message } from "ai";
 import ThinkBlock from "../think-block";
+import ActionBlock from "../action-block";
 import { SourceBadge } from "./source-badge";
 import { Source, SourcesSidebar } from "./sources-sidebar";
+import { ToolActionDetailSidebar } from "./tool-action-detail-sidebar";
+import { ToolAction, MessageToolActions } from "@/types/tool-action";
 
 interface ChatListProps {
   messages: Message[];
   isLoading: boolean;
   messageSources?: { [messageId: string]: Source[] };
+  messageToolActions?: MessageToolActions;
 }
 
 const MessageToolbar = () => (
@@ -67,15 +71,23 @@ function processThinkTags(content: string, isLoading: boolean, message: Message 
   return [content];
 }
 
-export default function ChatList({ messages, isLoading, messageSources }: ChatListProps) {
+export default function ChatList({ messages, isLoading, messageSources, messageToolActions }: ChatListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedSources, setSelectedSources] = useState<Source[]>([]);
+  const [toolDetailSidebarOpen, setToolDetailSidebarOpen] = useState(false);
+  const [selectedToolAction, setSelectedToolAction] = useState<ToolAction | null>(null);
   
   // Debug logging
   useEffect(() => {
     console.log("ChatList messageSources:", messageSources);
-  }, [messageSources]);
+    console.log("ChatList messageToolActions:", messageToolActions);
+  }, [messageSources, messageToolActions]);
+
+  const handleToolClick = (toolAction: ToolAction) => {
+    setSelectedToolAction(toolAction);
+    setToolDetailSidebarOpen(true);
+  };
 
   const scrollToBottom = () => {
     bottomRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
@@ -149,14 +161,12 @@ export default function ChatList({ messages, isLoading, messageSources }: ChatLi
                 {message.role === "assistant" && (
                   <div className="relative flex w-full min-w-0 flex-col">
                     <div className="font-semibold pb-2">Assistant</div>
-                    {/* Show source badge if sources exist for this message */}
-                    {messageSources && messageSources[message.id] && (
-                      <SourceBadge
-                        sourceCount={messageSources[message.id].length}
-                        onClick={() => {
-                          setSelectedSources(messageSources[message.id]);
-                          setSidebarOpen(true);
-                        }}
+                    {/* Show ActionBlock if tool actions exist for this message */}
+                    {messageToolActions && messageToolActions[message.id] && (
+                      <ActionBlock
+                        actions={messageToolActions[message.id]}
+                        live={isLoading && messages.indexOf(message) === messages.length - 1}
+                        onToolClick={handleToolClick}
                       />
                     )}
                     <div className="flex-col gap-1 md:gap-3">
@@ -194,6 +204,18 @@ export default function ChatList({ messages, isLoading, messageSources }: ChatLi
                           )}
                       </span>
                     </div>
+                    {/* Show source badge AFTER content if sources exist for this message */}
+                    {messageSources && messageSources[message.id] && (
+                      <div className="mt-3">
+                        <SourceBadge
+                          sourceCount={messageSources[message.id].length}
+                          onClick={() => {
+                            setSelectedSources(messageSources[message.id]);
+                            setSidebarOpen(true);
+                          }}
+                        />
+                      </div>
+                    )}
                     <MessageToolbar />
                   </div>
                 )}
@@ -208,6 +230,13 @@ export default function ChatList({ messages, isLoading, messageSources }: ChatLi
         open={sidebarOpen}
         onOpenChange={setSidebarOpen}
         sources={selectedSources}
+      />
+      
+      {/* Tool Action Detail Sidebar */}
+      <ToolActionDetailSidebar
+        open={toolDetailSidebarOpen}
+        onOpenChange={setToolDetailSidebarOpen}
+        toolAction={selectedToolAction}
       />
     </div>
   );

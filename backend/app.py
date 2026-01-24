@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import List, Dict, Optional, AsyncIterator
+from typing import List, Dict, Optional, AsyncIterator, Any
 import uvicorn
 import json
 import asyncio
@@ -126,7 +126,8 @@ async def chat(request: ChatRequest):
         use_tools = request.use_tools if request.use_tools is not None else True
         
         if request.stream:
-            # Return streaming response in AI SDK format
+            # Return streaming response in AI SDK format with explicit flushing
+            # This ensures real-time delivery of tool actions without buffering
             return StreamingResponse(
                 stream_chat_response(
                     messages, 
@@ -134,7 +135,11 @@ async def chat(request: ChatRequest):
                     request.enable_thinking,
                     use_tools
                 ),
-                media_type="text/plain; charset=utf-8"
+                media_type="text/plain; charset=utf-8",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",  # Disable nginx buffering
+                }
             )
         else:
             # Non-streaming response (legacy support)
@@ -173,9 +178,9 @@ async def stream_chat_response(
     use_tools: bool = True
 ) -> AsyncIterator[str]:
     """
-    Stream chat response in Vercel AI SDK compatible format
+    Stream chat response in Vercel AI SDK compatible format with real-time tool action updates
     
-    Streams text tokens and metadata for the frontend.
+    Streams text tokens, tool actions, and metadata for the frontend in real-time.
     Uses newline-delimited JSON format expected by AI SDK.
     
     Args:
@@ -185,60 +190,116 @@ async def stream_chat_response(
         use_tools: Use multi-tool agent (True) or legacy RAG agent (False)
     """
     import logging
+    import queue
+    import threading
+    import time
     logger = logging.getLogger(__name__)
     
     try:
         # Select appropriate agent
         if use_tools:
             agent = get_agent_graph()
-            logger.info("Using multi-tool agent")
+            logger.info("Using multi-tool agent with real-time streaming")
         else:
             agent = get_agent()
             logger.info("Using legacy RAG agent")
         
-        # Run agent to get result with streaming
         logger.info(f"Running agent with {len(messages)} messages")
-        result = await asyncio.to_thread(
-            agent.run_with_streaming, 
-            messages, 
-            system_prompt=system_prompt, 
-            enable_thinking=enable_thinking
-        )
         
-        # Ensure result is valid
+        # Create a queue for real-time updates
+        update_queue = queue.Queue()
+        result_container = {"result": None, "error": None}
+        
+        # Custom callback that puts updates in the queue
+        def queue_callback(event_type: str, content: Any):
+            update_queue.put((event_type, content))
+        
+        # Run agent in background thread with queue callback
+        def run_agent():
+            try:
+                result = agent.run_with_streaming_realtime(
+                    messages,
+                    system_prompt=system_prompt,
+                    enable_thinking=enable_thinking,
+                    realtime_callback=queue_callback
+                )
+                result_container["result"] = result
+            except Exception as e:
+                result_container["error"] = e
+            finally:
+                update_queue.put(("done", None))
+        
+        thread = threading.Thread(target=run_agent, daemon=True)
+        thread.start()
+        
+        # Stream updates from queue in real-time
+        tool_actions_dict = {}  # Use dict to track by tool_call_id to avoid duplicates
+        while True:
+            try:
+                event_type, content = update_queue.get(timeout=30)
+                
+                if event_type == "done":
+                    break
+                elif event_type == "tool_action":
+                    # Update or add tool action by tool_call_id to avoid duplicates
+                    tool_call_id = content.get("tool_call_id", str(time.time()))
+                    tool_actions_dict[tool_call_id] = content
+                    
+                    # Convert dict to list for streaming
+                    tool_actions_list = list(tool_actions_dict.values())
+                    metadata = {
+                        "tool_actions": tool_actions_list,
+                        "live_update": True
+                    }
+                    # Yield with newline to trigger immediate flush
+                    message = f"2:{json.dumps([metadata])}\n"
+                    yield message
+                    # Force a zero-wait to allow event loop to process and flush
+                    await asyncio.sleep(0)
+                    logger.info(f"Streamed tool action: {content.get('display_name')} - {content.get('status')}")
+                    
+            except queue.Empty:
+                logger.warning("Queue timeout - no updates received")
+                break
+        
+        # Wait for thread to complete
+        thread.join(timeout=5)
+        
+        # Check for errors
+        if result_container["error"]:
+            raise result_container["error"]
+        
+        result = result_container["result"]
         if not result:
             raise ValueError("Agent returned empty result")
         
         logger.info(f"Agent result: {len(result.get('tokens', []))} tokens, {len(result.get('steps', []))} steps")
         
-        # Send metadata about steps and retrieved docs first (as annotations)
+        # Send final metadata
         retrieved_docs = result.get("retrieved", [])
+        # Don't send tool_actions in final metadata - they were already streamed in real-time
+        # Using tool_actions_dict ensures we only have unique actions
+        final_tool_actions_list = list(tool_actions_dict.values())
         metadata = {
             "steps": result.get("steps", []),
             "retrieved": retrieved_docs,
-            "source_count": len(retrieved_docs)  # Count for frontend display
+            "source_count": len(retrieved_docs),
+            "tool_actions": final_tool_actions_list,
+            "live_update": False
         }
         
-        # Stream annotations/data first
-        if metadata["steps"] or metadata["retrieved"]:
-            # Send as data annotation (AI SDK format)
-            yield f"2:{json.dumps([metadata])}\n"
+        yield f"2:{json.dumps([metadata])}\n"
         
-        # Stream LLM response tokens as text chunks
-        # Format: "0:{token_text}\n" where 0 indicates text chunk
+        # Stream LLM response tokens
         tokens = result.get("tokens", [])
         if tokens:
             for token in tokens:
                 yield f"0:{json.dumps(token)}\n"
-                await asyncio.sleep(0.001)  # Small delay for smoother streaming
+                await asyncio.sleep(0.001)
         else:
-            # If no tokens were streamed, send the full content in smaller chunks
-            # to ensure proper frontend parsing
             content = result.get("content", "")
             if content:
-                logger.warning(f"No tokens, sending full content: {len(content)} chars")
-                # Split content into smaller chunks for better streaming compatibility
-                chunk_size = 100  # Send in chunks of 100 chars
+                chunk_size = 100
                 for i in range(0, len(content), chunk_size):
                     chunk = content[i:i + chunk_size]
                     yield f"0:{json.dumps(chunk)}\n"
@@ -249,13 +310,12 @@ async def stream_chat_response(
         logger.info("Streaming completed successfully")
         
     except Exception as e:
-        # Send error in AI SDK format with more detail
+        # Send error in AI SDK format
         import traceback
         error_detail = traceback.format_exc()
         error_msg = f"Error: {str(e)}\n\nDetails:\n{error_detail}"
         logger.error(f"Streaming error: {error_msg}")
         yield f"3:{json.dumps(error_msg)}\n"
-        # Also send done to close the stream properly
         yield "d:\n"
 
 
@@ -291,5 +351,11 @@ if __name__ == "__main__":
         "app:app",
         host="0.0.0.0",
         port=8001,
-        reload=True
+        reload=True,
+        log_level="info",
+        # Disable buffering for real-time streaming
+        timeout_keep_alive=75,
+        limit_concurrency=None,
+        # These settings help with immediate flushing
+        h11_max_incomplete_event_size=None
     )

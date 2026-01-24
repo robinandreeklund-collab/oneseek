@@ -4,6 +4,9 @@ Implements agent → tools → conditional edge → loops to final answers
 """
 
 import os
+import json
+import time
+import logging
 from typing import TypedDict, List, Dict, Any, Optional, Literal, Annotated
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
@@ -22,6 +25,7 @@ class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], operator.add]
     retrieved_docs: List[Dict[str, Any]]
     steps: List[str]
+    tool_actions: List[Dict[str, Any]]  # Track tool invocations for ActionBlock
     system_prompt: Optional[str]
     enable_thinking: Optional[bool]
 
@@ -50,6 +54,18 @@ class OneSeekGraphAgent:
         
         # Build the graph
         self.graph = self._build_graph()
+    
+    @staticmethod
+    def _map_tool_name(tool_name: str) -> tuple[str, str, str]:
+        """Map internal tool name to display name, icon, and color for ActionBlock"""
+        tool_mapping = {
+            "tavily_search": ("web_search", "🔍", "blue"),
+            "duckduckgo_search": ("web_search", "🔍", "blue"),
+            "browse_page": ("browse_page", "🌐", "green"),
+            "smhi_weather_forecast": ("smhi_api", "🌤️", "purple"),
+            "vespa_search": ("vespa_search", "📚", "gray"),
+        }
+        return tool_mapping.get(tool_name, (tool_name, "🔧", "gray"))
     
     def _get_configured_tools(self):
         """Get list of tools that are properly configured"""
@@ -281,6 +297,7 @@ class OneSeekGraphAgent:
             "messages": lc_messages,
             "retrieved_docs": [],
             "steps": [],
+            "tool_actions": [],  # Initialize tool_actions
             "system_prompt": system_prompt,
             "enable_thinking": enable_thinking
         }
@@ -297,7 +314,6 @@ class OneSeekGraphAgent:
         for msg in final_state["messages"]:
             if isinstance(msg, ToolMessage):
                 try:
-                    import json
                     tool_result = json.loads(msg.content) if isinstance(msg.content, str) else msg.content
                     if isinstance(tool_result, list):
                         retrieved_docs.extend(tool_result)
@@ -307,7 +323,8 @@ class OneSeekGraphAgent:
         return {
             "content": final_response,
             "retrieved": retrieved_docs,
-            "steps": final_state.get("steps", [])
+            "steps": final_state.get("steps", []),
+            "tool_actions": final_state.get("tool_actions", [])
         }
     
     def run_with_streaming(self, messages: List[Dict[str, str]], system_prompt: Optional[str] = None, 
@@ -319,6 +336,7 @@ class OneSeekGraphAgent:
         tokens = []
         steps_list = []
         retrieved_docs = []
+        tool_actions_list = []  # Track tool invocations
         
         def callback(event_type: str, content: Any):
             if event_type == "token":
@@ -327,6 +345,9 @@ class OneSeekGraphAgent:
             elif event_type == "step":
                 steps_list.append(content)
                 logger.info(f"Step: {content}")
+            elif event_type == "tool_action":
+                tool_actions_list.append(content)
+                logger.info(f"Tool action: {content}")
         
         # Convert dict messages to LangChain messages
         lc_messages = []
@@ -347,6 +368,7 @@ class OneSeekGraphAgent:
             "messages": lc_messages,
             "retrieved_docs": [],
             "steps": [],
+            "tool_actions": [],  # Initialize tool_actions
             "system_prompt": system_prompt,
             "enable_thinking": enable_thinking
         }
@@ -376,22 +398,74 @@ class OneSeekGraphAgent:
             steps_list.append("Executing tools...")
             callback("step", "Executing tools...")
             
+            # Track tool invocations with timing
+            tool_calls_from_last_msg = []
+            if hasattr(last_msg, 'tool_calls') and last_msg.tool_calls:
+                for tc in last_msg.tool_calls:
+                    tool_name = tc.get("name", "unknown")
+                    tool_input = tc.get("args", {})
+                    tool_call_id = tc.get("id", f"{tool_name}_{time.time()}")  # Unique ID per invocation
+                    display_name, icon, color = self._map_tool_name(tool_name)
+                    
+                    # Create tool action entry (start) with complete details
+                    tool_action = {
+                        "tool_call_id": tool_call_id,  # Unique identifier
+                        "tool_name": tool_name,
+                        "display_name": display_name,
+                        "icon": icon,
+                        "color": color,
+                        "input": tool_input,
+                        "raw_request": {  # Complete raw request details
+                            "tool": tool_name,
+                            "arguments": tool_input,
+                            "call_id": tool_call_id
+                        },
+                        "iteration": iteration,  # Which iteration in the agent loop
+                        "start_time": time.time(),
+                        "status": "running",
+                        "reasoning": last_msg.content if hasattr(last_msg, 'content') and last_msg.content else None  # Model's reasoning before calling tool
+                    }
+                    tool_calls_from_last_msg.append(tool_action)
+                    tool_actions_list.append(tool_action)
+                    callback("tool_action", tool_action)
+            
+            # Execute tools
             tool_node = ToolNode(self.available_tools)
             tool_result = tool_node.invoke(current_state)
             
-            # Add tool messages to state
-            current_state["messages"] = current_state.get("messages", []) + tool_result["messages"]
-            
-            # Extract retrieved docs from tool messages
-            for msg in tool_result["messages"]:
-                if isinstance(msg, ToolMessage):
+            # Update tool actions with results and timing
+            for idx, msg in enumerate(tool_result["messages"]):
+                if isinstance(msg, ToolMessage) and idx < len(tool_calls_from_last_msg):
+                    tool_action = tool_calls_from_last_msg[idx]
+                    tool_action["end_time"] = time.time()
+                    tool_action["duration"] = tool_action["end_time"] - tool_action["start_time"]
+                    tool_action["status"] = "completed"
+                    
+                    # Extract output with complete raw response
                     try:
-                        import json
                         tool_content = json.loads(msg.content) if isinstance(msg.content, str) else msg.content
+                        tool_action["output"] = tool_content
+                        tool_action["raw_response"] = {  # Complete raw response
+                            "content": msg.content,
+                            "tool_call_id": msg.tool_call_id if hasattr(msg, 'tool_call_id') else None,
+                            "parsed": tool_content
+                        }
+                        
+                        # Also collect retrieved docs
                         if isinstance(tool_content, list):
                             retrieved_docs.extend(tool_content)
-                    except:
-                        pass
+                    except Exception as e:
+                        tool_action["output"] = msg.content
+                        tool_action["raw_response"] = {
+                            "content": msg.content,
+                            "error": str(e)
+                        }
+                    
+                    # Update the tool action in the list
+                    callback("tool_action", tool_action)
+            
+            # Add tool messages to state
+            current_state["messages"] = current_state.get("messages", []) + tool_result["messages"]
             
             steps_list.append(f"Tools executed, retrieved {len(retrieved_docs)} documents")
             callback("step", f"Tools executed, retrieved {len(retrieved_docs)} documents")
@@ -406,7 +480,180 @@ class OneSeekGraphAgent:
             "content": final_response,
             "retrieved": retrieved_docs,
             "steps": steps_list,
-            "tokens": tokens
+            "tokens": tokens,
+            "tool_actions": tool_actions_list
+        }
+    
+    def run_with_streaming_realtime(self, messages: List[Dict[str, str]], system_prompt: Optional[str] = None, 
+                                     enable_thinking: Optional[bool] = False, realtime_callback=None) -> Dict[str, Any]:
+        """
+        Run the agent workflow with real-time streaming support
+        
+        This method is the same as run_with_streaming but accepts an external realtime_callback
+        that gets called immediately when events occur, allowing for true real-time streaming.
+        
+        Args:
+            messages: List of message dictionaries
+            system_prompt: Optional custom system prompt
+            enable_thinking: Enable thinking mode
+            realtime_callback: External callback function(event_type, content) for real-time updates
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        tokens = []
+        steps_list = []
+        retrieved_docs = []
+        tool_actions_list = []
+        
+        def callback(event_type: str, content: Any):
+            # Call internal handlers
+            if event_type == "token":
+                tokens.append(content)
+                logger.debug(f"Token collected: {content[:50] if len(content) > 50 else content}")
+            elif event_type == "step":
+                steps_list.append(content)
+                logger.info(f"Step: {content}")
+            elif event_type == "tool_action":
+                tool_actions_list.append(content)
+                logger.info(f"Tool action: {content}")
+            
+            # Also call external realtime callback if provided
+            if realtime_callback:
+                realtime_callback(event_type, content)
+        
+        # Convert dict messages to LangChain messages
+        lc_messages = []
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            
+            if role == "user":
+                lc_messages.append(HumanMessage(content=content))
+            elif role == "assistant":
+                lc_messages.append(AIMessage(content=content))
+        
+        logger.info(f"Starting workflow with real-time streaming, {len(lc_messages)} messages")
+        
+        # Run the graph with streaming (same as run_with_streaming but with realtime callback)
+        current_state: AgentState = {
+            "messages": lc_messages,
+            "retrieved_docs": [],
+            "steps": [],
+            "tool_actions": [],
+            "system_prompt": system_prompt,
+            "enable_thinking": enable_thinking
+        }
+        
+        max_iterations = 5
+        iteration = 0
+        
+        while iteration < max_iterations:
+            iteration += 1
+            logger.info(f"Iteration {iteration}")
+            
+            # Run agent node
+            agent_result = self._agent_node_streaming(current_state, callback)
+            current_state["messages"] = current_state.get("messages", []) + agent_result["messages"]
+            current_state["steps"] = agent_result["steps"]
+            
+            last_msg = current_state["messages"][-1]
+            logger.info(f"Agent returned: {type(last_msg).__name__}, has tool_calls: {hasattr(last_msg, 'tool_calls') and bool(last_msg.tool_calls)}")
+            
+            # Check if we should continue
+            if self._should_continue(current_state) == "end":
+                logger.info("Workflow ending - no more tool calls")
+                break
+            
+            # Execute tools
+            logger.info("Executing tools...")
+            steps_list.append("Executing tools...")
+            callback("step", "Executing tools...")
+            
+            # Track tool invocations with timing
+            tool_calls_from_last_msg = []
+            if hasattr(last_msg, 'tool_calls') and last_msg.tool_calls:
+                for tc in last_msg.tool_calls:
+                    tool_name = tc.get("name", "unknown")
+                    tool_input = tc.get("args", {})
+                    tool_call_id = tc.get("id", f"{tool_name}_{time.time()}")
+                    display_name, icon, color = self._map_tool_name(tool_name)
+                    
+                    # Create tool action entry (start) with complete details
+                    tool_action = {
+                        "tool_call_id": tool_call_id,
+                        "tool_name": tool_name,
+                        "display_name": display_name,
+                        "icon": icon,
+                        "color": color,
+                        "input": tool_input,
+                        "raw_request": {
+                            "tool": tool_name,
+                            "arguments": tool_input,
+                            "call_id": tool_call_id
+                        },
+                        "iteration": iteration,
+                        "start_time": time.time(),
+                        "status": "running",
+                        "reasoning": last_msg.content if hasattr(last_msg, 'content') and last_msg.content else None
+                    }
+                    tool_calls_from_last_msg.append(tool_action)
+                    tool_actions_list.append(tool_action)
+                    callback("tool_action", tool_action)  # This triggers realtime_callback immediately!
+            
+            # Execute tools
+            tool_node = ToolNode(self.available_tools)
+            tool_result = tool_node.invoke(current_state)
+            
+            # Update tool actions with results and timing
+            for idx, msg in enumerate(tool_result["messages"]):
+                if isinstance(msg, ToolMessage) and idx < len(tool_calls_from_last_msg):
+                    tool_action = tool_calls_from_last_msg[idx]
+                    tool_action["end_time"] = time.time()
+                    tool_action["duration"] = tool_action["end_time"] - tool_action["start_time"]
+                    tool_action["status"] = "completed"
+                    
+                    # Extract output with complete raw response
+                    try:
+                        tool_content = json.loads(msg.content) if isinstance(msg.content, str) else msg.content
+                        tool_action["output"] = tool_content
+                        tool_action["raw_response"] = {
+                            "content": msg.content,
+                            "tool_call_id": msg.tool_call_id if hasattr(msg, 'tool_call_id') else None,
+                            "parsed": tool_content
+                        }
+                        
+                        # Also collect retrieved docs
+                        if isinstance(tool_content, list):
+                            retrieved_docs.extend(tool_content)
+                    except Exception as e:
+                        tool_action["output"] = msg.content
+                        tool_action["raw_response"] = {
+                            "content": msg.content,
+                            "error": str(e)
+                        }
+                    
+                    # Update the tool action in the list and trigger realtime callback
+                    callback("tool_action", tool_action)  # This triggers realtime_callback immediately!
+            
+            # Add tool messages to state
+            current_state["messages"] = current_state.get("messages", []) + tool_result["messages"]
+            
+            steps_list.append(f"Tools executed, retrieved {len(retrieved_docs)} documents")
+            callback("step", f"Tools executed, retrieved {len(retrieved_docs)} documents")
+        
+        # Get final response
+        final_message = current_state["messages"][-1]
+        final_response = final_message.content if hasattr(final_message, "content") else ""
+        
+        logger.info(f"Workflow complete. Tokens collected: {len(tokens)}, Final response length: {len(final_response)}")
+        
+        return {
+            "content": final_response,
+            "retrieved": retrieved_docs,
+            "steps": steps_list,
+            "tokens": tokens,
+            "tool_actions": tool_actions_list
         }
 
 

@@ -12,6 +12,7 @@ import { ChatLayout } from "@/components/chat/chat-layout";
 import { ChatOptions } from "@/components/chat/chat-options";
 import { basePath } from "@/lib/utils";
 import { Source } from "@/components/chat/sources-sidebar";
+import { MessageToolActions } from "@/types/tool-action";
 
 interface ChatPageProps {
   chatId: string;
@@ -24,7 +25,11 @@ interface MessageSources {
 
 export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
   const [messageSources, setMessageSources] = React.useState<MessageSources>({});
+  const [messageToolActions, setMessageToolActions] = React.useState<MessageToolActions>({});
   const processedDataRef = React.useRef<Set<string>>(new Set());
+  const currentStreamingMessageIdRef = React.useRef<string | null>(null);
+  const lastSeenMessageCountRef = React.useRef<number>(0);
+  const frozenMessagesRef = React.useRef<Set<string>>(new Set()); // Track which messages are "frozen" (completed)
 
   const {
     messages,
@@ -44,7 +49,47 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
     },
   });
   
-  // Watch for data changes and extract sources
+  // Track the current streaming message - detect when a NEW assistant message appears
+  React.useEffect(() => {
+    const currentMessageCount = messages.length;
+    
+    // Check if a new message was added
+    if (currentMessageCount > lastSeenMessageCountRef.current) {
+      lastSeenMessageCountRef.current = currentMessageCount;
+      
+      // Get the latest assistant message
+      const lastAssistantMessage = messages.filter(m => m.role === 'assistant').slice(-1)[0];
+      
+      // If there's a new assistant message and it's different from the tracked one
+      if (lastAssistantMessage && currentStreamingMessageIdRef.current !== lastAssistantMessage.id) {
+        console.log(`New assistant message detected: ${lastAssistantMessage.id}, clearing previous tracking`);
+        
+        // Freeze the previous message's tool actions (if any)
+        if (currentStreamingMessageIdRef.current) {
+          frozenMessagesRef.current.add(currentStreamingMessageIdRef.current);
+          console.log(`Froze tool actions for previous message: ${currentStreamingMessageIdRef.current}`);
+        }
+        
+        // Update to track this new message
+        currentStreamingMessageIdRef.current = lastAssistantMessage.id;
+        
+        // Initialize empty tool actions for this new message
+        setMessageToolActions((prev) => {
+          const newState = { ...prev };
+          newState[lastAssistantMessage.id] = [];
+          return newState;
+        });
+      }
+    }
+    
+    // When loading stops, freeze the current message's tool actions
+    if (!isLoading && currentStreamingMessageIdRef.current) {
+      frozenMessagesRef.current.add(currentStreamingMessageIdRef.current);
+      console.log(`Froze tool actions for completed message: ${currentStreamingMessageIdRef.current}`);
+    }
+  }, [messages, isLoading]);
+  
+  // Watch for data changes and extract sources and tool actions
   React.useEffect(() => {
     if (data && Array.isArray(data) && data.length > 0) {
       // Get the most recent assistant message
@@ -61,16 +106,23 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
         return;
       }
       
-      // Process all data items to find sources
+      // Process all data items to find sources and tool actions
       for (const item of data) {
-        if (item && typeof item === 'object' && item.retrieved && Array.isArray(item.retrieved) && item.retrieved.length > 0) {
+        // Type guard to ensure item is an object with the expected properties
+        if (!item || typeof item !== 'object' || Array.isArray(item)) {
+          continue;
+        }
+        
+        // Extract sources
+        if ('retrieved' in item && Array.isArray(item.retrieved) && item.retrieved.length > 0) {
+          const retrieved = item.retrieved as any[];
           setMessageSources((prev) => {
             // Only set if not already set for this message
             if (!prev[lastAssistantMessage.id]) {
               processedDataRef.current.add(dataKey);
               return {
                 ...prev,
-                [lastAssistantMessage.id]: item.retrieved.map((source: any) => ({
+                [lastAssistantMessage.id]: retrieved.map((source: any) => ({
                   title: source.title || "Untitled",
                   content: source.content || "",
                   url: source.url,
@@ -81,7 +133,36 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
             }
             return prev;
           });
-          break;
+        }
+        
+        // Extract tool actions - only update for the current message being streamed
+        if ('tool_actions' in item && Array.isArray(item.tool_actions) && item.tool_actions.length > 0) {
+          const toolActions = item.tool_actions as any[];
+          const isLiveUpdate = item.live_update === true;
+          
+          setMessageToolActions((prev) => {
+            // Determine target message ID - prefer the tracked streaming message
+            const targetMessageId = currentStreamingMessageIdRef.current;
+            
+            // If no target message is being tracked, skip (shouldn't happen during streaming)
+            if (!targetMessageId) {
+              console.warn('Tool actions received but no streaming message tracked');
+              return prev;
+            }
+            
+            // Check if this message is frozen (completed) - NEVER update frozen messages
+            if (frozenMessagesRef.current.has(targetMessageId)) {
+              console.log(`Skipping tool action update for frozen message: ${targetMessageId}`);
+              return prev;
+            }
+            
+            // ALWAYS replace tool actions for the target message (never merge with old data)
+            // This ensures each question gets its OWN tool actions and old data doesn't persist
+            const newState = { ...prev };
+            newState[targetMessageId] = toolActions;
+            console.log(`Updated tool actions for message ${targetMessageId}:`, toolActions.length, 'actions', isLiveUpdate ? '(live)' : '(final)');
+            return newState;
+          });
         }
       }
     }
@@ -158,6 +239,7 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
         navCollapsedSize={10}
         defaultLayout={[30, 160]}
         messageSources={messageSources}
+        messageToolActions={messageToolActions}
       />
     </main>
   );
