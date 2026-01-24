@@ -22,6 +22,7 @@ class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], operator.add]
     retrieved_docs: List[Dict[str, Any]]
     steps: List[str]
+    tool_actions: List[Dict[str, Any]]  # Track individual tool actions
     system_prompt: Optional[str]
     enable_thinking: Optional[bool]
 
@@ -314,11 +315,13 @@ class OneSeekGraphAgent:
                           enable_thinking: Optional[bool] = False) -> Dict[str, Any]:
         """Run the agent workflow with streaming support"""
         import logging
+        import time
         logger = logging.getLogger(__name__)
         
         tokens = []
         steps_list = []
         retrieved_docs = []
+        tool_actions = []  # Track individual tool actions
         
         def callback(event_type: str, content: Any):
             if event_type == "token":
@@ -347,6 +350,7 @@ class OneSeekGraphAgent:
             "messages": lc_messages,
             "retrieved_docs": [],
             "steps": [],
+            "tool_actions": [],
             "system_prompt": system_prompt,
             "enable_thinking": enable_thinking
         }
@@ -376,13 +380,52 @@ class OneSeekGraphAgent:
             steps_list.append("Executing tools...")
             callback("step", "Executing tools...")
             
+            # Track tool execution timing and details
+            tool_calls = last_msg.tool_calls if hasattr(last_msg, 'tool_calls') else []
+            for tool_call in tool_calls:
+                tool_name = tool_call.get("name", "unknown")
+                tool_args = tool_call.get("args", {})
+                
+                # Map tool names to user-friendly names and types
+                tool_mapping = {
+                    "tavily_search": ("web_search", "Webbsökning"),
+                    "duckduckgo_search": ("web_search", "Webbsökning"),
+                    "vespa_search": ("web_search", "Databassökning"),
+                    "browse_page": ("browse_page", "Läser sida"),
+                    "smhi_weather_forecast": ("smhi_api", "SMHI Väder")
+                }
+                
+                tool_type, tool_label = tool_mapping.get(tool_name, ("unknown", tool_name))
+                
+                # Get input parameter (varies by tool)
+                input_param = ""
+                if tool_name in ["tavily_search", "duckduckgo_search", "vespa_search"]:
+                    input_param = tool_args.get("query", "")
+                elif tool_name == "browse_page":
+                    input_param = tool_args.get("url", "")
+                elif tool_name == "smhi_weather_forecast":
+                    input_param = tool_args.get("location", "")
+                
+                # Create action entry for this tool (mark as running)
+                action_id = f"{tool_type}_{len(tool_actions)}"
+                tool_actions.append({
+                    "id": action_id,
+                    "tool": tool_type,
+                    "status": "running",
+                    "input": input_param,
+                    "start_time": time.time()
+                })
+            
             tool_node = ToolNode(self.available_tools)
+            tool_start_time = time.time()
             tool_result = tool_node.invoke(current_state)
+            tool_duration = time.time() - tool_start_time
             
             # Add tool messages to state
             current_state["messages"] = current_state.get("messages", []) + tool_result["messages"]
             
-            # Extract retrieved docs from tool messages
+            # Extract retrieved docs from tool messages and update tool actions with results
+            tool_msg_index = 0
             for msg in tool_result["messages"]:
                 if isinstance(msg, ToolMessage):
                     try:
@@ -390,8 +433,28 @@ class OneSeekGraphAgent:
                         tool_content = json.loads(msg.content) if isinstance(msg.content, str) else msg.content
                         if isinstance(tool_content, list):
                             retrieved_docs.extend(tool_content)
-                    except:
-                        pass
+                            
+                            # Update the corresponding tool action with results
+                            if tool_msg_index < len(tool_actions):
+                                action = tool_actions[tool_msg_index]
+                                action["status"] = "complete"
+                                action["output"] = f"Hittade {len(tool_content)} resultat"
+                                action["duration"] = time.time() - action["start_time"]
+                                action["metadata"] = {
+                                    "resultat": str(len(tool_content))
+                                }
+                                del action["start_time"]  # Remove internal timing field
+                        tool_msg_index += 1
+                    except Exception as e:
+                        logger.error(f"Error processing tool message: {e}")
+                        if tool_msg_index < len(tool_actions):
+                            action = tool_actions[tool_msg_index]
+                            action["status"] = "error"
+                            action["output"] = f"Fel: {str(e)}"
+                            action["duration"] = time.time() - action.get("start_time", time.time())
+                            if "start_time" in action:
+                                del action["start_time"]
+                        tool_msg_index += 1
             
             steps_list.append(f"Tools executed, retrieved {len(retrieved_docs)} documents")
             callback("step", f"Tools executed, retrieved {len(retrieved_docs)} documents")
@@ -400,13 +463,14 @@ class OneSeekGraphAgent:
         final_message = current_state["messages"][-1]
         final_response = final_message.content if hasattr(final_message, "content") else ""
         
-        logger.info(f"Workflow complete. Tokens collected: {len(tokens)}, Final response length: {len(final_response)}")
+        logger.info(f"Workflow complete. Tokens collected: {len(tokens)}, Final response length: {len(final_response)}, Tool actions: {len(tool_actions)}")
         
         return {
             "content": final_response,
             "retrieved": retrieved_docs,
             "steps": steps_list,
-            "tokens": tokens
+            "tokens": tokens,
+            "tool_actions": tool_actions  # Include tool actions for frontend
         }
 
 

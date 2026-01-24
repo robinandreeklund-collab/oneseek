@@ -22,8 +22,13 @@ interface MessageSources {
   [messageId: string]: Source[];
 }
 
+interface MessageToolActions {
+  [messageId: string]: any[];
+}
+
 export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
   const [messageSources, setMessageSources] = React.useState<MessageSources>({});
+  const [messageToolActions, setMessageToolActions] = React.useState<MessageToolActions>({});
   const processedDataRef = React.useRef<Set<string>>(new Set());
 
   const {
@@ -61,26 +66,46 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
         return;
       }
       
-      // Process all data items to find sources
+      // Process all data items to find sources and tool actions
       for (const item of data) {
-        if (item && typeof item === 'object' && item.retrieved && Array.isArray(item.retrieved) && item.retrieved.length > 0) {
-          setMessageSources((prev) => {
-            // Only set if not already set for this message
-            if (!prev[lastAssistantMessage.id]) {
-              processedDataRef.current.add(dataKey);
-              return {
-                ...prev,
-                [lastAssistantMessage.id]: item.retrieved.map((source: any) => ({
-                  title: source.title || "Untitled",
-                  content: source.content || "",
-                  url: source.url,
-                  relevance: source.relevance,
-                  source: source.source,
-                })),
-              };
-            }
-            return prev;
-          });
+        if (item && typeof item === 'object') {
+          // Extract sources
+          if (item.retrieved && Array.isArray(item.retrieved) && item.retrieved.length > 0) {
+            setMessageSources((prev) => {
+              // Only set if not already set for this message
+              if (!prev[lastAssistantMessage.id]) {
+                processedDataRef.current.add(dataKey);
+                return {
+                  ...prev,
+                  [lastAssistantMessage.id]: item.retrieved.map((source: any) => ({
+                    title: source.title || "Untitled",
+                    content: source.content || "",
+                    url: source.url,
+                    relevance: source.relevance,
+                    source: source.source,
+                  })),
+                };
+              }
+              return prev;
+            });
+          }
+          
+          // Extract tool actions
+          if (item.tool_actions && Array.isArray(item.tool_actions) && item.tool_actions.length > 0) {
+            setMessageToolActions((prev) => {
+              // Only set if not already set for this message
+              if (!prev[lastAssistantMessage.id]) {
+                processedDataRef.current.add(dataKey);
+                return {
+                  ...prev,
+                  [lastAssistantMessage.id]: item.tool_actions,
+                };
+              }
+              return prev;
+            });
+          }
+        }
+        if (processedDataRef.current.has(dataKey)) {
           break;
         }
       }
@@ -158,6 +183,7 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
         navCollapsedSize={10}
         defaultLayout={[30, 160]}
         messageSources={messageSources}
+        messageToolActions={messageToolActions}
       />
     </main>
   );

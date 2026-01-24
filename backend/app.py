@@ -213,10 +213,12 @@ async def stream_chat_response(
         
         # Send metadata about steps and retrieved docs first (as annotations)
         retrieved_docs = result.get("retrieved", [])
+        tool_actions = result.get("tool_actions", [])
         metadata = {
             "steps": result.get("steps", []),
             "retrieved": retrieved_docs,
-            "source_count": len(retrieved_docs)  # Count for frontend display
+            "source_count": len(retrieved_docs),  # Count for frontend display
+            "tool_actions": tool_actions  # Tool execution details for ActionBlock
         }
         
         # Stream annotations/data first

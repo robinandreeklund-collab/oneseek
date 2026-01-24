@@ -12,6 +12,7 @@ interface ChatLayoutProps {
   navCollapsedSize: number;
   chatId: string;
   messageSources?: { [messageId: string]: Source[] };
+  messageToolActions?: { [messageId: string]: any[] };
 }
 
 type MergedProps = ChatLayoutProps & ChatProps & ChatTopbarProps;
@@ -32,6 +33,7 @@ export function ChatLayout({
   chatOptions,
   setChatOptions,
   messageSources,
+  messageToolActions,
 }: MergedProps) {
   const [isCollapsed, setIsCollapsed] = React.useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -80,6 +82,7 @@ export function ChatLayout({
           error={error}
           stop={stop}
           messageSources={messageSources}
+          messageToolActions={messageToolActions}
         />
       </div>
     </div>

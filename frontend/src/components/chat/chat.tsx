@@ -23,6 +23,7 @@ export interface ChatProps {
   error: undefined | Error;
   stop: () => void;
   messageSources?: { [messageId: string]: Source[] };
+  messageToolActions?: { [messageId: string]: any[] };
 }
 
 export interface ChatTopbarProps {
@@ -43,6 +44,7 @@ export default function Chat({
   chatId,
   setChatId,
   messageSources,
+  messageToolActions,
 }: ChatProps & ChatTopbarProps) {
   return (
     <div className="flex flex-col justify-between w-full h-full  ">
@@ -59,6 +61,7 @@ export default function Chat({
         messages={messages}
         isLoading={isLoading}
         messageSources={messageSources}
+        messageToolActions={messageToolActions}
       />
 
       <ChatBottombar

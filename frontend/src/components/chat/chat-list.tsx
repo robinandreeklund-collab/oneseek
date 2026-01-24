@@ -10,11 +10,13 @@ import { Message } from "ai";
 import ThinkBlock from "../think-block";
 import { SourceBadge } from "./source-badge";
 import { Source, SourcesSidebar } from "./sources-sidebar";
+import ActionBlock, { ToolAction } from "../action-transparency/ActionBlock";
 
 interface ChatListProps {
   messages: Message[];
   isLoading: boolean;
   messageSources?: { [messageId: string]: Source[] };
+  messageToolActions?: { [messageId: string]: any[] };
 }
 
 const MessageToolbar = () => (
@@ -67,7 +69,7 @@ function processThinkTags(content: string, isLoading: boolean, message: Message 
   return [content];
 }
 
-export default function ChatList({ messages, isLoading, messageSources }: ChatListProps) {
+export default function ChatList({ messages, isLoading, messageSources, messageToolActions }: ChatListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedSources, setSelectedSources] = useState<Source[]>([]);
@@ -75,7 +77,8 @@ export default function ChatList({ messages, isLoading, messageSources }: ChatLi
   // Debug logging
   useEffect(() => {
     console.log("ChatList messageSources:", messageSources);
-  }, [messageSources]);
+    console.log("ChatList messageToolActions:", messageToolActions);
+  }, [messageSources, messageToolActions]);
 
   const scrollToBottom = () => {
     bottomRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
@@ -149,6 +152,20 @@ export default function ChatList({ messages, isLoading, messageSources }: ChatLi
                 {message.role === "assistant" && (
                   <div className="relative flex w-full min-w-0 flex-col">
                     <div className="font-semibold pb-2">Assistant</div>
+                    
+                    {/* Show tool actions if they exist for this message */}
+                    {messageToolActions && messageToolActions[message.id] && messageToolActions[message.id].length > 0 && (
+                      <div className="mb-4">
+                        {messageToolActions[message.id].map((action: ToolAction, idx: number) => (
+                          <ActionBlock
+                            key={`${message.id}-action-${idx}`}
+                            action={action}
+                            live={isLoading && messages.indexOf(message) === messages.length - 1}
+                          />
+                        ))}
+                      </div>
+                    )}
+                    
                     {/* Show source badge if sources exist for this message */}
                     {messageSources && messageSources[message.id] && (
                       <SourceBadge
