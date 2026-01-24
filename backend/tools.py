@@ -239,19 +239,22 @@ def browse_page(url: str, max_chunk_size: int = 6000, overlap_sentences: int = 2
     Browse and extract content from a webpage URL with automatic intelligent chunking for large pages.
     
     IMPORTANT TOKEN-SAVING BEHAVIOR:
-    - Small pages (<6000 chars): Returns full content immediately in a single chunk
+    - Small pages (<6000 chars): Returns full content immediately in a single chunk with 'content' field
     - Large pages (>6000 chars): Returns ONLY PREVIEWS (800 chars each) to avoid token limits
     
-    When multiple chunks are returned, each chunk contains:
-    - content_preview: First 800 characters (enough for relevance checking)
+    When multiple chunks are returned (large pages), each chunk contains:
+    - preview: First 800 characters (for relevance checking ONLY - NOT for answering)
     - full_length: Total character count of the full chunk
     - chunk_id: Position indicator (e.g., "2/5")
+    - status: "preview_only" - indicating you MUST call get_chunk_content for full text
+    
+    ⚠️ CRITICAL: Previews are NOT sufficient to answer questions. Always follow the workflow.
     
     WORKFLOW for large pages:
-    1. browse_page returns chunk previews
-    2. Use check_chunk_relevance on all previews in parallel
-    3. Use get_chunk_content to fetch full text of relevant chunks only
-    4. Generate answer from relevant full content
+    1. browse_page returns chunk previews with status="preview_only"
+    2. Call check_chunk_relevance on all previews in parallel to filter
+    3. Call get_chunk_content to fetch full text of ONLY relevant chunks
+    4. Generate answer ONLY from full content retrieved in step 3
     
     This prevents token limit errors by filtering BEFORE retrieving full content.
     
@@ -262,8 +265,8 @@ def browse_page(url: str, max_chunk_size: int = 6000, overlap_sentences: int = 2
         
     Returns:
         List of chunks. Each chunk has:
-        - For single chunk: 'content' with full text
-        - For multiple chunks: 'content_preview' with 800 chars, 'full_length' with total size
+        - For small pages (single chunk): 'content' with full text, status not set
+        - For large pages (multiple chunks): 'preview' with 800 chars, 'status'='preview_only', 'full_length'
     """
     try:
         import requests
@@ -345,11 +348,12 @@ def browse_page(url: str, max_chunk_size: int = 6000, overlap_sentences: int = 2
                 
                 chunks.append({
                     "title": f"{title_text} (Part {chunk_number})",
-                    "content_preview": content_preview,  # Only preview in initial result
+                    "preview": content_preview,  # Preview for relevance checking only
                     "full_length": len(chunk_text),  # Show how much content is available
                     "url": url,
                     "chunk_id": f"{chunk_number}/TBD",  # Will update total later
-                    "instructions": f"This is part {chunk_number} of a large document. IMPORTANT: You are seeing only a preview. Use check_chunk_relevance with this preview to determine relevance, then use get_chunk_content(url, chunk_id) to retrieve full content of relevant chunks.",
+                    "status": "preview_only",  # Explicitly mark as incomplete
+                    "instructions": f"⚠️ PREVIEW ONLY - NOT COMPLETE CONTENT ⚠️\nThis is a preview of part {chunk_number} of a large document. To get the full content:\n1. Call check_chunk_relevance(chunk_id='{chunk_number}/TBD', chunk_content=preview, user_query='your query') to determine if relevant\n2. If relevant, call get_chunk_content(url='{url}', chunk_id='{chunk_number}/TBD') to get full text\n3. Use full text from get_chunk_content to answer the question",
                     "error": False
                 })
                 
