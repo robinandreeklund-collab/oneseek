@@ -93,6 +93,7 @@ export default function ActionBlock({ actions, live = false, onToolClick }: Acti
   const taskDescription = getTaskDescription();
   const searchQueries = getSearchQueries();
   const sources = getSources();
+  const statusText = allCompleted ? "used" : "invoked";
 
   return (
     <div className="my-3">
@@ -107,7 +108,7 @@ export default function ActionBlock({ actions, live = false, onToolClick }: Acti
           }`}
         />
         <span>
-          Reviewed {actions.length} source{actions.length !== 1 ? "s" : ""}
+          Actions {actions.length} tool{actions.length !== 1 ? "s" : ""} {statusText}
         </span>
       </button>
 
