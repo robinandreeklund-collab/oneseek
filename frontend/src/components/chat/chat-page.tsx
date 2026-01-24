@@ -28,6 +28,7 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
   const [messageToolActions, setMessageToolActions] = React.useState<MessageToolActions>({});
   const processedDataRef = React.useRef<Set<string>>(new Set());
   const currentStreamingMessageIdRef = React.useRef<string | null>(null);
+  const lastSeenMessageCountRef = React.useRef<number>(0);
 
   const {
     messages,
@@ -47,28 +48,38 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
     },
   });
   
-  // Track the current streaming message
+  // Track the current streaming message - detect when a NEW assistant message appears
   React.useEffect(() => {
-    if (isLoading) {
+    const currentMessageCount = messages.length;
+    
+    // Check if a new message was added
+    if (currentMessageCount > lastSeenMessageCountRef.current) {
+      lastSeenMessageCountRef.current = currentMessageCount;
+      
+      // Get the latest assistant message
       const lastAssistantMessage = messages.filter(m => m.role === 'assistant').slice(-1)[0];
+      
+      // If there's a new assistant message and it's different from the tracked one
       if (lastAssistantMessage && currentStreamingMessageIdRef.current !== lastAssistantMessage.id) {
-        // New message started streaming, update the ref
+        console.log(`New assistant message detected: ${lastAssistantMessage.id}, clearing previous tracking`);
+        
+        // Update to track this new message
         currentStreamingMessageIdRef.current = lastAssistantMessage.id;
         
-        // Clear tool actions for this new message to ensure fresh start
+        // Initialize empty tool actions for this new message
         setMessageToolActions((prev) => {
           const newState = { ...prev };
-          // Only clear if this is truly a new message (not already set)
-          if (!newState[lastAssistantMessage.id]) {
-            newState[lastAssistantMessage.id] = [];
-          }
+          newState[lastAssistantMessage.id] = [];
           return newState;
         });
       }
-    } else {
+    }
+    
+    // Clear tracking when not loading
+    if (!isLoading) {
       currentStreamingMessageIdRef.current = null;
     }
-  }, [isLoading, messages]);
+  }, [messages, isLoading]);
   
   // Watch for data changes and extract sources and tool actions
   React.useEffect(() => {
