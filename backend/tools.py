@@ -221,7 +221,14 @@ def browse_page(url: str, max_chunk_size: int = 6000, overlap_sentences: int = 2
     """
     Browse and extract content from a webpage URL with automatic intelligent chunking for large pages.
     For pages exceeding max_chunk_size, the content is split into semantic chunks with sentence-level overlap.
-    This allows the agent to process large documents in parallel for better throughput.
+    
+    IMPORTANT: This tool returns chunks as a LIST to enable parallel processing.
+    - Small pages: returns 1 chunk
+    - Large pages: returns multiple chunks (e.g., 5 chunks for a 30,000 char page)
+    
+    For large pages with multiple chunks, use check_chunk_relevance tool in parallel
+    to efficiently determine which chunks are relevant before processing them.
+    This avoids token limit issues by filtering out irrelevant content.
     
     Args:
         url: The URL of the webpage to browse
@@ -231,7 +238,7 @@ def browse_page(url: str, max_chunk_size: int = 6000, overlap_sentences: int = 2
     Returns:
         List of chunks, each with title, content, url, chunk_id, and instructions.
         For small pages: returns single-item list.
-        For large pages: returns multiple chunks that can be processed in parallel.
+        For large pages: returns multiple chunks that can be processed in parallel using check_chunk_relevance.
     """
     try:
         import requests
@@ -371,6 +378,100 @@ def browse_page(url: str, max_chunk_size: int = 6000, overlap_sentences: int = 2
             "instructions": "Error occurred",
             "error": True
         }]
+
+
+@tool
+def check_chunk_relevance(chunk_id: str, chunk_content: str, user_query: str) -> Dict[str, Any]:
+    """
+    Check if a specific chunk from browse_page is relevant to the user's query.
+    This tool is designed for parallel execution - call it on multiple chunks simultaneously
+    to leverage vLLM's multi-query batching for efficient throughput.
+    
+    Use this tool when browse_page returns multiple chunks (chunk_id like "2/5" indicates multiple chunks).
+    By checking relevance in parallel, you avoid sending all chunks to the model, preventing token limit issues.
+    
+    Args:
+        chunk_id: The chunk identifier (e.g., "1/5", "2/5") from browse_page result
+        chunk_content: The actual content of the chunk to evaluate
+        user_query: The user's original question or query
+        
+    Returns:
+        Dictionary with:
+        - chunk_id: The chunk identifier
+        - is_relevant: Boolean indicating if chunk is relevant
+        - relevance_score: Float 0.0-1.0 indicating confidence
+        - relevant_excerpts: List of relevant text excerpts if found
+        - reasoning: Brief explanation of relevance decision
+    """
+    try:
+        # Simple keyword-based relevance check
+        # In production, this could use embeddings or LLM-based relevance
+        import re
+        
+        # Normalize texts for comparison
+        query_lower = user_query.lower()
+        content_lower = chunk_content.lower()
+        
+        # Extract key terms from query (simple approach)
+        # Remove common Swedish stop words
+        stop_words = {'och', 'i', 'på', 'att', 'en', 'är', 'som', 'för', 'det', 'av', 'till', 'med', 'om', 'den', 'var', 'kan', 'vad', 'hur', 'när', 'var', 'vilka', 'the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'is', 'of', 'and', 'or'}
+        query_words = [w for w in re.findall(r'\w+', query_lower) if len(w) > 2 and w not in stop_words]
+        
+        if not query_words:
+            # If no meaningful words, consider relevant (conservative approach)
+            return {
+                "chunk_id": chunk_id,
+                "is_relevant": True,
+                "relevance_score": 0.5,
+                "relevant_excerpts": [],
+                "reasoning": "No specific keywords to match, treating as potentially relevant"
+            }
+        
+        # Count how many query terms appear in chunk
+        matches = 0
+        relevant_excerpts = []
+        
+        for word in query_words:
+            if word in content_lower:
+                matches += 1
+                # Find context around the match (50 chars before and after)
+                pattern = re.compile(f'.{{0,50}}{re.escape(word)}.{{0,50}}', re.IGNORECASE)
+                match_contexts = pattern.findall(chunk_content)
+                if match_contexts:
+                    # Add first match as excerpt
+                    relevant_excerpts.append(match_contexts[0].strip())
+        
+        # Calculate relevance score
+        relevance_score = min(matches / len(query_words), 1.0)
+        is_relevant = relevance_score > 0.2  # Threshold: at least 20% of query terms
+        
+        # Deduplicate and limit excerpts
+        relevant_excerpts = list(dict.fromkeys(relevant_excerpts))[:3]  # Max 3 excerpts
+        
+        reasoning = f"Found {matches}/{len(query_words)} query terms in chunk. "
+        if is_relevant:
+            reasoning += "Chunk appears relevant to the query."
+        else:
+            reasoning += "Chunk does not appear relevant to the query."
+        
+        return {
+            "chunk_id": chunk_id,
+            "is_relevant": is_relevant,
+            "relevance_score": round(relevance_score, 2),
+            "relevant_excerpts": relevant_excerpts,
+            "reasoning": reasoning
+        }
+    
+    except Exception as e:
+        # On error, be conservative and mark as relevant
+        return {
+            "chunk_id": chunk_id,
+            "is_relevant": True,
+            "relevance_score": 0.5,
+            "relevant_excerpts": [],
+            "reasoning": f"Error checking relevance: {str(e)}. Treating as potentially relevant.",
+            "error": True
+        }
 
 
 @tool
@@ -536,4 +637,4 @@ def smhi_weather_forecast(location: str) -> Dict[str, Any]:
 
 
 # Export all tools for easy access
-AVAILABLE_TOOLS = [tavily_search, duckduckgo_search, vespa_search, browse_page, smhi_weather_forecast]
+AVAILABLE_TOOLS = [tavily_search, duckduckgo_search, vespa_search, browse_page, check_chunk_relevance, smhi_weather_forecast]
