@@ -3,23 +3,25 @@
 
 from .builder import build_retriever
 from .dify import DifyProvider
-from .milvus import MilvusProvider
 from .moi import MOIProvider
-from .qdrant import QdrantProvider
 from .ragflow import RAGFlowProvider
 from .retriever import Chunk, Document, Resource, Retriever
 from .vikingdb_knowledge_base import VikingDBKnowledgeBaseProvider
 
+# Optional RAG providers (imported conditionally to avoid dependency errors)
+# from .milvus import MilvusProvider
+# from .qdrant import QdrantProvider
+
 __all__ = [
-    Retriever,
-    Document,
-    Resource,
-    DifyProvider,
-    RAGFlowProvider,
-    MOIProvider,
-    MilvusProvider,
-    QdrantProvider,
-    VikingDBKnowledgeBaseProvider,
-    Chunk,
-    build_retriever,
+    "Retriever",
+    "Document",
+    "Resource",
+    "DifyProvider",
+    "RAGFlowProvider",
+    "MOIProvider",
+    # "MilvusProvider",  # Import conditionally in builder.py
+    # "QdrantProvider",  # Import conditionally in builder.py
+    "VikingDBKnowledgeBaseProvider",
+    "Chunk",
+    "build_retriever",
 ]
