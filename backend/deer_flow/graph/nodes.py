@@ -10,7 +10,8 @@ from typing import Annotated, Any, Literal
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
-from langchain_mcp_adapters.client import MultiServerMCPClient
+# MCP adapters import moved to conditional block where it's used
+# from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.types import Command, interrupt
 
 from backend.deer_flow.agents import create_agent
@@ -1209,14 +1210,18 @@ async def _setup_and_execute_agent_step(
     # Create and execute agent with MCP tools if available
     if mcp_servers:
         # Add MCP tools to loaded tools if MCP servers are configured
-        client = MultiServerMCPClient(mcp_servers)
-        all_tools = await client.get_tools()
-        for tool in all_tools:
-            if tool.name in enabled_tools:
-                tool.description = (
-                    f"Powered by '{enabled_tools[tool.name]}'.\n{tool.description}"
-                )
-                loaded_tools.append(tool)
+        try:
+            from langchain_mcp_adapters.client import MultiServerMCPClient
+            client = MultiServerMCPClient(mcp_servers)
+            all_tools = await client.get_tools()
+            for tool in all_tools:
+                if tool.name in enabled_tools:
+                    tool.description = (
+                        f"Powered by '{enabled_tools[tool.name]}'.\n{tool.description}"
+                    )
+                    loaded_tools.append(tool)
+        except ImportError:
+            logger.warning("MCP servers configured but langchain_mcp_adapters not installed. Install with: pip install langchain-mcp-adapters")
 
     llm_token_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP[agent_type])
     pre_model_hook = partial(ContextManager(llm_token_limit, 3).compress_messages)
