@@ -403,6 +403,10 @@ def check_chunk_relevance(chunk_id: str, chunk_content: str, user_query: str) ->
         - relevant_excerpts: List of relevant text excerpts if found
         - reasoning: Brief explanation of relevance decision
     """
+    # Configuration constants
+    RELEVANCE_THRESHOLD = 0.2  # Minimum score to consider chunk relevant
+    MAX_EXCERPTS = 3  # Maximum number of excerpts to return
+    
     try:
         # Simple keyword-based relevance check
         # In production, this could use embeddings or LLM-based relevance
@@ -413,8 +417,14 @@ def check_chunk_relevance(chunk_id: str, chunk_content: str, user_query: str) ->
         content_lower = chunk_content.lower()
         
         # Extract key terms from query (simple approach)
-        # Remove common Swedish stop words
-        stop_words = {'och', 'i', 'på', 'att', 'en', 'är', 'som', 'för', 'det', 'av', 'till', 'med', 'om', 'den', 'var', 'kan', 'vad', 'hur', 'när', 'var', 'vilka', 'the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'is', 'of', 'and', 'or'}
+        # Remove common Swedish and English stop words
+        stop_words = {
+            # Swedish stop words
+            'och', 'i', 'på', 'att', 'en', 'är', 'som', 'för', 'det', 'av', 
+            'till', 'med', 'om', 'den', 'kan', 'vad', 'hur', 'när', 'vilka',
+            # English stop words
+            'the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'is', 'of', 'and', 'or'
+        }
         query_words = [w for w in re.findall(r'\w+', query_lower) if len(w) > 2 and w not in stop_words]
         
         if not query_words:
@@ -443,10 +453,10 @@ def check_chunk_relevance(chunk_id: str, chunk_content: str, user_query: str) ->
         
         # Calculate relevance score
         relevance_score = min(matches / len(query_words), 1.0)
-        is_relevant = relevance_score > 0.2  # Threshold: at least 20% of query terms
+        is_relevant = relevance_score > RELEVANCE_THRESHOLD
         
         # Deduplicate and limit excerpts
-        relevant_excerpts = list(dict.fromkeys(relevant_excerpts))[:3]  # Max 3 excerpts
+        relevant_excerpts = list(dict.fromkeys(relevant_excerpts))[:MAX_EXCERPTS]
         
         reasoning = f"Found {matches}/{len(query_words)} query terms in chunk. "
         if is_relevant:
