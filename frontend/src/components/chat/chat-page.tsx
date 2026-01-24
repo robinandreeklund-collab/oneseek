@@ -29,6 +29,7 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
   const processedDataRef = React.useRef<Set<string>>(new Set());
   const currentStreamingMessageIdRef = React.useRef<string | null>(null);
   const lastSeenMessageCountRef = React.useRef<number>(0);
+  const frozenMessagesRef = React.useRef<Set<string>>(new Set()); // Track which messages are "frozen" (completed)
 
   const {
     messages,
@@ -63,6 +64,12 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
       if (lastAssistantMessage && currentStreamingMessageIdRef.current !== lastAssistantMessage.id) {
         console.log(`New assistant message detected: ${lastAssistantMessage.id}, clearing previous tracking`);
         
+        // Freeze the previous message's tool actions (if any)
+        if (currentStreamingMessageIdRef.current) {
+          frozenMessagesRef.current.add(currentStreamingMessageIdRef.current);
+          console.log(`Froze tool actions for previous message: ${currentStreamingMessageIdRef.current}`);
+        }
+        
         // Update to track this new message
         currentStreamingMessageIdRef.current = lastAssistantMessage.id;
         
@@ -75,9 +82,12 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
       }
     }
     
-    // DO NOT clear tracking when loading stops - keep the reference so final tool actions go to the right message
-    // The reference will be updated when the next new message starts
-  }, [messages]);
+    // When loading stops, freeze the current message's tool actions
+    if (!isLoading && currentStreamingMessageIdRef.current) {
+      frozenMessagesRef.current.add(currentStreamingMessageIdRef.current);
+      console.log(`Froze tool actions for completed message: ${currentStreamingMessageIdRef.current}`);
+    }
+  }, [messages, isLoading]);
   
   // Watch for data changes and extract sources and tool actions
   React.useEffect(() => {
@@ -137,6 +147,12 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
             // If no target message is being tracked, skip (shouldn't happen during streaming)
             if (!targetMessageId) {
               console.warn('Tool actions received but no streaming message tracked');
+              return prev;
+            }
+            
+            // Check if this message is frozen (completed) - NEVER update frozen messages
+            if (frozenMessagesRef.current.has(targetMessageId)) {
+              console.log(`Skipping tool action update for frozen message: ${targetMessageId}`);
               return prev;
             }
             
