@@ -11,12 +11,26 @@ import { v4 as uuidv4 } from "uuid";
 import { ChatLayout } from "@/components/chat/chat-layout";
 import { ChatOptions } from "@/components/chat/chat-options";
 import { basePath } from "@/lib/utils";
+import { Source } from "@/components/chat/sources-sidebar";
 
 interface ChatPageProps {
   chatId: string;
   setChatId: React.Dispatch<React.SetStateAction<string>>;
 }
+
+interface MessageSources {
+  [messageId: string]: Source[];
+}
+
+interface MessageToolActions {
+  [messageId: string]: any[];
+}
+
 export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
+  const [messageSources, setMessageSources] = React.useState<MessageSources>({});
+  const [messageToolActions, setMessageToolActions] = React.useState<MessageToolActions>({});
+  const processedDataRef = React.useRef<Set<string>>(new Set());
+
   const {
     messages,
     input,
@@ -26,6 +40,7 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
     error,
     stop,
     setMessages,
+    data,
   } = useChat({
     api: basePath + "/api/chat",
     streamMode: "stream-data",
@@ -33,6 +48,69 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
       toast.error("Something went wrong: " + error);
     },
   });
+  
+  // Watch for data changes and extract sources
+  React.useEffect(() => {
+    if (data && Array.isArray(data) && data.length > 0) {
+      // Get the most recent assistant message
+      const lastAssistantMessage = messages.filter(m => m.role === 'assistant').slice(-1)[0];
+      if (!lastAssistantMessage) {
+        return;
+      }
+      
+      // Create a unique key for this data + message combination
+      const dataKey = `${lastAssistantMessage.id}-${JSON.stringify(data)}`;
+      
+      // Skip if we've already processed this data for this message
+      if (processedDataRef.current.has(dataKey)) {
+        return;
+      }
+      
+      // Process all data items to find sources and tool actions
+      for (const item of data) {
+        if (item && typeof item === 'object') {
+          // Extract sources
+          if (item.retrieved && Array.isArray(item.retrieved) && item.retrieved.length > 0) {
+            setMessageSources((prev) => {
+              // Only set if not already set for this message
+              if (!prev[lastAssistantMessage.id]) {
+                processedDataRef.current.add(dataKey);
+                return {
+                  ...prev,
+                  [lastAssistantMessage.id]: item.retrieved.map((source: any) => ({
+                    title: source.title || "Untitled",
+                    content: source.content || "",
+                    url: source.url,
+                    relevance: source.relevance,
+                    source: source.source,
+                  })),
+                };
+              }
+              return prev;
+            });
+          }
+          
+          // Extract tool actions
+          if (item.tool_actions && Array.isArray(item.tool_actions) && item.tool_actions.length > 0) {
+            setMessageToolActions((prev) => {
+              // Only set if not already set for this message
+              if (!prev[lastAssistantMessage.id]) {
+                processedDataRef.current.add(dataKey);
+                return {
+                  ...prev,
+                  [lastAssistantMessage.id]: item.tool_actions,
+                };
+              }
+              return prev;
+            });
+          }
+        }
+        if (processedDataRef.current.has(dataKey)) {
+          break;
+        }
+      }
+    }
+  }, [data, messages]);
   const [chatOptions, setChatOptions] = useLocalStorageState<ChatOptions>(
     "chatOptions",
     {
@@ -104,6 +182,8 @@ export default function ChatPage({ chatId, setChatId }: ChatPageProps) {
         stop={stop}
         navCollapsedSize={10}
         defaultLayout={[30, 160]}
+        messageSources={messageSources}
+        messageToolActions={messageToolActions}
       />
     </main>
   );

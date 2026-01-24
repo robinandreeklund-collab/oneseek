@@ -69,6 +69,38 @@ pip install -r requirements.txt
   VLLM_URL=http://localhost:8000/v1
   ```
 
+### 2a. vLLM Tool Calling Error (v0.3 Multi-Tool Feature)
+
+**Problem:** `Error code: 400 - "auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set`
+
+**Cause:** The multi-tool search feature requires vLLM to support tool calling, which needs specific flags.
+
+**Solution:**
+Restart vLLM with tool calling support:
+```bash
+vllm serve Qwen/Qwen2.5-14B-Instruct-AWQ \
+  --dtype auto \
+  --quantization awq \
+  --max-model-len 8192 \
+  --gpu-memory-utilization 0.92 \
+  --enable-auto-tool-choice \
+  --tool-call-parser hermes \
+  --host 0.0.0.0 --port 8000
+```
+
+**Required flags:**
+- `--enable-auto-tool-choice` - Enables tool calling API
+- `--tool-call-parser hermes` - Uses Hermes format (compatible with Qwen, Llama, Mistral)
+
+**Alternative:** Use legacy RAG-only mode (no tool calling needed):
+```json
+POST /chat
+{
+  "messages": [...],
+  "use_tools": false
+}
+```
+
 ### 3. Vespa Authentication Error
 
 **Problem:** `401 Unauthorized` or `403 Forbidden` when accessing Vespa

@@ -7,6 +7,7 @@ import ChatBottombar from "./chat-bottombar";
 import ChatList from "./chat-list";
 import { ChatOptions } from "./chat-options";
 import ChatTopbar from "./chat-topbar";
+import { Source } from "./sources-sidebar";
 
 export interface ChatProps {
   chatId?: string;
@@ -21,6 +22,8 @@ export interface ChatProps {
   isLoading: boolean;
   error: undefined | Error;
   stop: () => void;
+  messageSources?: { [messageId: string]: Source[] };
+  messageToolActions?: { [messageId: string]: any[] };
 }
 
 export interface ChatTopbarProps {
@@ -40,6 +43,8 @@ export default function Chat({
   setChatOptions,
   chatId,
   setChatId,
+  messageSources,
+  messageToolActions,
 }: ChatProps & ChatTopbarProps) {
   return (
     <div className="flex flex-col justify-between w-full h-full  ">
@@ -55,6 +60,8 @@ export default function Chat({
       <ChatList
         messages={messages}
         isLoading={isLoading}
+        messageSources={messageSources}
+        messageToolActions={messageToolActions}
       />
 
       <ChatBottombar

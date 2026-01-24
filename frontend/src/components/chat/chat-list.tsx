@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 import Image from "next/image";
 
@@ -8,10 +8,15 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Message } from "ai";
 import ThinkBlock from "../think-block";
+import { SourceBadge } from "./source-badge";
+import { Source, SourcesSidebar } from "./sources-sidebar";
+import ActionBlock, { ToolAction } from "../action-transparency/ActionBlock";
 
 interface ChatListProps {
   messages: Message[];
   isLoading: boolean;
+  messageSources?: { [messageId: string]: Source[] };
+  messageToolActions?: { [messageId: string]: any[] };
 }
 
 const MessageToolbar = () => (
@@ -64,8 +69,16 @@ function processThinkTags(content: string, isLoading: boolean, message: Message 
   return [content];
 }
 
-export default function ChatList({ messages, isLoading }: ChatListProps) {
+export default function ChatList({ messages, isLoading, messageSources, messageToolActions }: ChatListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [selectedSources, setSelectedSources] = useState<Source[]>([]);
+  
+  // Debug logging
+  useEffect(() => {
+    console.log("ChatList messageSources:", messageSources);
+    console.log("ChatList messageToolActions:", messageToolActions);
+  }, [messageSources, messageToolActions]);
 
   const scrollToBottom = () => {
     bottomRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
@@ -139,6 +152,30 @@ export default function ChatList({ messages, isLoading }: ChatListProps) {
                 {message.role === "assistant" && (
                   <div className="relative flex w-full min-w-0 flex-col">
                     <div className="font-semibold pb-2">Assistant</div>
+                    
+                    {/* Show tool actions if they exist for this message */}
+                    {messageToolActions && messageToolActions[message.id] && messageToolActions[message.id].length > 0 && (
+                      <div className="mb-4">
+                        {messageToolActions[message.id].map((action: ToolAction, idx: number) => (
+                          <ActionBlock
+                            key={`${message.id}-action-${idx}`}
+                            action={action}
+                            live={isLoading && messages.indexOf(message) === messages.length - 1}
+                          />
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* Show source badge if sources exist for this message */}
+                    {messageSources && messageSources[message.id] && (
+                      <SourceBadge
+                        sourceCount={messageSources[message.id].length}
+                        onClick={() => {
+                          setSelectedSources(messageSources[message.id]);
+                          setSidebarOpen(true);
+                        }}
+                      />
+                    )}
                     <div className="flex-col gap-1 md:gap-3">
                       <span className="whitespace-pre-wrap">
                         {/* Check if the message content contains a code block */}
@@ -182,6 +219,13 @@ export default function ChatList({ messages, isLoading }: ChatListProps) {
           ))}
       </div>
       <div id="anchor" ref={bottomRef}></div>
+      
+      {/* Sources Sidebar */}
+      <SourcesSidebar
+        open={sidebarOpen}
+        onOpenChange={setSidebarOpen}
+        sources={selectedSources}
+      />
     </div>
   );
 }

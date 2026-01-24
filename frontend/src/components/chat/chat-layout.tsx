@@ -4,12 +4,15 @@ import React, { useEffect, useState } from "react";
 
 import { Sidebar } from "../sidebar";
 import Chat, { ChatProps, ChatTopbarProps } from "./chat";
+import { Source } from "./sources-sidebar";
 
 interface ChatLayoutProps {
   defaultLayout: number[] | undefined;
   defaultCollapsed?: boolean;
   navCollapsedSize: number;
   chatId: string;
+  messageSources?: { [messageId: string]: Source[] };
+  messageToolActions?: { [messageId: string]: any[] };
 }
 
 type MergedProps = ChatLayoutProps & ChatProps & ChatTopbarProps;
@@ -29,6 +32,8 @@ export function ChatLayout({
   setChatId,
   chatOptions,
   setChatOptions,
+  messageSources,
+  messageToolActions,
 }: MergedProps) {
   const [isCollapsed, setIsCollapsed] = React.useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -76,6 +81,8 @@ export function ChatLayout({
           isLoading={isLoading}
           error={error}
           stop={stop}
+          messageSources={messageSources}
+          messageToolActions={messageToolActions}
         />
       </div>
     </div>
