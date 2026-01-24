@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ActionBlock UI Preview</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            padding: 40px 20px;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: #fff;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        
+        .subtitle {
+            color: #888;
+            margin-bottom: 40px;
+            font-size: 14px;
+        }
+        
+        .message {
+            margin-bottom: 30px;
+        }
+        
+        .message-header {
+            font-weight: 600;
+            margin-bottom: 12px;
+            font-size: 14px;
+        }
+        
+        .action-block {
+            border: 1px dashed #666;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.02);
+            margin: 16px 0;
+            overflow: hidden;
+        }
+        
+        .action-block-header {
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .action-block-header:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+        
+        .chevron {
+            margin-right: 8px;
+            transition: transform 0.2s;
+        }
+        
+        .chevron.expanded {
+            transform: rotate(0deg);
+        }
+        
+        .chevron.collapsed {
+            transform: rotate(-90deg);
+        }
+        
+        .label {
+            color: #888;
+            font-weight: 500;
+            font-size: 14px;
+            margin-right: 12px;
+        }
+        
+        .status {
+            color: #999;
+            font-size: 13px;
+            font-style: italic;
+        }
+        
+        .action-block-body {
+            padding: 4px 24px 16px;
+        }
+        
+        .action-block-body.collapsed {
+            display: none;
+        }
+        
+        .tool-card {
+            border: 1px solid;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+        
+        .tool-card:last-child {
+            margin-bottom: 0;
+        }
+        
+        .tool-card.blue {
+            border-color: #60a5fa;
+            background: rgba(96, 165, 250, 0.05);
+        }
+        
+        .tool-card.green {
+            border-color: #4ade80;
+            background: rgba(74, 222, 128, 0.05);
+        }
+        
+        .tool-card.purple {
+            border-color: #c084fc;
+            background: rgba(192, 132, 252, 0.05);
+        }
+        
+        .tool-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+        
+        .tool-icon {
+            font-size: 24px;
+        }
+        
+        .tool-info {
+            flex: 1;
+        }
+        
+        .tool-name {
+            font-weight: 600;
+            font-size: 14px;
+        }
+        
+        .tool-name.blue { color: #60a5fa; }
+        .tool-name.green { color: #4ade80; }
+        .tool-name.purple { color: #c084fc; }
+        
+        .tool-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: #999;
+            margin-top: 2px;
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .tool-details {
+            font-size: 12px;
+            color: #999;
+            margin-top: 8px;
+        }
+        
+        .detail-label {
+            font-weight: 500;
+        }
+        
+        .detail-value {
+            font-family: 'Courier New', monospace;
+        }
+        
+        .section {
+            margin-bottom: 50px;
+        }
+        
+        .section-title {
+            color: #60a5fa;
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ActionBlock UI Preview</h1>
+        <p class="subtitle">Visual representation of tool invocation tracking in OneSeek</p>
+        
+        <div class="section">
+            <h2 class="section-title">1. Collapsed State (After Completion)</h2>
+            <div class="message">
+                <div class="message-header">Assistant</div>
+                <div class="action-block">
+                    <div class="action-block-header" onclick="toggleBlock(this)">
+                        <span class="chevron collapsed">▼</span>
+                        <span class="label">Actions</span>
+                        <span class="status">3 tool(s) used</span>
+                    </div>
+                    <div class="action-block-body collapsed">
+                        <!-- Content hidden when collapsed -->
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2 class="section-title">2. Expanded State (Shows All Tools)</h2>
+            <div class="message">
+                <div class="message-header">Assistant</div>
+                <div class="action-block">
+                    <div class="action-block-header">
+                        <span class="chevron expanded">▼</span>
+                        <span class="label">Actions</span>
+                        <span class="status">3 tool(s) used</span>
+                    </div>
+                    <div class="action-block-body">
+                        <div class="tool-card blue">
+                            <div class="tool-header">
+                                <span class="tool-icon">🔍</span>
+                                <div class="tool-info">
+                                    <div class="tool-name blue">web_search</div>
+                                    <div class="tool-status">
+                                        <span>2.34s</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="tool-details">
+                                <div><span class="detail-label">Input:</span> <span class="detail-value">query="weather in Stockholm"</span></div>
+                                <div><span class="detail-label">Output:</span> 5 result(s)</div>
+                            </div>
+                        </div>
+                        
+                        <div class="tool-card green">
+                            <div class="tool-header">
+                                <span class="tool-icon">🌐</span>
+                                <div class="tool-info">
+                                    <div class="tool-name green">browse_page</div>
+                                    <div class="tool-status">
+                                        <span>1.87s</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="tool-details">
+                                <div><span class="detail-label">Input:</span> <span class="detail-value">url="https://smhi.se/en/weather"</span></div>
+                                <div><span class="detail-label">Output:</span> 1 result(s)</div>
+                            </div>
+                        </div>
+                        
+                        <div class="tool-card purple">
+                            <div class="tool-header">
+                                <span class="tool-icon">🌤️</span>
+                                <div class="tool-info">
+                                    <div class="tool-name purple">smhi_api</div>
+                                    <div class="tool-status">
+                                        <span>0.56s</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="tool-details">
+                                <div><span class="detail-label">Input:</span> <span class="detail-value">location="Stockholm"</span></div>
+                                <div><span class="detail-label">Output:</span> 1 result</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2 class="section-title">3. Live Mode (Tools Running)</h2>
+            <div class="message">
+                <div class="message-header">Assistant</div>
+                <div class="action-block">
+                    <div class="action-block-header">
+                        <span class="chevron expanded">▼</span>
+                        <span class="label">Actions</span>
+                        <span class="status">2 tool(s) invoked</span>
+                    </div>
+                    <div class="action-block-body">
+                        <div class="tool-card blue">
+                            <div class="tool-header">
+                                <span class="tool-icon">🔍</span>
+                                <div class="tool-info">
+                                    <div class="tool-name blue">web_search</div>
+                                    <div class="tool-status">
+                                        <span class="spinner"></span>
+                                        <span style="font-style: italic;">Running...</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="tool-details">
+                                <div><span class="detail-label">Input:</span> <span class="detail-value">query="weather in Stockholm"</span></div>
+                            </div>
+                        </div>
+                        
+                        <div class="tool-card green">
+                            <div class="tool-header">
+                                <span class="tool-icon">🌐</span>
+                                <div class="tool-info">
+                                    <div class="tool-name green">browse_page</div>
+                                    <div class="tool-status">
+                                        <span class="spinner"></span>
+                                        <span style="font-style: italic;">Running...</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="tool-details">
+                                <div><span class="detail-label">Input:</span> <span class="detail-value">url="https://smhi.se/en/weather"</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function toggleBlock(header) {
+            const chevron = header.querySelector('.chevron');
+            const body = header.parentElement.querySelector('.action-block-body');
+            
+            if (body.classList.contains('collapsed')) {
+                body.classList.remove('collapsed');
+                chevron.classList.remove('collapsed');
+                chevron.classList.add('expanded');
+            } else {
+                body.classList.add('collapsed');
+                chevron.classList.remove('expanded');
+                chevron.classList.add('collapsed');
+            }
+        }
+    </script>
+</body>
+</html>
