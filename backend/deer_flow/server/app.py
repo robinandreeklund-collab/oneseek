@@ -47,8 +47,6 @@ from backend.deer_flow.prompt_enhancer.graph.builder import build_graph as build
 from backend.deer_flow.prose.graph.builder import build_graph as build_prose_graph
 from backend.deer_flow.eval import ReportEvaluator
 from backend.deer_flow.rag.builder import build_retriever
-from backend.deer_flow.rag.milvus import load_examples as load_milvus_examples
-from backend.deer_flow.rag.qdrant import load_examples as load_qdrant_examples
 from backend.deer_flow.rag.retriever import Resource
 from backend.deer_flow.server.chat_request import (
     ChatRequest,
@@ -251,8 +249,25 @@ app.add_middleware(
     allow_headers=["*"],  # Now allow all headers, but can be restricted further
 )
 # Load examples into RAG providers if configured
-load_milvus_examples()
-load_qdrant_examples()
+if SELECTED_RAG_PROVIDER == "milvus":
+    try:
+        from backend.deer_flow.rag.milvus import load_examples as load_milvus_examples
+        load_milvus_examples()
+        logger.info("Loaded Milvus examples")
+    except ImportError:
+        logger.warning("Milvus RAG provider configured but langchain_milvus not installed. Install with: pip install langchain-milvus pymilvus")
+    except Exception as e:
+        logger.error(f"Failed to load Milvus examples: {e}")
+
+if SELECTED_RAG_PROVIDER == "qdrant":
+    try:
+        from backend.deer_flow.rag.qdrant import load_examples as load_qdrant_examples
+        load_qdrant_examples()
+        logger.info("Loaded Qdrant examples")
+    except ImportError:
+        logger.warning("Qdrant RAG provider configured but langchain_qdrant not installed. Install with: pip install langchain-qdrant qdrant-client")
+    except Exception as e:
+        logger.error(f"Failed to load Qdrant examples: {e}")
 
 in_memory_store = InMemoryStore()
 graph = build_graph_with_memory()
