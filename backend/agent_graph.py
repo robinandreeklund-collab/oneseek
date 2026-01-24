@@ -62,6 +62,8 @@ class OneSeekGraphAgent:
             "tavily_search": ("web_search", "🔍", "blue"),
             "duckduckgo_search": ("web_search", "🔍", "blue"),
             "browse_page": ("browse_page", "🌐", "green"),
+            "check_chunk_relevance": ("chunk_filter", "🔎", "yellow"),
+            "get_chunk_content": ("fetch_chunk", "📄", "orange"),
             "smhi_weather_forecast": ("smhi_api", "🌤️", "purple"),
             "vespa_search": ("vespa_search", "📚", "gray"),
         }
@@ -91,8 +93,8 @@ class OneSeekGraphAgent:
                     configured_tools.append(tool)
                 continue
             
-            # browse_page and smhi_weather_forecast are always available (no config needed)
-            if tool_name in ["browse_page", "smhi_weather_forecast"]:
+            # browse_page, check_chunk_relevance, get_chunk_content, and smhi_weather_forecast are always available (no config needed)
+            if tool_name in ["browse_page", "check_chunk_relevance", "get_chunk_content", "smhi_weather_forecast"]:
                 configured_tools.append(tool)
                 continue
         
@@ -140,6 +142,10 @@ class OneSeekGraphAgent:
                     tool_descriptions.append("- vespa_search: Local/cloud RAG with embeddings and hybrid searching")
                 elif tool.name == "browse_page":
                     tool_descriptions.append("- browse_page: Fetch and read content from any webpage URL with automatic intelligent chunking for large pages")
+                elif tool.name == "check_chunk_relevance":
+                    tool_descriptions.append("- check_chunk_relevance: Check if a chunk preview is relevant to user's query (use in parallel for efficiency)")
+                elif tool.name == "get_chunk_content":
+                    tool_descriptions.append("- get_chunk_content: Retrieve full content of a specific chunk after filtering with check_chunk_relevance")
                 elif tool.name == "smhi_weather_forecast":
                     tool_descriptions.append("- smhi_weather_forecast: Get real-time weather forecast from SMHI for locations in Sweden")
             
@@ -154,13 +160,32 @@ class OneSeekGraphAgent:
                 "2. For weather questions about locations in Sweden, ALWAYS use smhi_weather_forecast for accurate, real-time data\n"
                 "3. If needed, call one or multiple tools IN PARALLEL for efficiency\n"
                 "4. You can combine web search with browse_page to read specific articles\n"
-                "5. The browse_page tool automatically chunks large pages into semantic sections with overlap\n"
-                "   - Small pages return 1 chunk, large pages return multiple chunks\n"
-                "   - When you receive multiple chunks from browse_page, analyze ALL chunks to get complete understanding\n"
-                "   - The chunks are designed for parallel processing - vLLM batches them for throughput\n"
-                "6. Use the results to provide a comprehensive, factual answer IN SWEDISH\n"
-                "7. Always cite your sources with URLs\n"
-                "8. If no search is needed, answer directly based on your knowledge\n\n"
+                "5. CHUNK HANDLING WORKFLOW (CRITICAL for large pages - prevents token limit errors):\n"
+                "   a. When browse_page returns multiple chunks, you receive ONLY PREVIEWS (not full content)\n"
+                "   b. Each chunk has 'preview' field (800 chars) and 'status': 'preview_only'\n"
+                "   c. ⚠️ DO NOT attempt to answer from previews - they are INCOMPLETE ⚠️\n"
+                "   d. IMMEDIATELY call check_chunk_relevance IN PARALLEL on ALL chunk previews\n"
+                "   e. After filtering, call get_chunk_content IN PARALLEL for ONLY relevant chunks (is_relevant=True)\n"
+                "   f. ONLY use the full content from get_chunk_content for your final answer\n"
+                "   g. Example workflow:\n"
+                "      - browse_page returns 5 chunks with previews (status='preview_only')\n"
+                "      - check_chunk_relevance on all 5 previews in parallel\n"
+                "      - 2 chunks marked relevant\n"
+                "      - get_chunk_content for those 2 chunks only\n"
+                "      - Generate answer from FULL CONTENT (not previews)\n"
+                "      - Result: Complete answer + no token limit errors\n"
+                "6. The browse_page tool automatically chunks large pages into semantic sections\n"
+                "   - Small pages (<6000 chars): returns full content immediately\n"
+                "   - Large pages: returns previews only, use check_chunk_relevance + get_chunk_content workflow\n"
+                "7. Use the results to provide a comprehensive, factual answer IN SWEDISH\n"
+                "8. Always cite your sources with URLs\n"
+                "9. IMPORTANT - For citation requests (when user asks to 'citera', 'quote', or requests specific paragraphs/sections):\n"
+                "   - Find the EXACT text in the full content from get_chunk_content\n"
+                "   - Quote it VERBATIM - do not paraphrase, summarize, or modify\n"
+                "   - Include section numbers, paragraph numbers, or headings as they appear\n"
+                "   - If asking for 'kapitel X, paragraf Y', search for those exact markers in the text\n"
+                "   - Present the quote clearly, e.g.: 'Kapitel 1, paragraf 2: [exact text]'\n"
+                "10. If no search is needed, answer directly based on your knowledge\n\n"
                 "Important: Do NOT show your thinking process or internal reasoning to the user. "
                 "Only provide the final answer with source citations.\n\n"
                 "Var transparent och ge välgrundade svar på svenska (Be transparent and provide well-sourced responses in Swedish)."

@@ -10,6 +10,23 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Constants for chunk handling
+PREVIEW_LENGTH = 800  # Characters to show in preview for large pages
+TRUNCATION_MESSAGE = "... [content truncated, use check_chunk_relevance to filter, then get_chunk_content to retrieve full text]"
+
+# Global cache for storing full chunk content
+# Note: For production use, consider thread-safe implementation or external cache
+_chunk_content_cache = {}
+_cache_lock = None  # Can be initialized with threading.Lock() for thread safety
+
+
+def _get_chunk_cache():
+    """Get or initialize the chunk content cache"""
+    global _chunk_content_cache
+    if not isinstance(_chunk_content_cache, dict):
+        _chunk_content_cache = {}
+    return _chunk_content_cache
+
 
 @tool
 def tavily_search(query: str, max_results: int = 5) -> List[Dict[str, Any]]:
@@ -220,18 +237,36 @@ def vespa_search(query: str, max_results: int = 6) -> List[Dict[str, Any]]:
 def browse_page(url: str, max_chunk_size: int = 6000, overlap_sentences: int = 2) -> List[Dict[str, Any]]:
     """
     Browse and extract content from a webpage URL with automatic intelligent chunking for large pages.
-    For pages exceeding max_chunk_size, the content is split into semantic chunks with sentence-level overlap.
-    This allows the agent to process large documents in parallel for better throughput.
+    
+    IMPORTANT TOKEN-SAVING BEHAVIOR:
+    - Small pages (<6000 chars): Returns full content immediately in a single chunk with 'content' field
+    - Large pages (>6000 chars): Returns ONLY PREVIEWS (800 chars each) to avoid token limits
+    
+    When multiple chunks are returned (large pages), each chunk contains:
+    - preview: First 800 characters (for relevance checking ONLY - NOT for answering)
+    - full_length: Total character count of the full chunk
+    - chunk_id: Position indicator (e.g., "2/5")
+    - status: "preview_only" - indicating you MUST call get_chunk_content for full text
+    
+    ⚠️ CRITICAL: Previews are NOT sufficient to answer questions. Always follow the workflow.
+    
+    WORKFLOW for large pages:
+    1. browse_page returns chunk previews with status="preview_only"
+    2. Call check_chunk_relevance on all previews in parallel to filter
+    3. Call get_chunk_content to fetch full text of ONLY relevant chunks
+    4. Generate answer ONLY from full content retrieved in step 3
+    
+    This prevents token limit errors by filtering BEFORE retrieving full content.
     
     Args:
         url: The URL of the webpage to browse
-        max_chunk_size: Maximum characters per chunk (default: 6000). Chunks try to stay under this limit.
-        overlap_sentences: Number of sentences to overlap between chunks for context continuity (default: 2)
+        max_chunk_size: Maximum characters per chunk (default: 6000)
+        overlap_sentences: Number of sentences to overlap between chunks (default: 2)
         
     Returns:
-        List of chunks, each with title, content, url, chunk_id, and instructions.
-        For small pages: returns single-item list.
-        For large pages: returns multiple chunks that can be processed in parallel.
+        List of chunks. Each chunk has:
+        - For small pages (single chunk): 'content' with full text, status not set
+        - For large pages (multiple chunks): 'preview' with 800 chars, 'status'='preview_only', 'full_length'
     """
     try:
         import requests
@@ -264,7 +299,7 @@ def browse_page(url: str, max_chunk_size: int = 6000, overlap_sentences: int = 2
         phrases = (phrase.strip() for line in lines for phrase in line.split("  "))
         text_content = ' '.join(phrase for phrase in phrases if phrase)
         
-        # If content fits within max_chunk_size, return as single chunk
+        # If content fits within max_chunk_size, return as single chunk with full content
         if len(text_content) <= max_chunk_size:
             return [{
                 "title": title_text,
@@ -280,6 +315,7 @@ def browse_page(url: str, max_chunk_size: int = 6000, overlap_sentences: int = 2
         sentences = re.split(r'(?<=[.!?])\s+', text_content)
         
         chunks = []
+        chunk_full_contents = []  # Store full content separately
         current_chunk = []
         current_length = 0
         min_chunk_size = max_chunk_size // 2  # Ensure chunks aren't too small
@@ -302,12 +338,22 @@ def browse_page(url: str, max_chunk_size: int = 6000, overlap_sentences: int = 2
                 chunk_text = ' '.join(current_chunk)
                 chunk_number = len(chunks) + 1
                 
+                # Store full content for later retrieval
+                chunk_full_contents.append(chunk_text)
+                
+                # Create preview using constant
+                content_preview = chunk_text[:PREVIEW_LENGTH]
+                if len(chunk_text) > PREVIEW_LENGTH:
+                    content_preview += TRUNCATION_MESSAGE
+                
                 chunks.append({
                     "title": f"{title_text} (Part {chunk_number})",
-                    "content": chunk_text,
+                    "preview": content_preview,  # Preview for relevance checking only
+                    "full_length": len(chunk_text),  # Show how much content is available
                     "url": url,
                     "chunk_id": f"{chunk_number}/TBD",  # Will update total later
-                    "instructions": f"This is part {chunk_number} of a large document. Analyze this section and combine insights with other chunks.",
+                    "status": "preview_only",  # Explicitly mark as incomplete
+                    "instructions": f"⚠️ PREVIEW ONLY - NOT COMPLETE CONTENT ⚠️\nThis is a preview of part {chunk_number} of a large document. To get the full content:\n1. Call check_chunk_relevance(chunk_id='{chunk_number}/TBD', chunk_content=preview, user_query='your query') to determine if relevant\n2. If relevant, call get_chunk_content(url='{url}', chunk_id='{chunk_number}/TBD') to get full text\n3. Use full text from get_chunk_content to answer the question",
                     "error": False
                 })
                 
@@ -325,6 +371,10 @@ def browse_page(url: str, max_chunk_size: int = 6000, overlap_sentences: int = 2
         for chunk in chunks:
             chunk_num = chunk["chunk_id"].split("/")[0]
             chunk["chunk_id"] = f"{chunk_num}/{total_chunks}"
+        
+        # Store full content in a cache for retrieval (using URL as key)
+        cache = _get_chunk_cache()
+        cache[url] = chunk_full_contents
         
         return chunks if chunks else [{
             "title": title_text,
@@ -371,6 +421,219 @@ def browse_page(url: str, max_chunk_size: int = 6000, overlap_sentences: int = 2
             "instructions": "Error occurred",
             "error": True
         }]
+
+
+@tool
+def get_chunk_content(url: str, chunk_id: str) -> Dict[str, Any]:
+    """
+    Retrieve the full content of a specific chunk from a previously browsed page.
+    Use this AFTER check_chunk_relevance has identified relevant chunks.
+    
+    This tool fetches the complete text of chunks that were initially returned 
+    as previews by browse_page to avoid token limit issues.
+    
+    Args:
+        url: The URL of the page (must match the URL from browse_page)
+        chunk_id: The chunk identifier (e.g., "2/5") from browse_page result
+        
+    Returns:
+        Dictionary with:
+        - chunk_id: The chunk identifier
+        - content: Full content of the chunk
+        - url: Source URL
+        - success: Boolean indicating if retrieval was successful
+    """
+    try:
+        # Access the cache using helper function
+        cache = _get_chunk_cache()
+        
+        # Check if we have cached content for this URL
+        if url not in cache:
+            return {
+                "chunk_id": chunk_id,
+                "content": "",
+                "url": url,
+                "success": False,
+                "error": "No cached content found for this URL. Please call browse_page first."
+            }
+        
+        # Extract chunk number
+        try:
+            chunk_num = int(chunk_id.split('/')[0])
+        except (ValueError, IndexError):
+            return {
+                "chunk_id": chunk_id,
+                "content": "",
+                "url": url,
+                "success": False,
+                "error": f"Invalid chunk_id format: {chunk_id}. Expected format like '2/5'."
+            }
+        
+        # Get the content from cache (chunks are 1-indexed)
+        cached_chunks = cache[url]
+        if chunk_num < 1 or chunk_num > len(cached_chunks):
+            return {
+                "chunk_id": chunk_id,
+                "content": "",
+                "url": url,
+                "success": False,
+                "error": f"Chunk {chunk_num} not found. Available chunks: 1-{len(cached_chunks)}"
+            }
+        
+        # Return the full content
+        full_content = cached_chunks[chunk_num - 1]  # Convert to 0-indexed
+        
+        return {
+            "chunk_id": chunk_id,
+            "content": full_content,
+            "url": url,
+            "success": True,
+            "length": len(full_content)
+        }
+        
+    except Exception as e:
+        return {
+            "chunk_id": chunk_id,
+            "content": "",
+            "url": url,
+            "success": False,
+            "error": f"Error retrieving chunk content: {str(e)}"
+        }
+
+
+@tool
+def check_chunk_relevance(chunk_id: str, chunk_content: str, user_query: str) -> Dict[str, Any]:
+    """
+    Check if a specific chunk from browse_page is relevant to the user's query.
+    This tool works with both preview content and full content.
+    Designed for parallel execution - call it on multiple chunks simultaneously
+    to leverage vLLM's multi-query batching for efficient throughput.
+    
+    Use this tool when browse_page returns multiple chunks (chunk_id like "2/5" indicates multiple chunks).
+    By checking relevance in parallel with previews, you avoid sending all full chunks to the model.
+    
+    After identifying relevant chunks, use get_chunk_content() to retrieve their full text.
+    
+    Args:
+        chunk_id: The chunk identifier (e.g., "1/5", "2/5") from browse_page result
+        chunk_content: The content to evaluate (can be preview or full content)
+        user_query: The user's original question or query
+        
+    Returns:
+        Dictionary with:
+        - chunk_id: The chunk identifier
+        - is_relevant: Boolean indicating if chunk is relevant
+        - relevance_score: Float 0.0-1.0 indicating confidence
+        - relevant_excerpts: List of relevant text excerpts if found
+        - reasoning: Brief explanation of relevance decision
+    """
+    # Configuration constants
+    RELEVANCE_THRESHOLD = 0.2  # Minimum score to consider chunk relevant
+    MAX_EXCERPTS = 3  # Maximum number of excerpts to return
+    
+    try:
+        # Simple keyword-based relevance check
+        # In production, this could use embeddings or LLM-based relevance
+        import re
+        
+        # Normalize texts for comparison
+        query_lower = user_query.lower()
+        content_lower = chunk_content.lower()
+        
+        # Special handling for structured document queries (chapters, paragraphs, sections)
+        # Look for patterns like "kapitel 1", "1 kap", "paragraf 2", "§ 2", etc.
+        structure_patterns = [
+            r'kapitel\s*(\d+)', r'kap\.?\s*(\d+)', r'(\d+)\s*kap',
+            r'paragraf\s*(\d+)', r'§\s*(\d+)', r'punkt\s*(\d+)',
+            r'avsnitt\s*(\d+)', r'stycke\s*(\d+)'
+        ]
+        
+        # Check if query is asking for a specific section/paragraph
+        is_citation_query = any(re.search(pattern, query_lower) for pattern in structure_patterns)
+        citation_boost = 0  # Initialize citation boost
+        relevant_excerpts = []  # Initialize excerpts list
+        
+        if is_citation_query:
+            # For citation queries, check if the content has matching section markers
+            for pattern in structure_patterns:
+                query_matches = re.findall(pattern, query_lower)
+                content_matches = re.findall(pattern, content_lower)
+                # If query asks for specific section numbers that appear in content
+                if query_matches and any(qm in content_matches for qm in query_matches):
+                    citation_boost = 0.5  # Strong boost for matching section numbers
+                    relevant_excerpts.append(f"Found section marker matching query in content")
+                    break
+        
+        # Extract key terms from query (simple approach)
+        # Remove common Swedish and English stop words
+        stop_words = {
+            # Swedish stop words
+            'och', 'i', 'på', 'att', 'en', 'är', 'som', 'för', 'det', 'av', 
+            'till', 'med', 'om', 'den', 'kan', 'vad', 'hur', 'när', 'vilka',
+            'från', 'citera', 'quote',  # Add citation-related words
+            # English stop words
+            'the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'is', 'of', 'and', 'or'
+        }
+        query_words = [w for w in re.findall(r'\w+', query_lower) if len(w) > 2 and w not in stop_words]
+        
+        if not query_words:
+            # If no meaningful words, consider relevant (conservative approach)
+            return {
+                "chunk_id": chunk_id,
+                "is_relevant": True,
+                "relevance_score": 0.5,
+                "relevant_excerpts": [],
+                "reasoning": "No specific keywords to match, treating as potentially relevant"
+            }
+        
+        # Count how many query terms appear in chunk
+        matches = 0
+        
+        for word in query_words:
+            if word in content_lower:
+                matches += 1
+                # Find context around the match (50 chars before and after)
+                pattern = re.compile(f'.{{0,50}}{re.escape(word)}.{{0,50}}', re.IGNORECASE)
+                match_contexts = pattern.findall(chunk_content)
+                if match_contexts:
+                    # Add first match as excerpt
+                    relevant_excerpts.append(match_contexts[0].strip())
+        
+        # Calculate relevance score
+        relevance_score = min(matches / len(query_words), 1.0) if query_words else 0.5
+        
+        # Add citation boost if applicable
+        relevance_score = min(relevance_score + citation_boost, 1.0)
+        
+        is_relevant = relevance_score > RELEVANCE_THRESHOLD
+        
+        # Deduplicate and limit excerpts
+        relevant_excerpts = list(dict.fromkeys(relevant_excerpts))[:MAX_EXCERPTS]
+        
+        reasoning = f"Found {matches}/{len(query_words)} query terms in chunk. "
+        if is_relevant:
+            reasoning += "Chunk appears relevant to the query."
+        else:
+            reasoning += "Chunk does not appear relevant to the query."
+        
+        return {
+            "chunk_id": chunk_id,
+            "is_relevant": is_relevant,
+            "relevance_score": round(relevance_score, 2),
+            "relevant_excerpts": relevant_excerpts,
+            "reasoning": reasoning
+        }
+    
+    except Exception as e:
+        # On error, be conservative and mark as relevant
+        return {
+            "chunk_id": chunk_id,
+            "is_relevant": True,
+            "relevance_score": 0.5,
+            "relevant_excerpts": [],
+            "reasoning": f"Error checking relevance: {str(e)}. Treating as potentially relevant.",
+            "error": True
+        }
 
 
 @tool
@@ -536,4 +799,4 @@ def smhi_weather_forecast(location: str) -> Dict[str, Any]:
 
 
 # Export all tools for easy access
-AVAILABLE_TOOLS = [tavily_search, duckduckgo_search, vespa_search, browse_page, smhi_weather_forecast]
+AVAILABLE_TOOLS = [tavily_search, duckduckgo_search, vespa_search, browse_page, check_chunk_relevance, get_chunk_content, smhi_weather_forecast]
