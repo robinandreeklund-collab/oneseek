@@ -1,0 +1,539 @@
+"""
+Search tools for OneSeek.ai agent
+Implements Tavily, DuckDuckGo, and Vespa search as LangGraph tools
+"""
+
+import os
+from typing import Dict, Any, List, Optional
+from langchain_core.tools import tool
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
+@tool
+def tavily_search(query: str, max_results: int = 5) -> List[Dict[str, Any]]:
+    """
+    Search the web using Tavily API - a paid, robust, and highly accurate search platform.
+    Uses advanced search depth and includes AI-generated answer summary.
+    Searches are geographically focused on Sweden for relevant local results.
+    
+    Args:
+        query: The search query
+        max_results: Maximum number of results to return (default: 5)
+        
+    Returns:
+        List of search results including AI summary and web results with title, content, URL, and score
+    """
+    try:
+        from tavily import TavilyClient
+        
+        api_key = os.getenv("TAVILY_API_KEY")
+        if not api_key:
+            return [{
+                "title": "Tavily API Key Missing",
+                "content": "TAVILY_API_KEY not configured in environment variables",
+                "url": "",
+                "error": True
+            }]
+        
+        client = TavilyClient(api_key=api_key)
+        response = client.search(
+            query=query,
+            max_results=max_results,
+            include_answer="advanced",
+            search_depth="advanced",
+            country="sweden"
+        )
+        
+        results = []
+        
+        # Include Tavily's advanced LLM-generated answer if available
+        if response.get("answer"):
+            results.append({
+                "title": "Tavily AI Summary",
+                "content": response.get("answer"),
+                "url": "",
+                "score": 1.0,
+                "is_ai_summary": True
+            })
+        
+        # Add search results
+        for item in response.get("results", []):
+            results.append({
+                "title": item.get("title", ""),
+                "content": item.get("content", ""),
+                "url": item.get("url", ""),
+                "score": item.get("score", 0.0)
+            })
+        
+        return results if results else [{
+            "title": "No Results",
+            "content": "No results found for the query",
+            "url": ""
+        }]
+    
+    except ImportError:
+        return [{
+            "title": "Tavily Not Installed",
+            "content": "tavily-python package is not installed. Install with: pip install tavily-python",
+            "url": "",
+            "error": True
+        }]
+    except Exception as e:
+        return [{
+            "title": "Tavily Search Error",
+            "content": f"Error searching with Tavily: {str(e)}",
+            "url": "",
+            "error": True
+        }]
+
+
+@tool
+def duckduckgo_search(query: str, max_results: int = 5) -> List[Dict[str, Any]]:
+    """
+    Search the web using DuckDuckGo - a free, simple, and anonymous search engine.
+    
+    Args:
+        query: The search query
+        max_results: Maximum number of results to return (default: 5)
+        
+    Returns:
+        List of search results with title, content, and URL
+    """
+    try:
+        from duckduckgo_search import DDGS
+        
+        ddgs = DDGS()
+        search_results = ddgs.text(query, max_results=max_results)
+        
+        results = []
+        for item in search_results:
+            results.append({
+                "title": item.get("title", ""),
+                "content": item.get("body", ""),
+                "url": item.get("href", ""),
+                "score": 1.0  # DuckDuckGo doesn't provide scores
+            })
+        
+        return results if results else [{
+            "title": "No Results",
+            "content": "No results found for the query",
+            "url": ""
+        }]
+    
+    except ImportError:
+        return [{
+            "title": "DuckDuckGo Not Installed",
+            "content": "duckduckgo-search package is not installed. Install with: pip install duckduckgo-search",
+            "url": "",
+            "error": True
+        }]
+    except Exception as e:
+        return [{
+            "title": "DuckDuckGo Search Error",
+            "content": f"Error searching with DuckDuckGo: {str(e)}",
+            "url": "",
+            "error": True
+        }]
+
+
+@tool
+def vespa_search(query: str, max_results: int = 6) -> List[Dict[str, Any]]:
+    """
+    Search local/cloud Vespa RAG with embeddings and hybrid searching.
+    
+    Args:
+        query: The search query
+        max_results: Maximum number of results to return (default: 6)
+        
+    Returns:
+        List of search results with title, content, and relevance score
+    """
+    try:
+        from pyvespa import Vespa
+        
+        vespa_url = os.getenv("VESPA_URL")
+        vespa_cert = os.getenv("VESPA_CERT_PATH")
+        vespa_key = os.getenv("VESPA_KEY_PATH")
+        
+        if not vespa_url or not vespa_cert or not vespa_key:
+            return [{
+                "title": "Vespa Not Configured",
+                "content": "Vespa configuration missing. Set VESPA_URL, VESPA_CERT_PATH, and VESPA_KEY_PATH",
+                "relevance": 0.0,
+                "error": True
+            }]
+        
+        # Connect to Vespa
+        vespa_app = Vespa(
+            url=vespa_url,
+            cert=vespa_cert,
+            key=vespa_key
+        )
+        
+        # Query Vespa with hybrid search
+        yql = f"""
+            select title, content from rag 
+            where userQuery() 
+            limit {max_results}
+        """
+        
+        response = vespa_app.query(
+            yql=yql,
+            query=query
+        )
+        
+        results = []
+        if hasattr(response, 'hits'):
+            for hit in response.hits:
+                results.append({
+                    "title": hit.get("fields", {}).get("title", ""),
+                    "content": hit.get("fields", {}).get("content", ""),
+                    "relevance": hit.get("relevance", 0.0),
+                    "url": ""  # Vespa results typically don't have URLs
+                })
+        
+        return results if results else [{
+            "title": "No Results",
+            "content": "No results found in Vespa",
+            "relevance": 0.0
+        }]
+    
+    except ImportError as e:
+        return [{
+            "title": "Vespa Import Error",
+            "content": f"Required packages not installed: {str(e)}",
+            "relevance": 0.0,
+            "error": True
+        }]
+    except Exception as e:
+        return [{
+            "title": "Vespa Search Error",
+            "content": f"Error searching Vespa: {str(e)}",
+            "relevance": 0.0,
+            "error": True
+        }]
+
+
+@tool
+def browse_page(url: str, max_chunk_size: int = 6000, overlap_sentences: int = 2) -> List[Dict[str, Any]]:
+    """
+    Browse and extract content from a webpage URL with automatic intelligent chunking for large pages.
+    For pages exceeding max_chunk_size, the content is split into semantic chunks with sentence-level overlap.
+    This allows the agent to process large documents in parallel for better throughput.
+    
+    Args:
+        url: The URL of the webpage to browse
+        max_chunk_size: Maximum characters per chunk (default: 6000). Chunks try to stay under this limit.
+        overlap_sentences: Number of sentences to overlap between chunks for context continuity (default: 2)
+        
+    Returns:
+        List of chunks, each with title, content, url, chunk_id, and instructions.
+        For small pages: returns single-item list.
+        For large pages: returns multiple chunks that can be processed in parallel.
+    """
+    try:
+        import requests
+        from bs4 import BeautifulSoup
+        import re
+        
+        # Add headers to avoid being blocked
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Extract title
+        title = soup.find('title')
+        title_text = title.get_text().strip() if title else "No title"
+        
+        # Remove script and style elements
+        for script in soup(["script", "style"]):
+            script.decompose()
+        
+        # Get text content
+        text = soup.get_text()
+        
+        # Clean up text - remove extra whitespace
+        lines = (line.strip() for line in text.splitlines())
+        phrases = (phrase.strip() for line in lines for phrase in line.split("  "))
+        text_content = ' '.join(phrase for phrase in phrases if phrase)
+        
+        # If content fits within max_chunk_size, return as single chunk
+        if len(text_content) <= max_chunk_size:
+            return [{
+                "title": title_text,
+                "content": text_content,
+                "url": url,
+                "chunk_id": "1/1",
+                "instructions": "This is the complete page content.",
+                "error": False
+            }]
+        
+        # Large page: split into semantic chunks with overlap
+        # Split text into sentences for semantic chunking
+        sentences = re.split(r'(?<=[.!?])\s+', text_content)
+        
+        chunks = []
+        current_chunk = []
+        current_length = 0
+        min_chunk_size = max_chunk_size // 2  # Ensure chunks aren't too small
+        
+        for i, sentence in enumerate(sentences):
+            sentence_length = len(sentence)
+            
+            # Add sentence to current chunk
+            current_chunk.append(sentence)
+            current_length += sentence_length + 1  # +1 for space
+            
+            # Check if we should finalize this chunk
+            should_finalize = (
+                current_length >= min_chunk_size and 
+                current_length + sentence_length > max_chunk_size
+            ) or i == len(sentences) - 1
+            
+            if should_finalize and current_chunk:
+                # Create chunk text
+                chunk_text = ' '.join(current_chunk)
+                chunk_number = len(chunks) + 1
+                
+                chunks.append({
+                    "title": f"{title_text} (Part {chunk_number})",
+                    "content": chunk_text,
+                    "url": url,
+                    "chunk_id": f"{chunk_number}/TBD",  # Will update total later
+                    "instructions": f"This is part {chunk_number} of a large document. Analyze this section and combine insights with other chunks.",
+                    "error": False
+                })
+                
+                # Prepare next chunk with overlap
+                # Keep last N sentences for context
+                if i < len(sentences) - 1:  # Not the last sentence
+                    current_chunk = current_chunk[-overlap_sentences:] if len(current_chunk) > overlap_sentences else current_chunk
+                    current_length = sum(len(s) + 1 for s in current_chunk)
+                else:
+                    current_chunk = []
+                    current_length = 0
+        
+        # Update chunk_id with actual total count
+        total_chunks = len(chunks)
+        for chunk in chunks:
+            chunk_num = chunk["chunk_id"].split("/")[0]
+            chunk["chunk_id"] = f"{chunk_num}/{total_chunks}"
+        
+        return chunks if chunks else [{
+            "title": title_text,
+            "content": "Content extraction resulted in empty text.",
+            "url": url,
+            "chunk_id": "1/1",
+            "instructions": "Page appears to be empty or content could not be extracted.",
+            "error": False
+        }]
+    
+    except ImportError:
+        return [{
+            "title": "Missing Dependencies",
+            "content": "Required packages (requests, beautifulsoup4) not installed. Run: pip install requests beautifulsoup4",
+            "url": url,
+            "chunk_id": "1/1",
+            "instructions": "Error occurred",
+            "error": True
+        }]
+    except requests.exceptions.Timeout:
+        return [{
+            "title": "Timeout Error",
+            "content": f"Request to {url} timed out after 10 seconds",
+            "url": url,
+            "chunk_id": "1/1",
+            "instructions": "Error occurred",
+            "error": True
+        }]
+    except requests.exceptions.HTTPError as e:
+        return [{
+            "title": "HTTP Error",
+            "content": f"HTTP error occurred: {str(e)}",
+            "url": url,
+            "chunk_id": "1/1",
+            "instructions": "Error occurred",
+            "error": True
+        }]
+    except Exception as e:
+        return [{
+            "title": "Browse Error",
+            "content": f"Error browsing page: {str(e)}",
+            "url": url,
+            "chunk_id": "1/1",
+            "instructions": "Error occurred",
+            "error": True
+        }]
+
+
+@tool
+def smhi_weather_forecast(location: str) -> Dict[str, Any]:
+    """
+    Get real-time weather forecast from SMHI (Swedish Meteorological and Hydrological Institute) for any location in Sweden.
+    SMHI is the official weather authority in Sweden and provides accurate, authoritative forecasts.
+    
+    Args:
+        location: Swedish city or location name (e.g., "Stockholm", "Göteborg", "Tidaholm")
+        
+    Returns:
+        Dictionary with forecast information including temperature, weather description, and source URL
+    """
+    try:
+        import requests
+        from datetime import datetime
+        
+        # Simplified coordinate lookup for major Swedish cities
+        # In production, you'd use a geocoding service
+        city_coords = {
+            "stockholm": (59.3293, 18.0686),
+            "göteborg": (57.7089, 11.9746),
+            "gothenburg": (57.7089, 11.9746),
+            "malmö": (55.6050, 13.0038),
+            "malmo": (55.6050, 13.0038),
+            "uppsala": (59.8586, 17.6389),
+            "västerås": (59.6099, 16.5448),
+            "vasteras": (59.6099, 16.5448),
+            "örebro": (59.2753, 15.2134),
+            "orebro": (59.2753, 15.2134),
+            "linköping": (58.4108, 15.6214),
+            "linkoping": (58.4108, 15.6214),
+            "helsingborg": (56.0465, 12.6945),
+            "jönköping": (57.7826, 14.1618),
+            "jonkoping": (57.7826, 14.1618),
+            "norrköping": (58.5877, 16.1924),
+            "norrkoping": (58.5877, 16.1924),
+            "lund": (55.7047, 13.1910),
+            "umeå": (63.8258, 20.2630),
+            "umea": (63.8258, 20.2630),
+            "gävle": (60.6749, 17.1413),
+            "gavle": (60.6749, 17.1413),
+            "borås": (57.7210, 12.9401),
+            "boras": (57.7210, 12.9401),
+            "eskilstuna": (59.3667, 16.5077),
+            "södertälje": (59.1955, 17.6256),
+            "sodertalje": (59.1955, 17.6256),
+            "karlstad": (59.3793, 13.5036),
+            "täby": (59.4439, 18.0687),
+            "taby": (59.4439, 18.0687),
+            "växjö": (56.8777, 14.8091),
+            "vaxjo": (56.8777, 14.8091),
+            "halmstad": (56.6745, 12.8577),
+            "sundsvall": (62.3908, 17.3069),
+            "luleå": (65.5848, 22.1547),
+            "lulea": (65.5848, 22.1547),
+            "trollhättan": (58.2837, 12.2886),
+            "trollhattan": (58.2837, 12.2886),
+            "östersund": (63.1767, 14.6361),
+            "ostersund": (63.1767, 14.6361),
+            "borlänge": (60.4858, 15.4362),
+            "borlange": (60.4858, 15.4362),
+            "falun": (60.6066, 15.6263),
+            "kalmar": (56.6634, 16.3567),
+            "kristianstad": (56.0294, 14.1567),
+            "karlskrona": (56.1612, 15.5869),
+            "skellefteå": (64.7507, 20.9527),
+            "skelleftea": (64.7507, 20.9527),
+            "tidaholm": (58.1814, 13.9570),
+        }
+        
+        # Normalize location name
+        location_lower = location.lower().strip()
+        
+        # Try to find coordinates
+        lat, lon = city_coords.get(location_lower, (59.3293, 18.0686))  # Default to Stockholm
+        
+        # SMHI API endpoint for point forecast
+        url = f"https://opendata-download-metfcst.smhi.se/api/category/pmp3g/version/2/geotype/point/lon/{lon}/lat/{lat}/data.json"
+        
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        # Extract forecast data
+        if "timeSeries" not in data or not data["timeSeries"]:
+            return {
+                "title": "SMHI Data Unavailable",
+                "content": f"Weather forecast data not available for {location}",
+                "url": "https://opendata.smhi.se",
+                "error": True
+            }
+        
+        # Get the next few hours of forecast
+        forecasts = []
+        for i, time_point in enumerate(data["timeSeries"][:8]):  # Next 8 hours
+            valid_time = time_point.get("validTime", "")
+            parameters = {p["name"]: p["values"][0] for p in time_point.get("parameters", [])}
+            
+            temp = parameters.get("t", "N/A")  # Temperature
+            weather_symbol = parameters.get("Wsymb2", 1)  # Weather symbol code
+            
+            # Simplified weather description mapping
+            weather_descriptions = {
+                1: "Klart",
+                2: "Halvklart",
+                3: "Molnigt",
+                4: "Mulet",
+                5: "Lätt regn",
+                6: "Regn",
+                7: "Kraftigt regn",
+                8: "Lätt snö",
+                9: "Snö",
+                10: "Kraftig snö",
+                11: "Duggregn"
+            }
+            
+            weather_desc = weather_descriptions.get(int(weather_symbol), "Varierande")
+            
+            # Format time
+            try:
+                dt = datetime.fromisoformat(valid_time.replace("Z", "+00:00"))
+                time_str = dt.strftime("%H:%M")
+            except:
+                time_str = valid_time
+            
+            forecasts.append(f"{time_str}: {temp}°C, {weather_desc}")
+        
+        forecast_text = "\n".join(forecasts[:4])  # Show next 4 hours
+        
+        content = f"Väderprogn för {location.title()} från SMHI:\n\n{forecast_text}\n\nKälla: Sveriges Meteorologiska och Hydrologiska Institut (SMHI)"
+        
+        return {
+            "title": f"SMHI Väderprognos - {location.title()}",
+            "content": content,
+            "url": "https://opendata.smhi.se",
+            "error": False
+        }
+    
+    except requests.exceptions.Timeout:
+        return {
+            "title": "SMHI Timeout",
+            "content": f"Request to SMHI API timed out. Please try again.",
+            "url": "https://opendata.smhi.se",
+            "error": True
+        }
+    except requests.exceptions.HTTPError as e:
+        return {
+            "title": "SMHI API Error",
+            "content": f"Could not retrieve weather data from SMHI: {str(e)}",
+            "url": "https://opendata.smhi.se",
+            "error": True
+        }
+    except Exception as e:
+        return {
+            "title": "Weather Forecast Error",
+            "content": f"Error getting weather forecast: {str(e)}",
+            "url": "https://opendata.smhi.se",
+            "error": True
+        }
+
+
+# Export all tools for easy access
+AVAILABLE_TOOLS = [tavily_search, duckduckgo_search, vespa_search, browse_page, smhi_weather_forecast]
