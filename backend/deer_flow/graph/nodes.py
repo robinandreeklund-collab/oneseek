@@ -43,6 +43,14 @@ from .utils import (
 logger = logging.getLogger(__name__)
 
 
+def is_json_like(content: str) -> bool:
+    """Check if content looks like JSON (starts with { or [)."""
+    if not content:
+        return False
+    stripped = content.strip()
+    return stripped.startswith('{') or stripped.startswith('[')
+
+
 @tool
 def handoff_to_planner(
     research_topic: Annotated[str, "The topic of the research task to be handed off."],
@@ -338,24 +346,24 @@ def planner_node(
         content_after = full_response[think_end + len('</think>'):].strip()
         
         # If content after is empty or doesn't look like JSON, try content inside <think> tags
-        if not content_after or (not content_after.startswith('{') and not content_after.startswith('[')):
+        if not is_json_like(content_after):
             # Extract content between <think> and </think>
             content_inside = full_response[think_start + len('<think>'):think_end].strip()
             
             # Use content inside if it looks like valid JSON
-            if content_inside and (content_inside.startswith('{') or content_inside.startswith('[')):
+            if is_json_like(content_inside):
                 full_response = content_inside
                 logger.debug(f"Extracted JSON from inside <think> tags: {full_response[:100]}...")
             else:
                 # Fall back to content after even if empty
                 full_response = content_after
-                logger.debug(f"Extracted JSON after <think> tags: {full_response[:100] if full_response else '(empty)'}")
+                logger.debug(f"Extracted JSON after <think> tags (empty or invalid): {full_response[:100] if full_response else '(empty)'}...")
         else:
             full_response = content_after
             logger.debug(f"Extracted JSON after <think> tags: {full_response[:100]}...")
 
     # Validate explicitly that response content is valid JSON before proceeding to parse it
-    if not full_response.strip().startswith('{') and not full_response.strip().startswith('['):
+    if not is_json_like(full_response):
         logger.warning("Planner response does not appear to be valid JSON")
         if plan_iterations > 0:
             return Command(
