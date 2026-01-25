@@ -19,10 +19,9 @@
     "title": "Oneseek"
   },
   "hero": {
-    "title": "Djupgående Forskning",
-    "subtitle": "vid Dina Fingertoppar",
-    "description": "Möt Oneseek, din personliga assistent för djupgående forskning. Med kraftfulla verktyg som sökmotorer, webbskrapor, Python och MCP-tjänster levererar den omedelbara insikter, omfattande rapporter och till och med fängslande podcasts.",
-    "footnote": "* DEER står för Deep Exploration and Efficient Research."
+    "title": "Kunskap Utan Fluff.",
+    "subtitle": "Insyn Utan Gränser.",
+    "description": "Möt OneSeek, din hyperintelligenta forskningsmotor från framtiden. Den kombinerar kraftfull sökteknik med ett avancerat debatt‑ och jämförelseläge där flera AI‑modeller duellerar för att ge dig de mest robusta insikterna. All aktivitet säkras i en blockchain‑ledger och du förblir helt anonym. AI med insyn, beslut med ansvar — levererat som blixtsnabba svar, djupgående analyser och visionära podcasts."
   },
   "settings": {
     "title": "Oneseek Inställningar",
@@ -95,8 +94,8 @@
     }
   },
   "footer": {
-    "quote": "Ursprung från Open Source, ge tillbaka till Open Source.",
-    "license": "Licensierad under MIT-licens",
+    "quote": "AI med insyn, beslut med ansvar",
+    "license": "Copyright Oneseek 2026",
     "copyright": "Oneseek"
   },
   "chat": {

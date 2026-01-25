@@ -9,7 +9,6 @@ import { Jumbotron } from "./landing/components/jumbotron";
 import { Ray } from "./landing/components/ray";
 import { CaseStudySection } from "./landing/sections/case-study-section";
 import { CoreFeatureSection } from "./landing/sections/core-features-section";
-import { JoinCommunitySection } from "./landing/sections/join-community-section";
 import { MultiAgentSection } from "./landing/sections/multi-agent-section";
 
 export default function HomePage() {
@@ -21,7 +20,6 @@ export default function HomePage() {
         <CaseStudySection />
         <MultiAgentSection />
         <CoreFeatureSection />
-        <JoinCommunitySection />
       </main>
       <Footer />
       <Ray />
