@@ -6,6 +6,8 @@ import path from "path";
 
 import { NextResponse } from "next/server";
 
+// Note: Backend directory structure uses 'deer_flow' internally
+// Frontend displays 'Oneseek' branding
 const PROMPTS_DIR = path.join(process.cwd(), "..", "backend", "deer_flow", "prompts");
 
 interface PromptFile {
