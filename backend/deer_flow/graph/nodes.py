@@ -59,15 +59,16 @@ def strip_think_tags(content: str, expect_json: bool = False) -> str:
     """
     Strip <think> tags from content, intelligently handling different placements.
     
-    This function handles three cases:
+    This function handles multiple cases:
     1. Standard case: Content after </think> tag (e.g., "<think>...</think>actual content")
     2. Edge case: Content inside <think> tags (e.g., "<think>actual content</think>")
-    3. No tags: Returns content as-is
+    3. Edge case: Content before <think> tag (e.g., "actual content<think>...</think>")
+    4. No tags: Returns content as-is
+    5. Only tags with no content: Returns empty string
     
     For JSON responses (when expect_json=True), it tries content after </think> first,
     then falls back to content inside tags if the after-content is empty or invalid JSON.
-    For non-JSON responses, it uses content after </think> if available, otherwise
-    uses content inside tags.
+    For non-JSON responses, it tries content after, before, then inside tags.
     
     Args:
         content: The content potentially containing <think> tags
@@ -87,9 +88,10 @@ def strip_think_tags(content: str, expect_json: bool = False) -> str:
         # Invalid tag ordering, return content as-is
         return content
     
-    # Extract both potential content locations
-    content_after = content[think_end + len('</think>'):].strip()
+    # Extract all potential content locations
+    content_before = content[:think_start].strip()
     content_inside = content[think_start + len('<think>'):think_end].strip()
+    content_after = content[think_end + len('</think>'):].strip()
     
     if expect_json:
         # For JSON: prefer after, but fall back to inside if after is not valid JSON
@@ -97,16 +99,20 @@ def strip_think_tags(content: str, expect_json: bool = False) -> str:
             return content_after
         if content_inside and is_json_like(content_inside):
             return content_inside
+        if content_before and is_json_like(content_before):
+            return content_before
         # Fallback to after even if empty/invalid (will be caught by validation)
         return content_after
     else:
-        # For non-JSON: prefer after, fall back to inside
+        # For non-JSON: prefer after, then before, then inside
         if content_after:
             return content_after
+        if content_before:
+            return content_before
         if content_inside:
             return content_inside
-        # Fallback: return original content
-        return content
+        # Fallback: return empty string to avoid showing just the tags
+        return ""
 
 
 @tool
