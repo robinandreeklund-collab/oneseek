@@ -21,8 +21,7 @@
   "hero": {
     "title": "Deep Research",
     "subtitle": "at Your Fingertips",
-    "description": "Meet Oneseek, your personal Deep Research assistant. With powerful tools like search engines, web crawlers, Python and MCP services, it delivers instant insights, comprehensive reports, and even captivating podcasts.",
-    "footnote": "* DEER stands for Deep Exploration and Efficient Research."
+    "description": "Meet Oneseek, your personal Deep Research assistant. With powerful tools like search engines, web crawlers, Python and MCP services, it delivers instant insights, comprehensive reports, and even captivating podcasts."
   },
   "settings": {
     "title": "Oneseek Settings",
@@ -95,8 +94,8 @@
     }
   },
   "footer": {
-    "quote": "Originated from Open Source, give back to Open Source.",
-    "license": "Licensed under MIT License",
+    "quote": "AI with insight, decision with responsibility",
+    "license": "Copyright Oneseek 2026",
     "copyright": "Oneseek"
   },
   "chat": {

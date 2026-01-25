@@ -18,7 +18,7 @@ export function Jumbotron() {
   return (
     <section className="flex h-[95vh] w-full flex-col items-center justify-center pb-15">
       <FlickeringGrid
-        id="deer-hero-bg"
+        id="oneseek-hero-bg"
         className={`absolute inset-0 z-0 [mask-image:radial-gradient(800px_circle_at_center,white,transparent)]`}
         squareSize={4}
         gridGap={4}
@@ -27,8 +27,8 @@ export function Jumbotron() {
         flickerChance={0.1}
       />
       <FlickeringGrid
-        id="deer-hero"
-        className="absolute inset-0 z-0 translate-y-[2vh] mask-[url(/images/deer-hero.svg)] mask-size-[100vw] mask-center mask-no-repeat md:mask-size-[72vh]"
+        id="oneseek-hero"
+        className="absolute inset-0 z-0 translate-y-[2vh] mask-[url(/images/oneseek-hero.svg)] mask-size-[100vw] mask-center mask-no-repeat md:mask-size-[72vh]"
         squareSize={3}
         gridGap={6}
         color="#60A5FA"
@@ -60,26 +60,7 @@ export function Jumbotron() {
               {tCommon('getStarted')} <ChevronRight />
             </Link>
           </Button>
-          {!env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY && (
-            <Button
-              className="w-42 text-lg"
-              size="lg"
-              variant="outline"
-              asChild
-            >
-              <Link
-                href="https://github.com/bytedance/deer-flow"
-                target="_blank"
-              >
-                <GithubFilled />
-                {tCommon('learnMore')}
-              </Link>
-            </Button>
-          )}
         </div>
-      </div>
-      <div className="absolute bottom-8 flex text-xs opacity-50">
-        <p>{t('footnote')}</p>
       </div>
     </section>
   );
