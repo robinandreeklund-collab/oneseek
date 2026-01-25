@@ -1474,61 +1474,26 @@ async def analyst_node(
 
 async def ai_comparison_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["reporter"]]:
+) -> Command[Literal["research_team"]]:
     """
-    AI Comparison node that runs parallel queries across multiple AI models.
+    AI Comparison node that runs sequential queries across multiple AI models.
     Implements Debate OS functionality for DeerFlow with real-time streaming.
-    Works like planner_node - directly invokes agent and goes to reporter.
+    Uses _setup_and_execute_agent_step like researcher_node for proper streaming.
     """
     logger.info("AI Comparison node starting - Debate OS mode")
+    logger.info("Using _setup_and_execute_agent_step for real-time streaming (like researcher)")
     
-    configurable = Configuration.from_runnable_config(config)
+    # Get AI comparison tools
     tools = get_ai_comparison_tools()
-    locale = state.get("locale", "en-US")
     
-    # Create agent with AI comparison tools using standard pattern
-    llm_token_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP.get("ai_comparison", "basic"))
-    pre_model_hook = partial(ContextManager(llm_token_limit, 3).compress_messages)
-    agent = create_agent(
-        "ai_comparison",
+    logger.info(f"AI comparison tools count: {len(tools)}")
+    logger.debug(f"AI comparison tools: {[tool.name if hasattr(tool, 'name') else str(tool) for tool in tools]}")
+    
+    # Use the same execution pattern as researcher_node for proper streaming
+    # This ensures tool calls stream to frontend in real-time
+    return await _setup_and_execute_agent_step(
+        state,
+        config,
         "ai_comparison",
         tools,
-        "ai_comparison",
-        pre_model_hook,
-        interrupt_before_tools=configurable.interrupt_before_tools,
-        locale=locale,
-    )
-    
-    # Prepare messages for agent (like planner_node does)
-    messages = apply_prompt_template("ai_comparison", state, configurable, locale)
-    
-    # Invoke agent directly (like planner_node does)
-    # The agent will use tools and stream results automatically through LangGraph
-    logger.info("Invoking AI comparison agent...")
-    result = await agent.ainvoke({"messages": messages}, config)
-    
-    # Extract the agent's response
-    agent_messages = result.get("messages", [])
-    comparison_results = {}
-    
-    # Store the comparison results in state
-    if agent_messages:
-        # The last message should be the agent's final response
-        final_message = agent_messages[-1]
-        comparison_results["agent_response"] = getattr(final_message, "content", "")
-        comparison_results["tool_calls"] = [
-            msg for msg in agent_messages 
-            if hasattr(msg, "tool_calls") and msg.tool_calls
-        ]
-    
-    logger.info("AI comparison completed successfully")
-    
-    # Return Command to go to reporter (like planner_node does)
-    return Command(
-        update={
-            **preserve_state_meta_fields(state),
-            "comparison_results": comparison_results,
-            "messages": state.get("messages", []) + agent_messages,
-        },
-        goto="reporter",
     )
