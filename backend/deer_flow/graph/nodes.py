@@ -42,6 +42,10 @@ from .utils import (
 
 logger = logging.getLogger(__name__)
 
+# Think tag constants for consistent handling
+THINK_OPEN_TAG = '<think>'
+THINK_CLOSE_TAG = '</think>'
+
 
 def is_json_like(content: str) -> bool:
     """
@@ -77,11 +81,11 @@ def strip_think_tags(content: str, expect_json: bool = False) -> str:
     Returns:
         Content with <think> tags stripped appropriately
     """
-    if not content or '<think>' not in content or '</think>' not in content:
+    if not content or THINK_OPEN_TAG not in content or THINK_CLOSE_TAG not in content:
         return content
     
-    think_start = content.find('<think>')
-    think_end = content.find('</think>')
+    think_start = content.find(THINK_OPEN_TAG)
+    think_end = content.find(THINK_CLOSE_TAG)
     
     # Validate that tags are in correct order
     if think_start >= think_end or think_start < 0 or think_end < 0:
@@ -90,8 +94,8 @@ def strip_think_tags(content: str, expect_json: bool = False) -> str:
     
     # Extract all potential content locations
     content_before = content[:think_start].strip()
-    content_inside = content[think_start + len('<think>'):think_end].strip()
-    content_after = content[think_end + len('</think>'):].strip()
+    content_inside = content[think_start + len(THINK_OPEN_TAG):think_end].strip()
+    content_after = content[think_end + len(THINK_CLOSE_TAG):].strip()
     
     if expect_json:
         # For JSON: prefer after, but fall back to inside if after is not valid JSON
@@ -112,6 +116,7 @@ def strip_think_tags(content: str, expect_json: bool = False) -> str:
         if content_inside:
             return content_inside
         # Fallback: return empty string to avoid showing just the tags
+        logger.warning(f"strip_think_tags: No valid content found outside or inside think tags. Original content length: {len(content)}")
         return ""
 
 
