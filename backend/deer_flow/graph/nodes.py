@@ -1478,22 +1478,54 @@ async def ai_comparison_node(
     """
     AI Comparison node that runs sequential queries across multiple AI models.
     Implements Debate OS functionality for DeerFlow with real-time streaming.
-    Uses _setup_and_execute_agent_step like researcher_node for proper streaming.
+    
+    Unlike researcher/coder which execute plan steps, AI comparison is a standalone
+    agent that invokes tools directly (like planner but WITH tools).
     """
     logger.info("AI Comparison node starting - Debate OS mode")
-    logger.info("Using _setup_and_execute_agent_step for real-time streaming (like researcher)")
+    
+    configurable = Configuration.from_runnable_config(config)
     
     # Get AI comparison tools
     tools = get_ai_comparison_tools()
-    
     logger.info(f"AI comparison tools count: {len(tools)}")
-    logger.debug(f"AI comparison tools: {[tool.name if hasattr(tool, 'name') else str(tool) for tool in tools]}")
     
-    # Use the same execution pattern as researcher_node for proper streaming
-    # This ensures tool calls stream to frontend in real-time
-    return await _setup_and_execute_agent_step(
-        state,
-        config,
+    # Get locale from state
+    locale = state.get("locale", "en-US")
+    
+    # Prepare messages using the agent prompt
+    messages = apply_prompt_template("ai_comparison", state, configurable, locale)
+    
+    # Create agent with tools (enables streaming of tool calls)
+    llm_token_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["ai_comparison"])
+    pre_model_hook = partial(ContextManager(llm_token_limit, 3).compress_messages)
+    
+    agent = create_agent(
+        "ai_comparison",
         "ai_comparison",
         tools,
+        "ai_comparison",
+        pre_model_hook,
+        interrupt_before_tools=configurable.interrupt_before_tools,
+        locale=locale,
+    )
+    
+    logger.info("AI comparison agent created, invoking with tools")
+    
+    # Invoke agent - tool calls will stream to frontend automatically
+    result = await agent.ainvoke({"messages": messages}, config)
+    
+    logger.info("AI comparison agent completed")
+    logger.debug(f"Agent result keys: {result.keys() if isinstance(result, dict) else 'not a dict'}")
+    
+    # Extract messages from result
+    result_messages = result.get("messages", []) if isinstance(result, dict) else []
+    
+    # Return to research_team which will route to reporter
+    return Command(
+        update={
+            **preserve_state_meta_fields(state),
+            "messages": result_messages,
+        },
+        goto="research_team"
     )
