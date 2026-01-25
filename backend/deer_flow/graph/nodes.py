@@ -1509,7 +1509,7 @@ async def ai_comparison_node(
                         "error": "No user query found",
                         "status": "failed",
                     },
-                    "messages": [HumanMessage(content="Error: No user query found for AI comparison", name="ai_comparison")],
+                    "messages": [AIMessage(content="Error: No user query found for AI comparison", name="ai_comparison")],
                     "goto": "reporter",
                 }
             )
@@ -1529,7 +1529,7 @@ async def ai_comparison_node(
         
         # Initial message
         progress_messages.append(
-            HumanMessage(
+            AIMessage(
                 content="🔍 **AI Comparison Started**\n\nQuerying multiple AI models in parallel...",
                 name="ai_comparison"
             )
@@ -1537,7 +1537,7 @@ async def ai_comparison_node(
         
         # Step 1: Query all models in parallel
         progress_messages.append(
-            HumanMessage(
+            AIMessage(
                 content="⚡ **Querying AI Models**\n\nSending query to GPT-3.5, Gemini 2.5 Flash, DeepSeek, Grok-4, and OneSeek Local...",
                 name="ai_comparison"
             )
@@ -1557,12 +1557,12 @@ async def ai_comparison_node(
                 result_summary += f"- ✗ {response['display_name']}: {response['error'][:100]}\n"
         
         progress_messages.append(
-            HumanMessage(content=result_summary, name="ai_comparison")
+            AIMessage(content=result_summary, name="ai_comparison")
         )
         
         # Step 2: Analyze with fact-checking
         progress_messages.append(
-            HumanMessage(
+            AIMessage(
                 content="🔎 **Fact-Checking Analysis**\n\nAnalyzing responses with web search and RAG tools...",
                 name="ai_comparison"
             )
@@ -1571,7 +1571,7 @@ async def ai_comparison_node(
         
         sources_count = len(analysis.get("sources", []))
         progress_messages.append(
-            HumanMessage(
+            AIMessage(
                 content=f"📚 **Sources Found**: {sources_count} sources retrieved for fact-checking",
                 name="ai_comparison"
             )
@@ -1579,7 +1579,7 @@ async def ai_comparison_node(
         
         # Step 3: Run meta-agents
         progress_messages.append(
-            HumanMessage(
+            AIMessage(
                 content="🧠 **Meta-Agent Analysis**\n\nRunning parallel meta-agents (Counterfactual, Robustness, Consistency, Truth-Pressure)...",
                 name="ai_comparison"
             )
@@ -1588,7 +1588,7 @@ async def ai_comparison_node(
         
         successful_meta = sum(1 for v in meta_results.values() if v.get("success"))
         progress_messages.append(
-            HumanMessage(
+            AIMessage(
                 content=f"🔬 **Meta-Analysis Complete**: {successful_meta}/4 meta-agents completed successfully",
                 name="ai_comparison"
             )
@@ -1596,7 +1596,7 @@ async def ai_comparison_node(
         
         # Step 4: Synthesize
         progress_messages.append(
-            HumanMessage(
+            AIMessage(
                 content="🎯 **Synthesizing Optimal Answer**\n\nCombining insights from all models...",
                 name="ai_comparison"
             )
@@ -1606,7 +1606,7 @@ async def ai_comparison_node(
         )
         
         progress_messages.append(
-            HumanMessage(
+            AIMessage(
                 content="✨ **AI Comparison Complete**\n\nSynthesis ready. Generating final report...",
                 name="ai_comparison"
             )
@@ -1642,7 +1642,7 @@ async def ai_comparison_node(
                     "status": "failed",
                 },
                 "messages": [
-                    HumanMessage(
+                    AIMessage(
                         content=f"❌ **AI Comparison Failed**\n\nError: {str(e)}",
                         name="ai_comparison"
                     )
