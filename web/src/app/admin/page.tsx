@@ -3,7 +3,7 @@
 
 "use client";
 
-import { FileTextIcon, SettingsIcon } from "@radix-ui/react-icons";
+import { FileTextIcon, GearIcon } from "@radix-ui/react-icons";
 import Link from "next/link";
 
 export default function AdminPage() {
@@ -37,7 +37,7 @@ export default function AdminPage() {
         <div className="bg-card flex flex-col gap-4 rounded-lg border p-6 opacity-50">
           <div className="flex items-center gap-3">
             <div className="bg-primary/10 text-primary flex size-12 items-center justify-center rounded-lg">
-              <SettingsIcon className="size-6" />
+              <GearIcon className="size-6" />
             </div>
             <div>
               <h2 className="text-lg font-semibold">Systeminställningar</h2>
