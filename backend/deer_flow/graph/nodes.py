@@ -1478,7 +1478,7 @@ async def ai_comparison_node(
     """
     AI Comparison node that runs parallel queries across multiple AI models.
     Implements Debate OS functionality for DeerFlow with real-time streaming.
-    Uses standard agent pattern for consistent streaming behavior.
+    Works like planner_node - directly invokes agent and goes to reporter.
     """
     logger.info("AI Comparison node starting - Debate OS mode")
     
@@ -1499,11 +1499,36 @@ async def ai_comparison_node(
         locale=locale,
     )
     
-    # Execute agent using standard execution flow (like researcher/coder)
-    result = await _execute_agent_step(state, agent, "ai_comparison", config)
+    # Prepare messages for agent (like planner_node does)
+    messages = apply_prompt_template("ai_comparison", state, configurable, locale)
     
-    # Convert result to go to reporter instead of research_team
+    # Invoke agent directly (like planner_node does)
+    # The agent will use tools and stream results automatically through LangGraph
+    logger.info("Invoking AI comparison agent...")
+    result = await agent.ainvoke({"messages": messages}, config)
+    
+    # Extract the agent's response
+    agent_messages = result.get("messages", [])
+    comparison_results = {}
+    
+    # Store the comparison results in state
+    if agent_messages:
+        # The last message should be the agent's final response
+        final_message = agent_messages[-1]
+        comparison_results["agent_response"] = getattr(final_message, "content", "")
+        comparison_results["tool_calls"] = [
+            msg for msg in agent_messages 
+            if hasattr(msg, "tool_calls") and msg.tool_calls
+        ]
+    
+    logger.info("AI comparison completed successfully")
+    
+    # Return Command to go to reporter (like planner_node does)
     return Command(
-        update=result.update,
+        update={
+            **preserve_state_meta_fields(state),
+            "comparison_results": comparison_results,
+            "messages": state.get("messages", []) + agent_messages,
+        },
         goto="reporter",
     )
