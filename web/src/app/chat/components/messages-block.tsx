@@ -4,7 +4,8 @@
 import { motion } from "framer-motion";
 import { FastForward, Play } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { RainbowText } from "~/components/deer-flow/rainbow-text";
 import { Button } from "~/components/ui/button";
@@ -29,6 +30,7 @@ import { Welcome } from "./welcome";
 
 export function MessagesBlock({ className }: { className?: string }) {
   const t = useTranslations("chat.messages");
+  const searchParams = useSearchParams();
   const messageIds = useMessageIds();
   const messageCount = messageIds.length;
   const responding = useStore((state) => state.responding);
@@ -37,6 +39,8 @@ export function MessagesBlock({ className }: { className?: string }) {
   const [replayStarted, setReplayStarted] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const [feedback, setFeedback] = useState<{ option: Option } | null>(null);
+  const [initialQueryProcessed, setInitialQueryProcessed] = useState(false);
+  
   const handleSend = useCallback(
     async (
       message: string,
@@ -85,6 +89,16 @@ export function MessagesBlock({ className }: { className?: string }) {
     setFastForwarding(!fastForwarding);
     fastForwardReplay(!fastForwarding);
   }, [fastForwarding]);
+  
+  // Handle initial query parameter from landing page
+  useEffect(() => {
+    const query = searchParams?.get("q");
+    if (query && !initialQueryProcessed && !isReplay && messageCount === 0) {
+      setInitialQueryProcessed(true);
+      void handleSend(query);
+    }
+  }, [searchParams, initialQueryProcessed, isReplay, messageCount, handleSend]);
+  
   return (
     <div className={cn("flex h-full flex-col", className)}>
       {responding || messageCount !== 0 || isReplay ? (
