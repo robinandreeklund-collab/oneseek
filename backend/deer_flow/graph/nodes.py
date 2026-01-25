@@ -321,10 +321,7 @@ def planner_node(
     full_response = ""
     if AGENT_LLM_MAP["planner"] == "basic" and not configurable.enable_deep_thinking:
         response = llm.invoke(messages)
-        if hasattr(response, "model_dump_json"):
-            full_response = response.model_dump_json(indent=4, exclude_none=True)
-        else:
-            full_response = get_message_content(response) or ""
+        full_response = get_message_content(response) or ""
     else:
         response = llm.stream(messages)
         for chunk in response:
