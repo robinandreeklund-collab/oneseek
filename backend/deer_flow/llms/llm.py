@@ -70,7 +70,7 @@ ALLOWED_LLM_CONFIG_KEYS = {
 
 def _get_config_file_path() -> str:
     """Get the path to the configuration file."""
-    return str((Path(__file__).parent.parent.parent / "conf.yaml").resolve())
+    return str((Path(__file__).parent.parent.parent.parent / "conf.yaml").resolve())
 
 
 def _get_llm_type_config_keys() -> dict[str, str]:
