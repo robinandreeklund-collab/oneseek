@@ -22,12 +22,12 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# Windows-specific event loop fix for asyncio compatibility
-# The ProactorEventLoopPolicy provides better async I/O support on Windows
-# and fixes issues with LangGraph async execution in DeerFlow
+# Windows-specific event loop fix for asyncio compatibility with LangChain
+# LangChain uses ThreadPoolExecutor with run_in_executor for sync operations
+# WindowsSelectorEventLoopPolicy is required for proper threading support
 if sys.platform == 'win32':
     logger.info("Setting Windows event loop policy for asyncio")
-    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
 def handle_shutdown(signum, frame):
