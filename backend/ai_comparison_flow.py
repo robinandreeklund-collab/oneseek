@@ -4,8 +4,8 @@
 """
 AI Comparison Flow - Debate OS Integration for DeerFlow
 
-Implements parallel querying of multiple AI models (GPT-4o, Gemini 1.5 Pro, 
-DeepSeek-chat, Grok-beta, OneSeek local) with analysis, fact-checking, and synthesis.
+Implements parallel querying of multiple AI models (GPT-3.5, Gemini 2.5 Flash, 
+DeepSeek-chat, Grok-4 Fast Reasoning, OneSeek local) with analysis, fact-checking, and synthesis.
 Uses the same deep research tools and techniques as DeerFlow.
 """
 
@@ -26,25 +26,25 @@ logger = logging.getLogger(__name__)
 
 # Model configurations for AI comparison
 AI_MODELS = {
-    "gpt-4o": {
+    "gpt-3.5-turbo": {
         "provider": "openai",
-        "model": "gpt-4o",
-        "display_name": "GPT-4o (OpenAI)",
+        "model": "gpt-3.5-turbo",
+        "display_name": "GPT-3.5 (OpenAI)",
     },
-    "gemini-1.5-pro": {
+    "gemini-2.5-flash": {
         "provider": "google",
-        "model": "gemini-1.5-pro",
-        "display_name": "Gemini 1.5 Pro (Google)",
+        "model": "gemini-2.5-flash",
+        "display_name": "Gemini 2.5 Flash (Google)",
     },
     "deepseek-chat": {
         "provider": "deepseek",
         "model": "deepseek-chat",
         "display_name": "DeepSeek Chat",
     },
-    "grok-beta": {
+    "grok-4-fast-reasoning": {
         "provider": "xai",
-        "model": "grok-beta",
-        "display_name": "Grok Beta (xAI)",
+        "model": "grok-4-fast-reasoning",
+        "display_name": "Grok-4 Fast Reasoning (xAI)",
     },
     "oneseek-local": {
         "provider": "local",
@@ -83,33 +83,33 @@ class AIComparisonFlow:
         """Initialize available AI models based on API keys."""
         models = {}
         
-        # GPT-4o (OpenAI)
+        # GPT-3.5 Turbo (OpenAI)
         openai_key = os.getenv("OPENAI_API_KEY")
         if openai_key:
             try:
-                models["gpt-4o"] = ChatOpenAI(
-                    model="gpt-4o",
+                models["gpt-3.5-turbo"] = ChatOpenAI(
+                    model="gpt-3.5-turbo",
                     api_key=openai_key,
                     temperature=0.7,
                     max_tokens=2048,
                 )
-                logger.info("GPT-4o model initialized")
+                logger.info("GPT-3.5 Turbo model initialized")
             except Exception as e:
-                logger.warning(f"Failed to initialize GPT-4o: {e}")
+                logger.warning(f"Failed to initialize GPT-3.5 Turbo: {e}")
         
-        # Gemini 1.5 Pro (Google)
+        # Gemini 2.5 Flash (Google)
         google_key = os.getenv("GOOGLE_API_KEY")
         if google_key:
             try:
-                models["gemini-1.5-pro"] = ChatGoogleGenerativeAI(
-                    model="gemini-1.5-pro",
+                models["gemini-2.5-flash"] = ChatGoogleGenerativeAI(
+                    model="gemini-2.5-flash",
                     google_api_key=google_key,
                     temperature=0.7,
                     max_tokens=2048,
                 )
-                logger.info("Gemini 1.5 Pro model initialized")
+                logger.info("Gemini 2.5 Flash model initialized")
             except Exception as e:
-                logger.warning(f"Failed to initialize Gemini 1.5 Pro: {e}")
+                logger.warning(f"Failed to initialize Gemini 2.5 Flash: {e}")
         
         # DeepSeek Chat
         deepseek_key = os.getenv("DEEPSEEK_API_KEY")
@@ -125,21 +125,21 @@ class AIComparisonFlow:
             except Exception as e:
                 logger.warning(f"Failed to initialize DeepSeek Chat: {e}")
         
-        # Grok Beta (xAI)
+        # Grok-4 Fast Reasoning (xAI)
         xai_key = os.getenv("XAI_API_KEY")
         xai_base_url = os.getenv("XAI_BASE_URL", "https://api.x.ai/v1")
         if xai_key:
             try:
-                models["grok-beta"] = ChatOpenAI(
-                    model="grok-beta",
+                models["grok-4-fast-reasoning"] = ChatOpenAI(
+                    model="grok-4-fast-reasoning",
                     api_key=xai_key,
                     base_url=xai_base_url,
                     temperature=0.7,
                     max_tokens=2048,
                 )
-                logger.info("Grok Beta model initialized")
+                logger.info("Grok-4 Fast Reasoning model initialized")
             except Exception as e:
-                logger.warning(f"Failed to initialize Grok Beta: {e}")
+                logger.warning(f"Failed to initialize Grok-4 Fast Reasoning: {e}")
         
         # OneSeek Local (vLLM)
         vllm_url = os.getenv("VLLM_URL", "http://localhost:8000/v1")

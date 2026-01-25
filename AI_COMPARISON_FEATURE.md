@@ -9,10 +9,10 @@ This feature implements a **Debate OS** capability for DeerFlow, allowing parall
 ### Backend (`backend/ai_comparison_flow.py`)
 
 - **Parallel AI Model Queries**: Asynchronously queries multiple models:
-  - GPT-4o (OpenAI)
-  - Gemini 1.5 Pro (Google)
+  - GPT-3.5 (OpenAI)
+  - Gemini 2.5 Flash (Google)
   - DeepSeek Chat
-  - Grok Beta (xAI)
+  - Grok-4 Fast Reasoning (xAI)
   - OneSeek Local (vLLM)
 
 - **Analysis & Fact-Checking**: Uses DeerFlow's existing tools:
@@ -46,16 +46,16 @@ This feature implements a **Debate OS** capability for DeerFlow, allowing parall
 ### Required API Keys (in `.env` or `.env.deer`)
 
 ```bash
-# OpenAI (for GPT-4o)
+# OpenAI (for GPT-3.5)
 OPENAI_API_KEY=your-openai-api-key
 
-# Google (for Gemini 1.5 Pro)
+# Google (for Gemini 2.5 Flash)
 GOOGLE_API_KEY=your-google-api-key
 
 # DeepSeek
 DEEPSEEK_API_KEY=your-deepseek-api-key
 
-# xAI (for Grok)
+# xAI (for Grok-4 Fast Reasoning)
 XAI_API_KEY=your-xai-api-key
 XAI_BASE_URL=https://api.x.ai/v1
 
@@ -97,10 +97,10 @@ User Query → Coordinator → [enable_ai_comparison?]
 
 ```
 1. Parallel Queries (asyncio.gather)
-   ├─ GPT-4o
-   ├─ Gemini 1.5 Pro
+   ├─ GPT-3.5
+   ├─ Gemini 2.5 Flash
    ├─ DeepSeek
-   ├─ Grok
+   ├─ Grok-4 Fast Reasoning
    └─ OneSeek Local
 
 2. Fact-Check Analysis

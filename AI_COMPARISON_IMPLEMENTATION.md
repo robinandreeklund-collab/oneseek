@@ -11,10 +11,10 @@ This PR successfully implements the **AI Comparison / Debate OS** feature for De
 
 - **AIComparisonFlow Class**: Main orchestrator for the comparison workflow
 - **Parallel Model Initialization**: Support for 5 AI models:
-  - GPT-4o (OpenAI)
-  - Gemini 1.5 Pro (Google)  
+  - GPT-3.5 (OpenAI)
+  - Gemini 2.5 Flash (Google)  
   - DeepSeek Chat
-  - Grok Beta (xAI)
+  - Grok-4 Fast Reasoning (xAI)
   - OneSeek Local (vLLM)
   
 - **Async Parallel Execution**: Using `asyncio.gather` for concurrent queries

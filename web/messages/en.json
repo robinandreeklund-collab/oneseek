@@ -128,7 +128,7 @@
       "aiComparison": "Compare AIs",
       "aiComparisonTooltip": {
         "title": "AI Comparison Mode: {status}",
-        "description": "When enabled, Oneseek will query multiple AI models in parallel (GPT-4o, Gemini, DeepSeek, Grok) and synthesize an optimal answer with fact-checking and meta-analysis."
+        "description": "When enabled, Oneseek will query multiple AI models in parallel (GPT-3.5, Gemini 2.5 Flash, DeepSeek, Grok-4) and synthesize an optimal answer with fact-checking and meta-analysis."
       },
       "enhancePrompt": "Enhance prompt with AI",
       "on": "On",
