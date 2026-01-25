@@ -1476,13 +1476,15 @@ async def ai_comparison_node(
 ) -> Command[Literal["reporter"]]:
     """
     AI Comparison node that runs parallel queries across multiple AI models.
-    Implements Debate OS functionality for DeerFlow.
+    Implements Debate OS functionality for DeerFlow with real-time streaming.
     
     This node:
     1. Queries multiple AI models in parallel (GPT-3.5, Gemini, DeepSeek, Grok, OneSeek)
     2. Performs fact-checking using DeerFlow tools
     3. Runs meta-agents for deeper analysis
     4. Synthesizes an optimal answer
+    
+    Emits progress messages in real-time just like deep research.
     """
     logger.info("AI Comparison node starting - Debate OS mode")
     
@@ -1507,6 +1509,7 @@ async def ai_comparison_node(
                         "error": "No user query found",
                         "status": "failed",
                     },
+                    "messages": [HumanMessage(content="Error: No user query found for AI comparison", name="ai_comparison")],
                     "goto": "reporter",
                 }
             )
@@ -1521,15 +1524,111 @@ async def ai_comparison_node(
         # Get the AI comparison flow instance with proper parameters
         comparison_flow = get_ai_comparison_flow(max_search_results=max_search_results, resources=resources)
         
-        # Run the comparison
-        results = await comparison_flow.run_comparison(user_message)
+        # Collect all progress messages
+        progress_messages = []
+        
+        # Initial message
+        progress_messages.append(
+            HumanMessage(
+                content="🔍 **AI Comparison Started**\n\nQuerying multiple AI models in parallel...",
+                name="ai_comparison"
+            )
+        )
+        
+        # Step 1: Query all models in parallel
+        progress_messages.append(
+            HumanMessage(
+                content="⚡ **Querying AI Models**\n\nSending query to GPT-3.5, Gemini 2.5 Flash, DeepSeek, Grok-4, and OneSeek Local...",
+                name="ai_comparison"
+            )
+        )
+        model_responses = await comparison_flow.parallel_query_all_models(user_message)
+        
+        # Report model results
+        successful_models = [r for r in model_responses if r["success"]]
+        failed_models = [r for r in model_responses if not r["success"]]
+        
+        result_summary = f"✅ **Models Responded** ({len(successful_models)}/{len(model_responses)})\n\n"
+        for response in successful_models:
+            result_summary += f"- ✓ {response['display_name']}\n"
+        if failed_models:
+            result_summary += f"\n❌ Failed:\n"
+            for response in failed_models:
+                result_summary += f"- ✗ {response['display_name']}: {response['error'][:100]}\n"
+        
+        progress_messages.append(
+            HumanMessage(content=result_summary, name="ai_comparison")
+        )
+        
+        # Step 2: Analyze with fact-checking
+        progress_messages.append(
+            HumanMessage(
+                content="🔎 **Fact-Checking Analysis**\n\nAnalyzing responses with web search and RAG tools...",
+                name="ai_comparison"
+            )
+        )
+        analysis = await comparison_flow.analyze_with_fact_check(user_message, model_responses)
+        
+        sources_count = len(analysis.get("sources", []))
+        progress_messages.append(
+            HumanMessage(
+                content=f"📚 **Sources Found**: {sources_count} sources retrieved for fact-checking",
+                name="ai_comparison"
+            )
+        )
+        
+        # Step 3: Run meta-agents
+        progress_messages.append(
+            HumanMessage(
+                content="🧠 **Meta-Agent Analysis**\n\nRunning parallel meta-agents (Counterfactual, Robustness, Consistency, Truth-Pressure)...",
+                name="ai_comparison"
+            )
+        )
+        meta_results = await comparison_flow.run_meta_agents(user_message, model_responses, analysis)
+        
+        successful_meta = sum(1 for v in meta_results.values() if v.get("success"))
+        progress_messages.append(
+            HumanMessage(
+                content=f"🔬 **Meta-Analysis Complete**: {successful_meta}/4 meta-agents completed successfully",
+                name="ai_comparison"
+            )
+        )
+        
+        # Step 4: Synthesize
+        progress_messages.append(
+            HumanMessage(
+                content="🎯 **Synthesizing Optimal Answer**\n\nCombining insights from all models...",
+                name="ai_comparison"
+            )
+        )
+        synthesis = await comparison_flow.synthesize_optimal_answer(
+            user_message, model_responses, analysis, meta_results
+        )
+        
+        progress_messages.append(
+            HumanMessage(
+                content="✨ **AI Comparison Complete**\n\nSynthesis ready. Generating final report...",
+                name="ai_comparison"
+            )
+        )
+        
+        # Compile full results
+        results = {
+            "query": user_message,
+            "model_responses": model_responses,
+            "analysis": analysis,
+            "meta_results": meta_results,
+            "synthesis": synthesis,
+            "status": "completed",
+        }
         
         logger.info("AI comparison completed successfully")
         
-        # Store results in state and proceed to reporter
+        # Store results in state and proceed to reporter, including all progress messages
         return Command(
             update={
                 "comparison_results": results,
+                "messages": progress_messages,
                 "goto": "reporter",
             }
         )
@@ -1542,6 +1641,12 @@ async def ai_comparison_node(
                     "error": str(e),
                     "status": "failed",
                 },
+                "messages": [
+                    HumanMessage(
+                        content=f"❌ **AI Comparison Failed**\n\nError: {str(e)}",
+                        name="ai_comparison"
+                    )
+                ],
                 "goto": "reporter",
             }
         )
