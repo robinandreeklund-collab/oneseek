@@ -1,9 +1,10 @@
 // Copyright (c) 2025 Bytedance Ltd. and/or its affiliates
 // SPDX-License-Identifier: MIT
 
-import { NextRequest, NextResponse } from "next/server";
 import fs from "fs/promises";
 import path from "path";
+
+import { NextResponse } from "next/server";
 
 const PROMPTS_DIR = path.join(process.cwd(), "..", "backend", "deer_flow", "prompts");
 
@@ -13,7 +14,7 @@ interface PromptFile {
   locale?: string;
 }
 
-async function getPromptFiles(dir: string, baseDir: string = ""): Promise<PromptFile[]> {
+async function getPromptFiles(dir: string, baseDir = ""): Promise<PromptFile[]> {
   const files: PromptFile[] = [];
   const entries = await fs.readdir(dir, { withFileTypes: true });
 
@@ -27,12 +28,13 @@ async function getPromptFiles(dir: string, baseDir: string = ""): Promise<Prompt
       files.push(...subFiles);
     } else if (entry.isFile() && entry.name.endsWith(".md")) {
       // Extract locale from filename if present (e.g., coordinator.zh_CN.md)
-      const match = entry.name.match(/^(.+)\.(zh_CN|en_US|sv_SE)\.md$/);
-      if (match) {
+      const localeRegex = /^(.+)\.(zh_CN|en_US|sv_SE)\.md$/;
+      const localeMatch = localeRegex.exec(entry.name);
+      if (localeMatch) {
         files.push({
-          name: `${match[1]} (${match[2]})`,
+          name: `${localeMatch[1]} (${localeMatch[2]})`,
           path: relativePath,
-          locale: match[2],
+          locale: localeMatch[2],
         });
       } else {
         files.push({

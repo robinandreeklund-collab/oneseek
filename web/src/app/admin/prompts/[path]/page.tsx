@@ -6,8 +6,9 @@
 import { ArrowLeftIcon, CheckIcon } from "@radix-ui/react-icons";
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
-import { Button } from "~/components/ui/button";
 import { toast } from "sonner";
+
+import { Button } from "~/components/ui/button";
 
 export default function EditPromptPage({
   params,
@@ -23,7 +24,7 @@ export default function EditPromptPage({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function loadPrompt() {
+    void (async function loadPrompt() {
       try {
         const response = await fetch(
           `/api/admin/prompts/${encodeURIComponent(decodedPath)}`,
@@ -39,8 +40,7 @@ export default function EditPromptPage({
       } finally {
         setLoading(false);
       }
-    }
-    loadPrompt();
+    })();
   }, [decodedPath]);
 
   async function handleSave() {

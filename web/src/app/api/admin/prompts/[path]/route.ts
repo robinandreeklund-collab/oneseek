@@ -1,9 +1,11 @@
 // Copyright (c) 2025 Bytedance Ltd. and/or its affiliates
 // SPDX-License-Identifier: MIT
 
-import { NextRequest, NextResponse } from "next/server";
 import fs from "fs/promises";
 import path from "path";
+
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 
 const PROMPTS_DIR = path.join(process.cwd(), "..", "backend", "deer_flow", "prompts");
 

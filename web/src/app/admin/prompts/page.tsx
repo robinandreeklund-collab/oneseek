@@ -6,6 +6,7 @@
 import { FileTextIcon, Pencil1Icon } from "@radix-ui/react-icons";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+
 import { Button } from "~/components/ui/button";
 
 interface Prompt {
@@ -20,7 +21,7 @@ export default function PromptsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function loadPrompts() {
+    void (async function loadPrompts() {
       try {
         const response = await fetch("/api/admin/prompts");
         if (!response.ok) {
@@ -33,8 +34,7 @@ export default function PromptsPage() {
       } finally {
         setLoading(false);
       }
-    }
-    loadPrompts();
+    })();
   }, []);
 
   if (loading) {
