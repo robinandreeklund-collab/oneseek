@@ -82,6 +82,11 @@ def strip_think_tags(content: str, expect_json: bool = False) -> str:
     think_start = content.find('<think>')
     think_end = content.find('</think>')
     
+    # Validate that tags are in correct order
+    if think_start >= think_end or think_start < 0 or think_end < 0:
+        # Invalid tag ordering, return content as-is
+        return content
+    
     # Extract both potential content locations
     content_after = content[think_end + len('</think>'):].strip()
     content_inside = content[think_start + len('<think>'):think_end].strip()
@@ -391,8 +396,9 @@ def planner_node(
     logger.info(f"Planner response: {full_response}")
 
     # Strip <think> tags if present (from deep thinking mode)
+    original_response = full_response
     full_response = strip_think_tags(full_response, expect_json=True)
-    if '<think>' not in full_response:  # Only log if tags were present
+    if '<think>' in original_response and '<think>' not in full_response:  # Tags were stripped
         logger.debug(f"Stripped think tags, result: {full_response[:100]}...")
 
     # Validate explicitly that response content is valid JSON before proceeding to parse it
