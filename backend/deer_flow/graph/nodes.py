@@ -1481,6 +1481,11 @@ async def ai_comparison_node(
     
     Unlike researcher/coder which execute plan steps, AI comparison is a standalone
     agent that invokes tools directly (like planner but WITH tools).
+    
+    Key difference from researcher/coder:
+    - They use _execute_agent_step() which requires plan steps
+    - AI comparison creates agent and invokes directly (no plan steps needed)
+    - Tool calls still stream to frontend automatically through LangGraph
     """
     logger.info("AI Comparison node starting - Debate OS mode")
     
@@ -1490,13 +1495,22 @@ async def ai_comparison_node(
     tools = get_ai_comparison_tools()
     logger.info(f"AI comparison tools count: {len(tools)}")
     
-    # Get locale from state
+    # Get locale and research topic from state
     locale = state.get("locale", "en-US")
+    research_topic = state.get("research_topic", "Unknown topic")
+    logger.info(f"Research topic: {research_topic}")
     
-    # Prepare messages using the agent prompt
-    messages = apply_prompt_template("ai_comparison", state, configurable, locale)
+    # Prepare input for agent - simple and direct
+    agent_input = {
+        "messages": [
+            HumanMessage(
+                content=f"Research Topic: {research_topic}\n\nLocale: {locale}"
+            )
+        ]
+    }
     
     # Create agent with tools (enables streaming of tool calls)
+    # This follows the same pattern as _setup_and_execute_agent_step
     llm_token_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["ai_comparison"])
     pre_model_hook = partial(ContextManager(llm_token_limit, 3).compress_messages)
     
@@ -1510,22 +1524,59 @@ async def ai_comparison_node(
         locale=locale,
     )
     
-    logger.info("AI comparison agent created, invoking with tools")
+    logger.info("AI comparison agent created successfully")
     
-    # Invoke agent - tool calls will stream to frontend automatically
-    result = await agent.ainvoke({"messages": messages}, config)
+    # Apply context compression to agent input
+    if llm_token_limit:
+        compressed_state = ContextManager(llm_token_limit, preserve_prefix_message_count=3).compress_messages(
+            {"messages": agent_input["messages"]}
+        )
+        agent_input["messages"] = compressed_state.get("messages", [])
     
-    logger.info("AI comparison agent completed")
-    logger.debug(f"Agent result keys: {result.keys() if isinstance(result, dict) else 'not a dict'}")
+    # Get recursion limit
+    default_recursion_limit = 25
+    try:
+        env_value_str = os.getenv("AGENT_RECURSION_LIMIT", str(default_recursion_limit))
+        parsed_limit = int(env_value_str)
+        recursion_limit = parsed_limit if parsed_limit > 0 else default_recursion_limit
+    except:
+        recursion_limit = default_recursion_limit
     
-    # Extract messages from result
-    result_messages = result.get("messages", []) if isinstance(result, dict) else []
+    logger.info(f"Invoking AI comparison agent with recursion_limit={recursion_limit}")
     
-    # Return to research_team which will route to reporter
+    # Invoke agent - tool calls will stream to frontend automatically through LangGraph
+    # The key is that we pass messages through and LangGraph handles the streaming
+    result = await agent.ainvoke(
+        agent_input,
+        {"recursion_limit": recursion_limit, **config}
+    )
+    
+    logger.info("AI comparison agent execution completed")
+    
+    # Extract all messages (includes tool calls and results for streaming)
+    agent_messages = result.get("messages", []) if isinstance(result, dict) else []
+    logger.info(f"AI comparison returned {len(agent_messages)} messages")
+    
+    # Count tool messages for logging
+    tool_message_count = sum(1 for msg in agent_messages if isinstance(msg, ToolMessage))
+    if tool_message_count > 0:
+        logger.info(f"AI comparison made {tool_message_count} tool calls - all streamed to frontend")
+    
+    # Extract final response content
+    response_content = ""
+    for msg in reversed(agent_messages):
+        if isinstance(msg, AIMessage) and msg.content:
+            response_content = strip_think_tags(msg.content)
+            break
+    
+    logger.info(f"AI comparison final response: {response_content[:200] if response_content else 'No response'}...")
+    
+    # Return to research_team (which routes to reporter) - SAME AS RESEARCHER/CODER
     return Command(
         update={
             **preserve_state_meta_fields(state),
-            "messages": result_messages,
+            "messages": agent_messages,  # ALL messages including tool calls for streaming
+            "observations": state.get("observations", []) + [response_content],
         },
         goto="research_team"
     )
