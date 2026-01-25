@@ -1,0 +1,286 @@
+{
+  "common": {
+    "cancel": "Avbryt",
+    "save": "Spara",
+    "settings": "Inställningar",
+    "getStarted": "Kom igång",
+    "learnMore": "Lär dig mer",
+    "starOnGitHub": "Stjärnmärk på GitHub",
+    "send": "Skicka",
+    "stop": "Stoppa",
+    "linkNotReliable": "Denna länk kan vara en hallucination från AI-modellen och kanske inte är tillförlitlig.",
+    "noResult": "Inget resultat"
+  },
+  "messageInput": {
+    "placeholder": "Vad kan jag hjälpa dig med?",
+    "placeholderWithRag": "Vad kan jag hjälpa dig med? \nDu kan referera till RAG-resurser genom att använda @."
+  },
+  "header": {
+    "title": "Oneseek"
+  },
+  "hero": {
+    "title": "Djupgående Forskning",
+    "subtitle": "vid Dina Fingertoppar",
+    "description": "Möt Oneseek, din personliga assistent för djupgående forskning. Med kraftfulla verktyg som sökmotorer, webbskrapor, Python och MCP-tjänster levererar den omedelbara insikter, omfattande rapporter och till och med fängslande podcasts.",
+    "footnote": "* DEER står för Deep Exploration and Efficient Research."
+  },
+  "settings": {
+    "title": "Oneseek Inställningar",
+    "description": "Hantera dina Oneseek-inställningar här.",
+    "addServers": "Lägg till servrar",
+    "cancel": "Avbryt",
+    "addNewMCPServers": "Lägg till nya MCP-servrar",
+    "mcpConfigDescription": "Oneseek använder standard JSON MCP-konfiguration för att skapa en ny server.",
+    "pasteConfigBelow": "Klistra in din konfiguration nedan och klicka på \"Lägg till\" för att lägga till nya servrar.",
+    "rag": {
+      "title": "Resurser",
+      "description": "Hantera dina kunskapsbas-resurser här. Ladda upp markdown- eller textfiler för att indexeras för hämtning.",
+      "upload": "Ladda upp",
+      "uploading": "Laddar upp...",
+      "uploadSuccess": "Fil uppladdad framgångsrikt",
+      "uploadFailed": "Misslyckades med att ladda upp fil",
+      "emptyFile": "Kan inte ladda upp en tom fil",
+      "loading": "Laddar resurser...",
+      "noResources": "Inga resurser hittades. Ladda upp en fil för att komma igång."
+    },
+    "add": "Lägg till",
+    "general": {
+      "title": "Allmänt",
+      "autoAcceptPlan": "Tillåt automatisk godkännande av planer",
+      "enableClarification": "Tillåt förtydligande",
+      "maxClarificationRounds": "Max antal förtydliganderundor",
+      "maxClarificationRoundsDescription": "Maximalt antal förtydliganderundor när förtydligande är aktiverat (standard: 3).",
+      "maxPlanIterations": "Max antal planiterationer",
+      "maxPlanIterationsDescription": "Sätt till 1 för enstegs planering. Sätt till 2 eller mer för att aktivera omplanering.",
+      "maxStepsOfPlan": "Max antal steg i en forskningsplan",
+      "maxStepsDescription": "Som standard har varje forskningsplan 3 steg.",
+      "maxSearchResults": "Max antal sökresultat",
+      "maxSearchResultsDescription": "Som standard har varje söksteg 3 resultat.",
+      "enableWebSearch": "Aktivera webbsökning",
+      "enableWebSearchDescription": "När inaktiverad kommer endast lokal RAG-kunskapsbas att användas. Användbart för miljöer utan internetåtkomst."
+    },
+    "mcp": {
+      "title": "MCP-servrar",
+      "description": "Model Context Protocol förstärker Oneseek genom att integrera externa verktyg för uppgifter som privata domänsökningar, webbsurfning, matbeställning och mer. Klicka här för att",
+      "learnMore": "lära dig mer om MCP.",
+      "enableDisable": "Aktivera/inaktivera server",
+      "deleteServer": "Ta bort server",
+      "editServer": "Redigera server",
+      "refreshServer": "Uppdatera server",
+      "editServerDescription": "Redigera MCP-serverkonfigurationen",
+      "editServerNote": "Uppdatera serverkonfigurationen i JSON-format",
+      "disabled": "Inaktiverad",
+      "new": "Ny",
+      "invalidJson": "Ogiltigt JSON-format",
+      "validationFailed": "Validering misslyckades",
+      "missingServerName": "Servernamn saknas"
+    },
+    "about": {
+      "title": "Om"
+    },
+    "reportStyle": {
+      "writingStyle": "Skrivstil",
+      "chooseTitle": "Välj Skrivstil",
+      "chooseDesc": "Välj skrivstil för dina forskningsrapporter. Olika stilar är optimerade för olika målgrupper och syften.",
+      "academic": "Akademisk",
+      "academicDesc": "Formell, objektiv och analytisk med precis terminologi",
+      "popularScience": "Populärvetenskap",
+      "popularScienceDesc": "Engagerande och tillgänglig för allmänheten",
+      "news": "Nyheter",
+      "newsDesc": "Faktabaserad, koncis och opartisk journalistisk stil",
+      "socialMedia": "Sociala medier",
+      "socialMediaDesc": "Koncis, uppmärksamhetsfångande och delbar",
+      "strategicInvestment": "Strategisk investering",
+      "strategicInvestmentDesc": "Djup, omfattande analys för strategiska investeringsinstitutioner med handlingsbara insikter"
+    }
+  },
+  "footer": {
+    "quote": "Ursprung från Open Source, ge tillbaka till Open Source.",
+    "license": "Licensierad under MIT-licens",
+    "copyright": "Oneseek"
+  },
+  "chat": {
+    "page": {
+      "loading": "Laddar Oneseek...",
+      "welcomeUser": "Välkommen, {username}",
+      "starOnGitHub": "Stjärnmärk Oneseek på GitHub"
+    },
+    "welcome": {
+      "greeting": "👋 Hej där!",
+      "description": "Välkommen till Oneseek, en djupgående forskningsassistent byggd på banbrytande språkmodeller, hjälper dig att söka på webben, bläddra i information och hantera komplexa uppgifter."
+    },
+    "conversationStarters": [
+      "Hur många gånger högre är Eiffeltornet än den högsta byggnaden i världen?",
+      "Hur många år varar ett genomsnittligt Tesla-batteri jämfört med en bensinmotor?",
+      "Hur många liter vatten krävs för att producera 1 kg nötkött?",
+      "Hur många gånger snabbare är ljusets hastighet jämfört med ljudets hastighet?"
+    ],
+    "inputBox": {
+      "deepThinking": "Djuptänkande",
+      "deepThinkingTooltip": {
+        "title": "Djuptänkande-läge: {status}",
+        "description": "När aktiverat kommer Oneseek att använda resonemangsmodell ({model}) för att generera mer genomtänkta planer."
+      },
+      "investigation": "Undersökning",
+      "investigationTooltip": {
+        "title": "Undersökningsläge: {status}",
+        "description": "När aktiverat kommer Oneseek att utföra en snabb sökning innan planering. Detta är användbart för forskning relaterad till pågående händelser och nyheter."
+      },
+      "enhancePrompt": "Förbättra prompt med AI",
+      "on": "På",
+      "off": "Av"
+    },
+    "research": {
+      "deepResearch": "Djupgående forskning",
+      "researching": "Forskar...",
+      "generatingReport": "Genererar rapport...",
+      "reportGenerated": "Rapport genererad",
+      "open": "Öppna",
+      "close": "Stäng",
+      "deepThinking": "Djuptänkande",
+      "report": "Rapport",
+      "activities": "Aktiviteter",
+      "generatePodcast": "Generera podcast",
+      "edit": "Redigera",
+      "copy": "Kopiera",
+      "downloadReport": "Ladda ner rapport",
+      "downloadMarkdown": "Markdown (.md)",
+      "downloadHTML": "HTML (.html)",
+      "downloadPDF": "PDF (.pdf)",
+      "downloadWord": "Word (.docx)",
+      "downloadImage": "Bild (.png)",
+      "exportFailed": "Export misslyckades, försök igen",
+      "evaluateReport": "Utvärdera rapportkvalitet",
+      "searchingFor": "Söker efter",
+      "reading": "Läser",
+      "runningPythonCode": "Kör Python-kod",
+      "errorExecutingCode": "Fel vid körning av ovanstående kod",
+      "executionOutput": "Körningsutdata",
+      "retrievingDocuments": "Hämtar dokument från RAG",
+      "running": "Kör",
+      "generatingPodcast": "Genererar podcast...",
+      "nowPlayingPodcast": "Spelar nu podcast...",
+      "podcast": "Podcast",
+      "errorGeneratingPodcast": "Fel vid generering av podcast. Försök igen.",
+      "downloadPodcast": "Ladda ner podcast"
+    },
+    "evaluation": {
+      "title": "Utvärdering av rapportkvalitet",
+      "description": "Utvärdera din rapport med hjälp av automatiserade mått och AI-analys.",
+      "evaluating": "Utvärderar rapport...",
+      "analyzing": "Kör djupanalys...",
+      "overallScore": "Totalt betyg",
+      "metrics": "Rapportmått",
+      "wordCount": "Ordantal",
+      "citations": "Citat",
+      "sources": "Unika källor",
+      "images": "Bilder",
+      "sectionCoverage": "Sektionstäckning",
+      "detailedAnalysis": "Detaljerad analys",
+      "deepEvaluation": "Djuputvärdering (AI)",
+      "strengths": "Styrkor",
+      "weaknesses": "Områden för förbättring",
+      "scores": {
+        "factual_accuracy": "Faktanoggrannhet",
+        "completeness": "Fullständighet",
+        "coherence": "Sammanhang",
+        "relevance": "Relevans",
+        "citation_quality": "Citatkvalitet",
+        "writing_quality": "Skrivkvalitet"
+      }
+    },
+    "messages": {
+      "replaying": "Spelar upp",
+      "replayDescription": "Oneseek spelar nu upp konversationen...",
+      "replayHasStopped": "Uppspelningen har stoppats.",
+      "replayModeDescription": "Du är nu i Oneseeks uppspelningsläge. Klicka på \"Spela\"-knappen till höger för att starta.",
+      "play": "Spela",
+      "fastForward": "Snabbspola",
+      "demoNotice": "* Denna webbplats är endast för demoändamål. Om du vill prova din egen fråga, vänligen",
+      "clickHere": "klicka här",
+      "cloneLocally": "för att klona den lokalt och köra den."
+    },
+    "multiAgent": {
+      "moveToPrevious": "Gå till föregående steg",
+      "playPause": "Spela / Pausa",
+      "moveToNext": "Gå till nästa steg",
+      "toggleFullscreen": "Växla fullskärm"
+    }
+  },
+  "landing": {
+    "caseStudies": {
+      "title": "Fallstudier",
+      "description": "Se Oneseek i aktion genom uppspelningar.",
+      "clickToWatch": "Klicka för att se uppspelning",
+      "cases": [
+        {
+          "title": "Hur högt är Eiffeltornet jämfört med den högsta byggnaden?",
+          "description": "Forskningen jämför höjderna och den globala betydelsen av Eiffeltornet och Burj Khalifa, och använder Python-kod för att beräkna multiplar."
+        },
+        {
+          "title": "Vilka är de mest trendande repositorierna på GitHub?",
+          "description": "Forskningen använde MCP-tjänster för att identifiera de mest populära GitHub-repositorierna och dokumenterade dem i detalj med hjälp av sökmotorer."
+        },
+        {
+          "title": "Skriv en artikel om Nanjings traditionella rätter",
+          "description": "Studien visar levande Nanjings berömda rätter genom rikt innehåll och bilder, och avslöjar deras dolda historier och kulturella betydelse."
+        },
+        {
+          "title": "Hur inreder man en liten hyreslägenhet?",
+          "description": "Studien ger läsare praktiska och enkla metoder för att inreda lägenheter, tillsammans med inspirerande bilder."
+        },
+        {
+          "title": "Introducera filmen 'Léon: The Professional'",
+          "description": "Forskningen ger en omfattande introduktion till filmen 'Léon: The Professional', inklusive dess handling, karaktärer och teman."
+        },
+        {
+          "title": "Hur ser du på matleveranskriget i Kina? (på kinesiska)",
+          "description": "Forskningen analyserar den intensifierande konkurrensen mellan JD och Meituan, och lyfter fram deras strategier, teknologiska innovationer och utmaningar."
+        },
+        {
+          "title": "Är ultrabearbetade livsmedel kopplade till hälsa?",
+          "description": "Forskningen undersöker hälsoriskerna med ökad konsumtion av ultrabearbetade livsmedel och uppmanar till mer forskning om långsiktiga effekter och individuella skillnader."
+        },
+        {
+          "title": "Skriv en artikel om \"Skulle du försäkra din AI-tvilling?\"",
+          "description": "Forskningen utforskar konceptet att försäkra AI-tvillingar, och lyfter fram deras fördelar, risker, etiska överväganden och den utvecklande regleringen."
+        }
+      ]
+    },
+    "coreFeatures": {
+      "title": "Kärnfunktioner",
+      "description": "Ta reda på vad som gör Oneseek effektiv.",
+      "features": [
+        {
+          "name": "Dyk djupare och nå längre",
+          "description": "Lås upp djupare insikter med avancerade verktyg. Våra kraftfulla sök- och skrapverktyg samt Python-verktyg samlar omfattande data och levererar djupgående rapporter för att förbättra dina studier."
+        },
+        {
+          "name": "Människa-i-loopen",
+          "description": "Förfina din forskningsplan eller justera fokusområden, allt genom enkelt naturligt språk."
+        },
+        {
+          "name": "Lang Stack",
+          "description": "Bygg med förtroende med hjälp av LangChain- och LangGraph-ramverken."
+        },
+        {
+          "name": "MCP-integrationer",
+          "description": "Superladda ditt forskningsarbetsflöde och utöka din verktygslåda med sömlösa MCP-integrationer."
+        },
+        {
+          "name": "Podcast-generering",
+          "description": "Generera omedelbart podcasts från rapporter. Perfekt för lärande på språng eller för att enkelt dela fynd."
+        }
+      ]
+    },
+    "multiAgent": {
+      "title": "Fler-agentsarkitektur",
+      "description": "Upplev agentteamarbete med vårt Supervisor + Handoffs designmönster."
+    },
+    "joinCommunity": {
+      "title": "Gå med i Oneseek-gemenskapen",
+      "description": "Bidra med briljanta idéer för att forma framtiden för Oneseek. Samarbeta, innovera och gör skillnad.",
+      "contributeNow": "Bidra nu"
+    }
+  }
+}
