@@ -1500,12 +1500,37 @@ async def ai_comparison_node(
     research_topic = state.get("research_topic", "Unknown topic")
     logger.info(f"Research topic: {research_topic}")
     
-    # Prepare input for agent - simple and direct
+    # Prepare input for agent - give clear task instructions
+    # Format similar to researcher to trigger tool usage
+    task_description = f"""# AI Model Comparison Task
+
+## Research Question
+{research_topic}
+
+## Your Task
+Perform a comprehensive AI model comparison for the above question. Follow these steps:
+
+1. **Query each AI model individually** (call tools one at a time):
+   - query_gpt35
+   - query_gemini_flash
+   - query_deepseek
+   - query_grok4
+   - query_oneseek_local
+
+2. **Fact-check responses** using the fact_check_responses tool
+
+3. **Run meta-analysis** using the run_meta_analysis tool
+
+4. **Synthesize results** using the synthesize_optimal_answer tool
+
+Provide your comprehensive comparison report following the format specified in your instructions.
+
+## Locale
+{locale}"""
+
     agent_input = {
         "messages": [
-            HumanMessage(
-                content=f"Research Topic: {research_topic}\n\nLocale: {locale}"
-            )
+            HumanMessage(content=task_description)
         ]
     }
     
