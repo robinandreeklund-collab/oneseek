@@ -332,6 +332,13 @@ def planner_node(
     logger.debug(f"Current state messages: {state['messages']}")
     logger.info(f"Planner response: {full_response}")
 
+    # Strip <think> tags if present (from deep thinking mode)
+    if '<think>' in full_response and '</think>' in full_response:
+        # Extract content after </think> tag
+        think_end = full_response.find('</think>')
+        full_response = full_response[think_end + len('</think>'):].strip()
+        logger.debug(f"Extracted JSON after <think> tags: {full_response}")
+
     # Validate explicitly that response content is valid JSON before proceeding to parse it
     if not full_response.strip().startswith('{') and not full_response.strip().startswith('['):
         logger.warning("Planner response does not appear to be valid JSON")
