@@ -15,43 +15,143 @@ logger = logging.getLogger(__name__)
 
 
 @tool
-async def query_all_ai_models(query: str) -> str:
+async def query_gpt35(query: str) -> str:
     """
-    Query multiple AI models in parallel (GPT-3.5, Gemini 2.5 Flash, DeepSeek, Grok-4, OneSeek Local).
+    Query GPT-3.5 Turbo model from OpenAI.
     
     Args:
-        query: The question or prompt to send to all models
+        query: The question or prompt to send to GPT-3.5
         
     Returns:
-        A formatted string containing responses from all models with success/failure status
+        The response from GPT-3.5 Turbo
     """
     try:
-        # Get comparison flow instance with default config
         comparison_flow = get_ai_comparison_flow(max_search_results=3, resources=[])
+        response = await comparison_flow.query_single_model("gpt-3.5-turbo", query)
         
-        # Query all models
-        responses = await comparison_flow.parallel_query_all_models(query)
-        
-        # Format results
-        result = f"## AI Model Responses ({len([r for r in responses if r['success']])}/{len(responses)} successful)\n\n"
-        
-        for response in responses:
-            status = "✓" if response["success"] else "✗"
-            result += f"### {status} {response['display_name']}\n\n"
-            if response["success"]:
-                # Truncate long responses
-                content = response["response"][:500]
-                if len(response["response"]) > 500:
-                    content += "... [truncated]"
-                result += f"{content}\n\n"
-            else:
-                result += f"Error: {response['error']}\n\n"
-        
-        return result
+        if response["success"]:
+            content = response["response"][:800]
+            if len(response["response"]) > 800:
+                content += "... [response truncated for brevity]"
+            return f"**GPT-3.5 Response:**\n\n{content}"
+        else:
+            return f"**GPT-3.5 Error:** {response['error']}"
         
     except Exception as e:
-        logger.error(f"Error querying AI models: {e}", exc_info=True)
-        return f"Error querying AI models: {str(e)}"
+        logger.error(f"Error querying GPT-3.5: {e}", exc_info=True)
+        return f"Error querying GPT-3.5: {str(e)}"
+
+
+@tool
+async def query_gemini_flash(query: str) -> str:
+    """
+    Query Gemini 2.5 Flash model from Google.
+    
+    Args:
+        query: The question or prompt to send to Gemini 2.5 Flash
+        
+    Returns:
+        The response from Gemini 2.5 Flash
+    """
+    try:
+        comparison_flow = get_ai_comparison_flow(max_search_results=3, resources=[])
+        response = await comparison_flow.query_single_model("gemini-2.5-flash", query)
+        
+        if response["success"]:
+            content = response["response"][:800]
+            if len(response["response"]) > 800:
+                content += "... [response truncated for brevity]"
+            return f"**Gemini 2.5 Flash Response:**\n\n{content}"
+        else:
+            return f"**Gemini 2.5 Flash Error:** {response['error']}"
+        
+    except Exception as e:
+        logger.error(f"Error querying Gemini 2.5 Flash: {e}", exc_info=True)
+        return f"Error querying Gemini 2.5 Flash: {str(e)}"
+
+
+@tool
+async def query_deepseek(query: str) -> str:
+    """
+    Query DeepSeek Chat model.
+    
+    Args:
+        query: The question or prompt to send to DeepSeek
+        
+    Returns:
+        The response from DeepSeek Chat
+    """
+    try:
+        comparison_flow = get_ai_comparison_flow(max_search_results=3, resources=[])
+        response = await comparison_flow.query_single_model("deepseek-chat", query)
+        
+        if response["success"]:
+            content = response["response"][:800]
+            if len(response["response"]) > 800:
+                content += "... [response truncated for brevity]"
+            return f"**DeepSeek Response:**\n\n{content}"
+        else:
+            return f"**DeepSeek Error:** {response['error']}"
+        
+    except Exception as e:
+        logger.error(f"Error querying DeepSeek: {e}", exc_info=True)
+        return f"Error querying DeepSeek: {str(e)}"
+
+
+@tool
+async def query_grok4(query: str) -> str:
+    """
+    Query Grok-4 Fast Reasoning model from xAI.
+    
+    Args:
+        query: The question or prompt to send to Grok-4
+        
+    Returns:
+        The response from Grok-4 Fast Reasoning
+    """
+    try:
+        comparison_flow = get_ai_comparison_flow(max_search_results=3, resources=[])
+        response = await comparison_flow.query_single_model("grok-4-fast-reasoning", query)
+        
+        if response["success"]:
+            content = response["response"][:800]
+            if len(response["response"]) > 800:
+                content += "... [response truncated for brevity]"
+            return f"**Grok-4 Response:**\n\n{content}"
+        else:
+            return f"**Grok-4 Error:** {response['error']}"
+        
+    except Exception as e:
+        logger.error(f"Error querying Grok-4: {e}", exc_info=True)
+        return f"Error querying Grok-4: {str(e)}"
+
+
+@tool
+async def query_oneseek_local(query: str) -> str:
+    """
+    Query OneSeek Local model (vLLM).
+    
+    Args:
+        query: The question or prompt to send to OneSeek Local
+        
+    Returns:
+        The response from OneSeek Local
+    """
+    try:
+        comparison_flow = get_ai_comparison_flow(max_search_results=3, resources=[])
+        response = await comparison_flow.query_single_model("oneseek-local", query)
+        
+        if response["success"]:
+            content = response["response"][:800]
+            if len(response["response"]) > 800:
+                content += "... [response truncated for brevity]"
+            return f"**OneSeek Local Response:**\n\n{content}"
+        else:
+            return f"**OneSeek Local Error:** {response['error']}"
+        
+    except Exception as e:
+        logger.error(f"Error querying OneSeek Local: {e}", exc_info=True)
+        return f"Error querying OneSeek Local: {str(e)}"
 
 
 @tool
@@ -192,7 +292,11 @@ async def synthesize_optimal_answer(
 def get_ai_comparison_tools():
     """Get all AI comparison tools for the agent."""
     return [
-        query_all_ai_models,
+        query_gpt35,
+        query_gemini_flash,
+        query_deepseek,
+        query_grok4,
+        query_oneseek_local,
         fact_check_responses,
         run_meta_analysis,
         synthesize_optimal_answer,

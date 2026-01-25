@@ -199,6 +199,28 @@ class AIComparisonFlow:
                 "error": str(e),
             }
 
+    async def query_single_model(self, model_key: str, query: str) -> Dict[str, Any]:
+        """
+        Query a single AI model by its key (for individual tool calls).
+        
+        Args:
+            model_key: Model identifier (e.g., "gpt-3.5-turbo", "gemini-2.5-flash")
+            query: User query to send to the model
+            
+        Returns:
+            Dictionary with model response and metadata
+        """
+        if model_key not in self.models:
+            return {
+                "model": model_key,
+                "display_name": AI_MODELS.get(model_key, {}).get("display_name", model_key),
+                "response": None,
+                "success": False,
+                "error": f"Model {model_key} not available (check API key)",
+            }
+        
+        return await self.query_model(model_key, self.models[model_key], query)
+
     async def parallel_query_all_models(self, query: str) -> List[Dict[str, Any]]:
         """
         Query all available AI models in parallel using asyncio.gather.
