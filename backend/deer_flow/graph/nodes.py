@@ -600,7 +600,7 @@ def human_feedback_node(
 
 def coordinator_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["planner", "background_investigator", "coordinator", "__end__"]]:
+) -> Command[Literal["planner", "background_investigator", "ai_comparison", "coordinator", "__end__"]]:
     """Coordinator node that communicate with customers and handle clarification."""
     logger.info("Coordinator talking.")
     configurable = Configuration.from_runnable_config(config)
@@ -644,7 +644,12 @@ def coordinator_node(
 
                     if tool_name == "handoff_to_planner":
                         logger.info("Handing off to planner")
-                        goto = "planner"
+                        # Check if AI comparison mode is enabled
+                        if state.get("enable_ai_comparison", False):
+                            logger.info("AI comparison mode enabled, routing to ai_comparison node")
+                            goto = "ai_comparison"
+                        else:
+                            goto = "planner"
 
                         # Extract research_topic if provided
                         if tool_args.get("research_topic"):
@@ -828,7 +833,12 @@ def coordinator_node(
 
                 if tool_name in ["handoff_to_planner", "handoff_after_clarification"]:
                     logger.info("Handing off to planner")
-                    goto = "planner"
+                    # Check if AI comparison mode is enabled
+                    if state.get("enable_ai_comparison", False):
+                        logger.info("AI comparison mode enabled, routing to ai_comparison node")
+                        goto = "ai_comparison"
+                    else:
+                        goto = "planner"
 
                     if not enable_clarification and tool_args.get("research_topic"):
                         research_topic = tool_args["research_topic"]
@@ -895,6 +905,64 @@ def reporter_node(state: State, config: RunnableConfig):
     """Reporter node that write a final report."""
     logger.info("Reporter write final report")
     configurable = Configuration.from_runnable_config(config)
+    
+    # Check if this is AI comparison mode
+    comparison_results = state.get("comparison_results")
+    if comparison_results:
+        logger.info("Generating report for AI comparison results")
+        
+        # Format the comparison results as a report
+        report_parts = ["# AI Model Comparison Results\n\n"]
+        
+        if comparison_results.get("status") == "failed":
+            report_parts.append(f"**Error**: {comparison_results.get('error', 'Unknown error')}\n\n")
+        else:
+            # Add query
+            report_parts.append(f"## Query\n{comparison_results.get('query', 'N/A')}\n\n")
+            
+            # Add model responses
+            report_parts.append("## Model Responses\n\n")
+            model_responses = comparison_results.get("model_responses", [])
+            for response in model_responses:
+                display_name = response.get("display_name", "Unknown Model")
+                if response.get("success"):
+                    report_parts.append(f"### {display_name}\n")
+                    report_parts.append(f"{response.get('response', 'No response')}\n\n")
+                else:
+                    report_parts.append(f"### {display_name}\n")
+                    report_parts.append(f"**Error**: {response.get('error', 'Unknown error')}\n\n")
+            
+            # Add synthesis
+            synthesis = comparison_results.get("synthesis", {})
+            if synthesis:
+                report_parts.append("## Synthesized Optimal Answer\n\n")
+                report_parts.append(f"{synthesis.get('synthesized_answer', 'N/A')}\n\n")
+                
+                # Add models used
+                models_used = synthesis.get("models_used", [])
+                if models_used:
+                    report_parts.append(f"**Models Used**: {', '.join(models_used)}\n\n")
+                
+                # Add tools used
+                tools_used = [t for t in synthesis.get("tools_used", []) if t]
+                if tools_used:
+                    report_parts.append(f"**Tools Used**: {', '.join(tools_used)}\n\n")
+            
+            # Add analysis
+            analysis = comparison_results.get("analysis", {})
+            if analysis:
+                sources = analysis.get("sources", [])
+                if sources:
+                    report_parts.append(f"## Fact-Checking Sources\n\n")
+                    report_parts.append(f"Found {len(sources)} sources for fact-checking.\n\n")
+        
+        final_report = "".join(report_parts)
+        return {
+            "final_report": final_report,
+            "citations": state.get("citations", []),
+        }
+    
+    # Normal reporting mode
     current_plan = state.get("current_plan")
     input_ = {
         "messages": [
@@ -1400,3 +1468,73 @@ async def analyst_node(
         "analyst",
         [],  # No tools - pure reasoning
     )
+
+
+async def ai_comparison_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["reporter"]]:
+    """
+    AI Comparison node that runs parallel queries across multiple AI models.
+    Implements Debate OS functionality for DeerFlow.
+    
+    This node:
+    1. Queries multiple AI models in parallel (GPT-4o, Gemini, DeepSeek, Grok, OneSeek)
+    2. Performs fact-checking using DeerFlow tools
+    3. Runs meta-agents for deeper analysis
+    4. Synthesizes an optimal answer
+    """
+    logger.info("AI Comparison node starting - Debate OS mode")
+    
+    try:
+        # Import here to avoid circular dependencies
+        from backend.ai_comparison_flow import get_ai_comparison_flow
+        
+        # Get the user query from the latest message
+        messages = state.get("messages", [])
+        user_message = None
+        for msg in reversed(messages):
+            if is_user_message(msg):
+                user_message = get_message_content(msg)
+                break
+        
+        if not user_message:
+            logger.error("No user message found for AI comparison")
+            return Command(
+                update={
+                    "comparison_results": {
+                        "error": "No user query found",
+                        "status": "failed",
+                    },
+                    "goto": "reporter",
+                }
+            )
+        
+        logger.info(f"Running AI comparison for query: {user_message[:100]}...")
+        
+        # Get the AI comparison flow instance
+        comparison_flow = get_ai_comparison_flow()
+        
+        # Run the comparison
+        results = await comparison_flow.run_comparison(user_message)
+        
+        logger.info("AI comparison completed successfully")
+        
+        # Store results in state and proceed to reporter
+        return Command(
+            update={
+                "comparison_results": results,
+                "goto": "reporter",
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"AI comparison node failed: {e}", exc_info=True)
+        return Command(
+            update={
+                "comparison_results": {
+                    "error": str(e),
+                    "status": "failed",
+                },
+                "goto": "reporter",
+            }
+        )

@@ -46,3 +46,7 @@ class State(MessagesState):
 
     # Workflow control
     goto: str = "planner"  # Default next node
+    
+    # AI Comparison / Debate OS mode
+    enable_ai_comparison: bool = False  # Enable AI comparison mode
+    comparison_results: dict[str, Any] | None = None  # Results from AI comparison
