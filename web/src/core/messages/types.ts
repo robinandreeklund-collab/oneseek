@@ -13,7 +13,8 @@ export interface Message {
     | "coder"
     | "reporter"
     | "podcast"
-    | "analyst";
+    | "analyst"
+    | "ai_comparison";
   role: MessageRole;
   isStreaming?: boolean;
   content: string;

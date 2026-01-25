@@ -259,7 +259,8 @@ function appendMessage(message: Message) {
     message.agent === "coder" ||
     message.agent === "reporter" ||
     message.agent === "researcher" ||
-    message.agent === "analyst"
+    message.agent === "analyst" ||
+    message.agent === "ai_comparison"
   ) {
     if (!getOngoingResearchId()) {
       const id = message.id;
