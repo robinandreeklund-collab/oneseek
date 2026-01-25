@@ -43,6 +43,78 @@ from .utils import (
 logger = logging.getLogger(__name__)
 
 
+def is_json_like(content: str) -> bool:
+    """
+    Check if content looks like JSON by checking if it starts with { or [.
+    
+    This is a heuristic check for basic structural indicators, not actual JSON validation.
+    """
+    if not content:
+        return False
+    stripped = content.strip()
+    return stripped.startswith('{') or stripped.startswith('[')
+
+
+def strip_think_tags(content: str, expect_json: bool = False) -> str:
+    """
+    Strip <think> tags from content, intelligently handling different placements.
+    
+    This function handles multiple cases:
+    1. Standard case: Content after </think> tag (e.g., "<think>...</think>actual content")
+    2. Edge case: Content inside <think> tags (e.g., "<think>actual content</think>")
+    3. Edge case: Content before <think> tag (e.g., "actual content<think>...</think>")
+    4. No tags: Returns content as-is
+    5. Only tags with no content: Returns empty string
+    
+    For JSON responses (when expect_json=True), it tries content after </think> first,
+    then falls back to content inside tags if the after-content is empty or invalid JSON.
+    For non-JSON responses, it tries content after, before, then inside tags.
+    
+    Args:
+        content: The content potentially containing <think> tags
+        expect_json: If True, applies JSON-specific logic for fallback
+        
+    Returns:
+        Content with <think> tags stripped appropriately
+    """
+    if not content or '<think>' not in content or '</think>' not in content:
+        return content
+    
+    think_start = content.find('<think>')
+    think_end = content.find('</think>')
+    
+    # Validate that tags are in correct order
+    if think_start >= think_end or think_start < 0 or think_end < 0:
+        # Invalid tag ordering, return content as-is
+        return content
+    
+    # Extract all potential content locations
+    content_before = content[:think_start].strip()
+    content_inside = content[think_start + len('<think>'):think_end].strip()
+    content_after = content[think_end + len('</think>'):].strip()
+    
+    if expect_json:
+        # For JSON: prefer after, but fall back to inside if after is not valid JSON
+        if content_after and is_json_like(content_after):
+            return content_after
+        if content_inside and is_json_like(content_inside):
+            return content_inside
+        if content_before and is_json_like(content_before):
+            return content_before
+        # Fallback to after even if empty/invalid (will be caught by validation)
+        return content_after
+    else:
+        # For non-JSON: prefer after, then before, then inside
+        if content_after:
+            return content_after
+        if content_before:
+            return content_before
+        if content_inside:
+            return content_inside
+        # Fallback: return empty string to avoid showing just the tags
+        return ""
+
+
 @tool
 def handoff_to_planner(
     research_topic: Annotated[str, "The topic of the research task to be handed off."],
@@ -321,10 +393,7 @@ def planner_node(
     full_response = ""
     if AGENT_LLM_MAP["planner"] == "basic" and not configurable.enable_deep_thinking:
         response = llm.invoke(messages)
-        if hasattr(response, "model_dump_json"):
-            full_response = response.model_dump_json(indent=4, exclude_none=True)
-        else:
-            full_response = get_message_content(response) or ""
+        full_response = get_message_content(response) or ""
     else:
         response = llm.stream(messages)
         for chunk in response:
@@ -333,14 +402,13 @@ def planner_node(
     logger.info(f"Planner response: {full_response}")
 
     # Strip <think> tags if present (from deep thinking mode)
-    if '<think>' in full_response and '</think>' in full_response:
-        # Extract content after </think> tag
-        think_end = full_response.find('</think>')
-        full_response = full_response[think_end + len('</think>'):].strip()
-        logger.debug(f"Extracted JSON after <think> tags: {full_response}")
+    original_response = full_response
+    full_response = strip_think_tags(full_response, expect_json=True)
+    if '<think>' in original_response and '<think>' not in full_response:  # Tags were stripped
+        logger.debug(f"Stripped think tags, result: {full_response[:100]}...")
 
     # Validate explicitly that response content is valid JSON before proceeding to parse it
-    if not full_response.strip().startswith('{') and not full_response.strip().startswith('['):
+    if not is_json_like(full_response):
         logger.warning("Planner response does not appear to be valid JSON")
         if plan_iterations > 0:
             return Command(
@@ -690,6 +758,9 @@ def coordinator_node(
         # --- Process LLM response ---
         # No tool calls - LLM is asking a clarifying question
         if not response.tool_calls and response.content:
+            # Strip think tags from coordinator response
+            coordinator_content = strip_think_tags(response.content)
+            
             # Check if we've reached max rounds - if so, force handoff to planner
             if clarification_rounds >= max_clarification_rounds:
                 logger.warning(
@@ -703,14 +774,14 @@ def coordinator_node(
                 clarification_rounds += 1
                 # Do NOT add LLM response to clarification_history - only user responses
                 logger.info(
-                    f"Clarification response: {clarification_rounds}/{max_clarification_rounds}: {response.content}"
+                    f"Clarification response: {clarification_rounds}/{max_clarification_rounds}: {coordinator_content}"
                 )
 
                 # Append coordinator's question to messages
                 updated_messages = list(state_messages)
-                if response.content:
+                if coordinator_content:
                     updated_messages.append(
-                        HumanMessage(content=response.content, name="coordinator")
+                        HumanMessage(content=coordinator_content, name="coordinator")
                     )
 
                 return Command(
@@ -725,7 +796,7 @@ def coordinator_node(
                         "is_clarification_complete": False,
                         "goto": goto,
                         "citations": state.get("citations", []),
-                        "__interrupt__": [("coordinator", response.content)],
+                        "__interrupt__": [("coordinator", coordinator_content)],
                     },
                     goto=goto,
                 )
@@ -744,7 +815,9 @@ def coordinator_node(
     # ============================================================
     messages = list(state.get("messages", []) or [])
     if response.content:
-        messages.append(HumanMessage(content=response.content, name="coordinator"))
+        # Strip think tags from coordinator response before adding to messages
+        coordinator_content = strip_think_tags(response.content)
+        messages.append(HumanMessage(content=coordinator_content, name="coordinator"))
 
     # Process tool calls for BOTH branches (legacy and clarification)
     if response.tool_calls:
@@ -878,7 +951,7 @@ def reporter_node(state: State, config: RunnableConfig):
 
     logger.debug(f"Current invoke messages: {invoke_messages}")
     response = get_llm_by_type(AGENT_LLM_MAP["reporter"]).invoke(invoke_messages)
-    response_content = response.content
+    response_content = strip_think_tags(response.content)
     logger.info(f"reporter response: {response_content}")
 
     return {
@@ -1098,6 +1171,9 @@ async def _execute_agent_step(
 
     # Process the result
     response_content = result["messages"][-1].content
+    
+    # Strip think tags if present
+    response_content = strip_think_tags(response_content)
     
     # Sanitize response to remove extra tokens and truncate if needed
     response_content = sanitize_tool_response(str(response_content))
