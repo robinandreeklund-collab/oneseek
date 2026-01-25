@@ -331,10 +331,28 @@ def planner_node(
 
     # Strip <think> tags if present (from deep thinking mode)
     if '<think>' in full_response and '</think>' in full_response:
-        # Extract content after </think> tag
+        think_start = full_response.find('<think>')
         think_end = full_response.find('</think>')
-        full_response = full_response[think_end + len('</think>'):].strip()
-        logger.debug(f"Extracted JSON after <think> tags: {full_response}")
+        
+        # First, try content after </think> tag
+        content_after = full_response[think_end + len('</think>'):].strip()
+        
+        # If content after is empty or doesn't look like JSON, try content inside <think> tags
+        if not content_after or (not content_after.startswith('{') and not content_after.startswith('[')):
+            # Extract content between <think> and </think>
+            content_inside = full_response[think_start + len('<think>'):think_end].strip()
+            
+            # Use content inside if it looks like valid JSON
+            if content_inside and (content_inside.startswith('{') or content_inside.startswith('[')):
+                full_response = content_inside
+                logger.debug(f"Extracted JSON from inside <think> tags: {full_response[:100]}...")
+            else:
+                # Fall back to content after even if empty
+                full_response = content_after
+                logger.debug(f"Extracted JSON after <think> tags: {full_response[:100] if full_response else '(empty)'}")
+        else:
+            full_response = content_after
+            logger.debug(f"Extracted JSON after <think> tags: {full_response[:100]}...")
 
     # Validate explicitly that response content is valid JSON before proceeding to parse it
     if not full_response.strip().startswith('{') and not full_response.strip().startswith('['):
