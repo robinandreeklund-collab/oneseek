@@ -23,7 +23,7 @@ export function Jumbotron() {
       />
       <FlickeringGrid
         id="oneseek-hero"
-        className="absolute inset-0 z-0 translate-y-[2vh] mask-[url(/images/oneseek-hero.svg)] mask-size-[100vw] mask-center mask-no-repeat md:mask-size-[72vh]"
+        className="absolute top-[20vh] left-1/2 z-0 h-[15vh] w-[80vw] -translate-x-1/2 mask-[url(/images/oneseek-hero.svg)] mask-size-contain mask-center mask-no-repeat md:w-[60vw]"
         squareSize={3}
         gridGap={6}
         color="#60A5FA"

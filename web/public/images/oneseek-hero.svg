@@ -1,68 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 800 800">
-  <!-- Abstract concentric circles with dots representing data/connections -->
-  <g opacity="0.8">
-    <!-- Outer circles -->
-    <circle cx="400" cy="400" r="350" fill="none" stroke="currentColor" stroke-width="1" opacity="0.1"/>
-    <circle cx="400" cy="400" r="300" fill="none" stroke="currentColor" stroke-width="1" opacity="0.15"/>
-    <circle cx="400" cy="400" r="250" fill="none" stroke="currentColor" stroke-width="1" opacity="0.2"/>
-    <circle cx="400" cy="400" r="200" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.25"/>
-    <circle cx="400" cy="400" r="150" fill="none" stroke="currentColor" stroke-width="2" opacity="0.3"/>
-    <circle cx="400" cy="400" r="100" fill="none" stroke="currentColor" stroke-width="2" opacity="0.35"/>
-    <circle cx="400" cy="400" r="50" fill="none" stroke="currentColor" stroke-width="2" opacity="0.4"/>
-    
-    <!-- Connection nodes on circles - creating a network/data visualization feel -->
-    <!-- Outer ring -->
-    <circle cx="400" cy="50" r="4" fill="currentColor" opacity="0.4"/>
-    <circle cx="650" cy="150" r="4" fill="currentColor" opacity="0.4"/>
-    <circle cx="750" cy="400" r="4" fill="currentColor" opacity="0.4"/>
-    <circle cx="650" cy="650" r="4" fill="currentColor" opacity="0.4"/>
-    <circle cx="400" cy="750" r="4" fill="currentColor" opacity="0.4"/>
-    <circle cx="150" cy="650" r="4" fill="currentColor" opacity="0.4"/>
-    <circle cx="50" cy="400" r="4" fill="currentColor" opacity="0.4"/>
-    <circle cx="150" cy="150" r="4" fill="currentColor" opacity="0.4"/>
-    
-    <!-- Middle ring -->
-    <circle cx="400" cy="150" r="5" fill="currentColor" opacity="0.5"/>
-    <circle cx="573" cy="227" r="5" fill="currentColor" opacity="0.5"/>
-    <circle cx="650" cy="400" r="5" fill="currentColor" opacity="0.5"/>
-    <circle cx="573" cy="573" r="5" fill="currentColor" opacity="0.5"/>
-    <circle cx="400" cy="650" r="5" fill="currentColor" opacity="0.5"/>
-    <circle cx="227" cy="573" r="5" fill="currentColor" opacity="0.5"/>
-    <circle cx="150" cy="400" r="5" fill="currentColor" opacity="0.5"/>
-    <circle cx="227" cy="227" r="5" fill="currentColor" opacity="0.5"/>
-    
-    <!-- Inner ring -->
-    <circle cx="400" cy="250" r="6" fill="currentColor" opacity="0.6"/>
-    <circle cx="506" cy="294" r="6" fill="currentColor" opacity="0.6"/>
-    <circle cx="550" cy="400" r="6" fill="currentColor" opacity="0.6"/>
-    <circle cx="506" cy="506" r="6" fill="currentColor" opacity="0.6"/>
-    <circle cx="400" cy="550" r="6" fill="currentColor" opacity="0.6"/>
-    <circle cx="294" cy="506" r="6" fill="currentColor" opacity="0.6"/>
-    <circle cx="250" cy="400" r="6" fill="currentColor" opacity="0.6"/>
-    <circle cx="294" cy="294" r="6" fill="currentColor" opacity="0.6"/>
-    
-    <!-- Central focus point -->
-    <circle cx="400" cy="400" r="8" fill="currentColor" opacity="0.7"/>
-    
-    <!-- Connection lines creating a web/network effect -->
-    <line x1="400" y1="250" x2="506" y2="294" stroke="currentColor" stroke-width="0.5" opacity="0.15"/>
-    <line x1="506" y1="294" x2="550" y2="400" stroke="currentColor" stroke-width="0.5" opacity="0.15"/>
-    <line x1="550" y1="400" x2="506" y2="506" stroke="currentColor" stroke-width="0.5" opacity="0.15"/>
-    <line x1="506" y1="506" x2="400" y2="550" stroke="currentColor" stroke-width="0.5" opacity="0.15"/>
-    <line x1="400" y1="550" x2="294" y2="506" stroke="currentColor" stroke-width="0.5" opacity="0.15"/>
-    <line x1="294" y1="506" x2="250" y2="400" stroke="currentColor" stroke-width="0.5" opacity="0.15"/>
-    <line x1="250" y1="400" x2="294" y2="294" stroke="currentColor" stroke-width="0.5" opacity="0.15"/>
-    <line x1="294" y1="294" x2="400" y2="250" stroke="currentColor" stroke-width="0.5" opacity="0.15"/>
-    
-    <!-- Inner connections to center -->
-    <line x1="400" y1="250" x2="400" y2="400" stroke="currentColor" stroke-width="0.5" opacity="0.2"/>
-    <line x1="506" y1="294" x2="400" y2="400" stroke="currentColor" stroke-width="0.5" opacity="0.2"/>
-    <line x1="550" y1="400" x2="400" y2="400" stroke="currentColor" stroke-width="0.5" opacity="0.2"/>
-    <line x1="506" y1="506" x2="400" y2="400" stroke="currentColor" stroke-width="0.5" opacity="0.2"/>
-    <line x1="400" y1="550" x2="400" y2="400" stroke="currentColor" stroke-width="0.5" opacity="0.2"/>
-    <line x1="294" y1="506" x2="400" y2="400" stroke="currentColor" stroke-width="0.5" opacity="0.2"/>
-    <line x1="250" y1="400" x2="400" y2="400" stroke="currentColor" stroke-width="0.5" opacity="0.2"/>
-    <line x1="294" y1="294" x2="400" y2="400" stroke="currentColor" stroke-width="0.5" opacity="0.2"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300">
+  <!-- Text "Oneseek" as filled shapes for masking -->
+  <text x="50%" y="50%" 
+        dominant-baseline="middle" 
+        text-anchor="middle" 
+        font-family="system-ui, -apple-system, sans-serif" 
+        font-size="180" 
+        font-weight="700" 
+        fill="currentColor"
+        letter-spacing="-0.02em">
+    Oneseek
+  </text>
 </svg>
