@@ -873,7 +873,8 @@ def coordinator_node(
             logger.info("No tool calls in legacy mode - ending workflow gracefully")
 
     # Apply background_investigation routing if enabled (unified logic)
-    if goto == "planner" and state.get("enable_background_investigation"):
+    # But skip if AI comparison mode is enabled (comparison doesn't need background investigation)
+    if goto == "planner" and state.get("enable_background_investigation") and not state.get("enable_ai_comparison"):
         goto = "background_investigator"
 
     # Set default values for state variables (in case they're not defined in legacy mode)
