@@ -95,21 +95,9 @@ export function MessagesBlock({ className }: { className?: string }) {
     const query = searchParams?.get("q");
     if (query && !initialQueryProcessedRef.current && !isReplay && messageCount === 0) {
       initialQueryProcessedRef.current = true;
-      const abortController = new AbortController();
-      abortControllerRef.current = abortController;
-      void sendMessage(
-        query,
-        {
-          interruptFeedback: feedback?.option.value,
-          resources: [],
-        },
-        {
-          abortSignal: abortController.signal,
-        },
-      );
+      void handleSend(query);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, isReplay, messageCount]);
+  }, [searchParams, isReplay, messageCount, handleSend]);
   
   return (
     <div className={cn("flex h-full flex-col", className)}>
