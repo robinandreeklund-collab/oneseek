@@ -60,7 +60,7 @@ class AIComparisonFlow:
     Integrates with DeerFlow's deep research tools for fact-checking and RAG.
     """
 
-    def __init__(self):
+    def __init__(self, max_search_results: int = 3, resources: List[Any] = None):
         """Initialize AI comparison flow with configured models."""
         self.models = self._initialize_models()
         self.search_tool = None
@@ -68,14 +68,15 @@ class AIComparisonFlow:
         
         # Initialize tools from deer_flow
         try:
-            self.search_tool = get_web_search_tool()
+            self.search_tool = get_web_search_tool(max_search_results=max_search_results)
             logger.info("Web search tool initialized for AI comparison")
         except Exception as e:
             logger.warning(f"Could not initialize web search tool: {e}")
         
         try:
-            self.retriever_tool = get_retriever_tool()
-            logger.info("Retriever tool initialized for AI comparison")
+            if resources:
+                self.retriever_tool = get_retriever_tool(resources=resources)
+                logger.info("Retriever tool initialized for AI comparison")
         except Exception as e:
             logger.warning(f"Could not initialize retriever tool: {e}")
 
@@ -165,7 +166,7 @@ class AIComparisonFlow:
         Query a single AI model and return its response.
         
         Args:
-            model_key: Model identifier (e.g., "gpt-4o")
+            model_key: Model identifier (e.g., "gpt-3.5-turbo" or "meta-counterfactual")
             model: LangChain model instance
             query: User query to send to the model
             
@@ -177,18 +178,22 @@ class AIComparisonFlow:
             messages = [HumanMessage(content=query)]
             response = await model.ainvoke(messages)
             
+            # Get display name if it's a standard model, otherwise use the key
+            display_name = AI_MODELS.get(model_key, {}).get("display_name", model_key)
+            
             return {
                 "model": model_key,
-                "display_name": AI_MODELS[model_key]["display_name"],
+                "display_name": display_name,
                 "response": response.content if hasattr(response, "content") else str(response),
                 "success": True,
                 "error": None,
             }
         except Exception as e:
             logger.error(f"Error querying {model_key}: {e}")
+            display_name = AI_MODELS.get(model_key, {}).get("display_name", model_key)
             return {
                 "model": model_key,
-                "display_name": AI_MODELS[model_key]["display_name"],
+                "display_name": display_name,
                 "response": None,
                 "success": False,
                 "error": str(e),
@@ -492,9 +497,9 @@ Please provide a comprehensive, well-reasoned answer that:
 _ai_comparison_flow: Optional[AIComparisonFlow] = None
 
 
-def get_ai_comparison_flow() -> AIComparisonFlow:
+def get_ai_comparison_flow(max_search_results: int = 3, resources: List[Any] = None) -> AIComparisonFlow:
     """Get or create the global AI comparison flow instance."""
     global _ai_comparison_flow
-    if _ai_comparison_flow is None:
-        _ai_comparison_flow = AIComparisonFlow()
+    # Always create a new instance with the provided parameters
+    _ai_comparison_flow = AIComparisonFlow(max_search_results=max_search_results, resources=resources or [])
     return _ai_comparison_flow

@@ -1479,7 +1479,7 @@ async def ai_comparison_node(
     Implements Debate OS functionality for DeerFlow.
     
     This node:
-    1. Queries multiple AI models in parallel (GPT-4o, Gemini, DeepSeek, Grok, OneSeek)
+    1. Queries multiple AI models in parallel (GPT-3.5, Gemini, DeepSeek, Grok, OneSeek)
     2. Performs fact-checking using DeerFlow tools
     3. Runs meta-agents for deeper analysis
     4. Synthesizes an optimal answer
@@ -1489,6 +1489,7 @@ async def ai_comparison_node(
     try:
         # Import here to avoid circular dependencies
         from backend.ai_comparison_flow import get_ai_comparison_flow
+        from backend.deer_flow.config.configuration import Configuration
         
         # Get the user query from the latest message
         messages = state.get("messages", [])
@@ -1512,8 +1513,13 @@ async def ai_comparison_node(
         
         logger.info(f"Running AI comparison for query: {user_message[:100]}...")
         
-        # Get the AI comparison flow instance
-        comparison_flow = get_ai_comparison_flow()
+        # Get configuration
+        configurable = Configuration.from_runnable_config(config)
+        max_search_results = configurable.max_search_results if hasattr(configurable, 'max_search_results') else 3
+        resources = configurable.resources if hasattr(configurable, 'resources') else []
+        
+        # Get the AI comparison flow instance with proper parameters
+        comparison_flow = get_ai_comparison_flow(max_search_results=max_search_results, resources=resources)
         
         # Run the comparison
         results = await comparison_flow.run_comparison(user_message)
