@@ -14,6 +14,7 @@ const DEFAULT_SETTINGS: SettingsState = {
     maxClarificationRounds: 3,
     enableDeepThinking: false,
     enableBackgroundInvestigation: false,
+    enableAiComparison: false,
     enableWebSearch: true,
     maxPlanIterations: 1,
     maxStepNum: 3,
@@ -32,6 +33,7 @@ export type SettingsState = {
     maxClarificationRounds: number;
     enableDeepThinking: boolean;
     enableBackgroundInvestigation: boolean;
+    enableAiComparison: boolean;
     enableWebSearch: boolean;
     maxPlanIterations: number;
     maxStepNum: number;
@@ -162,6 +164,16 @@ export function setEnableBackgroundInvestigation(value: boolean) {
     general: {
       ...state.general,
       enableBackgroundInvestigation: value,
+    },
+  }));
+  saveSettings();
+}
+
+export function setEnableAiComparison(value: boolean) {
+  useSettingsStore.setState((state) => ({
+    general: {
+      ...state.general,
+      enableAiComparison: value,
     },
   }));
   saveSettings();

@@ -125,6 +125,11 @@
         "title": "Undersökningsläge: {status}",
         "description": "När aktiverat kommer Oneseek att utföra en snabb sökning innan planering. Detta är användbart för forskning relaterad till pågående händelser och nyheter."
       },
+      "aiComparison": "Jämför AI:er",
+      "aiComparisonTooltip": {
+        "title": "AI-jämförelseläge: {status}",
+        "description": "När aktiverat kommer Oneseek att fråga flera AI-modeller parallellt (GPT-4o, Gemini, DeepSeek, Grok) och syntetisera ett optimalt svar med faktakontroll och meta-analys."
+      },
       "enhancePrompt": "Förbättra prompt med AI",
       "on": "På",
       "off": "Av"
