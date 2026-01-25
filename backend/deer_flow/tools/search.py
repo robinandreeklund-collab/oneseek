@@ -44,6 +44,10 @@ LoggedWikipediaSearch = create_logged_tool(WikipediaQueryRun)
 def get_search_config():
     config = load_yaml_config("conf.yaml")
     search_config = config.get("SEARCH_ENGINE", {})
+    # Handle both string (simple) and dict (advanced) configuration formats
+    if isinstance(search_config, str):
+        # Simple format: just the engine name, return empty dict for tool options
+        return {}
     return search_config
 
 
