@@ -39,7 +39,7 @@ export function MessagesBlock({ className }: { className?: string }) {
   const [replayStarted, setReplayStarted] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const [feedback, setFeedback] = useState<{ option: Option } | null>(null);
-  const [initialQueryProcessed, setInitialQueryProcessed] = useState(false);
+  const initialQueryProcessedRef = useRef(false);
   
   const handleSend = useCallback(
     async (
@@ -93,11 +93,23 @@ export function MessagesBlock({ className }: { className?: string }) {
   // Handle initial query parameter from landing page
   useEffect(() => {
     const query = searchParams?.get("q");
-    if (query && !initialQueryProcessed && !isReplay && messageCount === 0) {
-      setInitialQueryProcessed(true);
-      void handleSend(query);
+    if (query && !initialQueryProcessedRef.current && !isReplay && messageCount === 0) {
+      initialQueryProcessedRef.current = true;
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+      void sendMessage(
+        query,
+        {
+          interruptFeedback: feedback?.option.value,
+          resources: [],
+        },
+        {
+          abortSignal: abortController.signal,
+        },
+      );
     }
-  }, [searchParams, initialQueryProcessed, isReplay, messageCount, handleSend]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, isReplay, messageCount]);
   
   return (
     <div className={cn("flex h-full flex-col", className)}>
