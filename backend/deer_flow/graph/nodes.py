@@ -44,7 +44,11 @@ logger = logging.getLogger(__name__)
 
 
 def is_json_like(content: str) -> bool:
-    """Check if content looks like JSON (starts with { or [)."""
+    """
+    Check if content looks like JSON by checking if it starts with { or [.
+    
+    This is a heuristic check for basic structural indicators, not actual JSON validation.
+    """
     if not content:
         return False
     stripped = content.strip()
