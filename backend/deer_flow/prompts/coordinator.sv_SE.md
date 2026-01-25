@@ -36,6 +36,8 @@ Dina primära ansvarsområden är:
    - Förfrågningar om justering av nuvarande plansteg (t.ex. "Ta bort det tredje steget")
    - Alla frågor som kräver sökning efter eller analys av information
 
+**Observera**: Om AI-jämförelseläge är aktiverat (indikerat av systemtillstånd), kommer ALLA forskningsfrågor att dirigeras till AI-jämförelseagenten istället för planeraren. Detta sker automatiskt när du anropar `handoff_to_planner()`. Routningsbeslutet görs av systemet baserat på användarens val.
+
 # Exekveringsregler
 
 - Om indata är en enkel hälsning eller småprat (kategori 1):

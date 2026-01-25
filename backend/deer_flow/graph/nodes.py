@@ -1478,6 +1478,7 @@ async def ai_comparison_node(
     """
     AI Comparison node that runs parallel queries across multiple AI models.
     Implements Debate OS functionality for DeerFlow with real-time streaming.
+    Uses standard agent pattern for consistent streaming behavior.
     """
     logger.info("AI Comparison node starting - Debate OS mode")
     
@@ -1485,8 +1486,8 @@ async def ai_comparison_node(
     tools = get_ai_comparison_tools()
     locale = state.get("locale", "en-US")
     
-    # Create agent with AI comparison tools
-    llm_token_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP.get("ai_comparison", "default"))
+    # Create agent with AI comparison tools using standard pattern
+    llm_token_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP.get("ai_comparison", "basic"))
     pre_model_hook = partial(ContextManager(llm_token_limit, 3).compress_messages)
     agent = create_agent(
         "ai_comparison",
@@ -1498,13 +1499,11 @@ async def ai_comparison_node(
         locale=locale,
     )
     
-    # Invoke agent with the current state
-    result = await agent.ainvoke(state, config)
+    # Execute agent using standard execution flow (like researcher/coder)
+    result = await _execute_agent_step(state, agent, "ai_comparison", config)
     
-    # Return to reporter
+    # Convert result to go to reporter instead of research_team
     return Command(
-        update={
-            "messages": result["messages"],
-        },
+        update=result.update,
         goto="reporter",
     )
