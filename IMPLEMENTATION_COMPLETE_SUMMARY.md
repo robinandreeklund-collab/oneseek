@@ -44,14 +44,17 @@ This PR successfully implements the Qwen3 model's built-in thinking functionalit
 
 ### vLLM API Parameter
 ```python
-{
-    "extra_body": {
+# Correct binding method - pass extra_body as keyword argument
+llm.bind(
+    extra_body={
         "chat_template_kwargs": {
-            "enable_thinking": true  # or false
+            "enable_thinking": True  # or False
         }
     }
-}
+)
 ```
+
+**Important**: The `extra_body` parameter must be passed as a direct keyword argument to `.bind()`, not as `**dict`. This was fixed in commit `ff459c3` to resolve an issue where thinking tags appeared even when the button was OFF.
 
 ### Swedish Language Instruction
 When Swedish locale + thinking enabled:

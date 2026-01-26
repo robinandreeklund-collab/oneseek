@@ -78,14 +78,17 @@ This function dynamically configures the LLM with the `enable_thinking` paramete
 The implementation uses vLLM's OpenAI-compatible API with custom parameters:
 
 ```python
-{
-    "extra_body": {
+# Correct binding method - pass extra_body as keyword argument
+llm.bind(
+    extra_body={
         "chat_template_kwargs": {
-            "enable_thinking": true  # or false
+            "enable_thinking": True  # or False
         }
     }
-}
+)
 ```
+
+**Important**: The `extra_body` parameter must be passed as a direct keyword argument to `.bind()`, not unpacked from a dictionary. This ensures vLLM receives the `chat_template_kwargs` correctly.
 
 This parameter is passed to vLLM when the model is invoked, controlling whether Qwen3 generates `<think>...</think>` tags.
 
