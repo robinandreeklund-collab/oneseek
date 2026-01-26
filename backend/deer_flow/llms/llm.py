@@ -241,7 +241,11 @@ def configure_llm_with_thinking(
     except (TypeError, AttributeError) as e:
         # TypeError: if bind() is not supported or model_kwargs format is invalid
         # AttributeError: if the LLM instance doesn't have a bind method
-        logger.warning(f"Failed to bind thinking parameters to LLM: {e}. Using original LLM.")
+        logger.warning(f"Failed to bind thinking parameters to LLM ({type(e).__name__}): {e}. Using original LLM.")
+        return llm
+    except Exception as e:
+        # Catch any other unexpected exceptions to ensure graceful degradation
+        logger.warning(f"Unexpected error binding thinking parameters to LLM ({type(e).__name__}): {e}. Using original LLM.")
         return llm
 
 

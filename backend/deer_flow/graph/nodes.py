@@ -377,15 +377,13 @@ def planner_node(
             }
         ]
 
-    # Get locale once for use throughout this section
-    locale = state.get("locale", "en-US")
-    
     if configurable.enable_deep_thinking:
         llm = get_llm_by_type("reasoning")
         # Configure LLM with enable_thinking parameter for vLLM/Qwen3
         llm = configure_llm_with_thinking(llm, enable_thinking=True)
         
         # Add Swedish language instruction when thinking mode is enabled and locale is Swedish
+        locale = state.get("locale", "en-US")
         if locale.startswith("sv"):
             messages += [
                 {
