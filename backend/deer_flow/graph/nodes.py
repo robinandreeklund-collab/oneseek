@@ -998,14 +998,47 @@ def reporter_node(state: State, config: RunnableConfig):
                 "citations": [],
             }
     
-    input_ = {
-        "messages": [
-            HumanMessage(
-                f"# Research Requirements\n\n## Task\n\n{current_plan.title}\n\n## Description\n\n{current_plan.thought}"
-            )
-        ],
-        "locale": state.get("locale", "en-US"),
-    }
+    # Handle case where current_plan is a string (raw JSON from planner)
+    # This happens when planner routes to AI comparison or human_feedback
+    if isinstance(current_plan, str):
+        logger.info("current_plan is a string, parsing it as Plan object")
+        try:
+            # Try to parse the JSON string to extract plan information
+            plan_dict = json.loads(repair_json_output(current_plan))
+            plan_content = extract_plan_content(plan_dict)
+            plan_dict = json.loads(repair_json_output(plan_content))
+            current_plan = Plan.model_validate(plan_dict)
+        except Exception as e:
+            logger.error(f"Failed to parse current_plan string to Plan object: {e}")
+            # Fall back to a generic task description
+            plan_title = "AI Model Comparison Research"
+            plan_thought = "Compare and analyze responses from multiple AI models"
+            input_ = {
+                "messages": [
+                    HumanMessage(
+                        f"# Research Requirements\n\n## Task\n\n{plan_title}\n\n## Description\n\n{plan_thought}"
+                    )
+                ],
+                "locale": state.get("locale", "en-US"),
+            }
+            invoke_messages = apply_prompt_template("reporter", input_, configurable, input_.get("locale", "en-US"))
+            observations = state.get("observations", [])
+            
+            # Get collected citations for the report
+            citations = state.get("citations", [])
+            
+            # Continue with reporter execution using fallback values
+            # (rest of the reporter logic will be executed below)
+    
+    if not isinstance(current_plan, str):  # Only set input_ if we have a proper Plan object
+        input_ = {
+            "messages": [
+                HumanMessage(
+                    f"# Research Requirements\n\n## Task\n\n{current_plan.title}\n\n## Description\n\n{current_plan.thought}"
+                )
+            ],
+            "locale": state.get("locale", "en-US"),
+        }
     invoke_messages = apply_prompt_template("reporter", input_, configurable, input_.get("locale", "en-US"))
     observations = state.get("observations", [])
     
