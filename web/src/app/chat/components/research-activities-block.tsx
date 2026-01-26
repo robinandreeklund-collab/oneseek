@@ -48,20 +48,10 @@ export function ResearchActivitiesBlock({
   );
   const ongoing = useStore((state) => state.ongoingResearchId === researchId);
   
-  // Get the plan message for this research
-  const planMessageId = useStore((state) =>
-    state.researchPlanIds.get(researchId),
-  );
-  const planMessage = useMessage(planMessageId ?? null);
-  
-  // Render plan card if available
-  const planCard = planMessage ? <PlanCard message={planMessage} /> : null;
-  
   // Guard against undefined activityIds
   if (!activityIds || activityIds.length === 0) {
     return (
       <>
-        {planCard}
         {ongoing && <LoadingAnimation className="mx-4 my-12" />}
       </>
     );
@@ -69,7 +59,6 @@ export function ResearchActivitiesBlock({
   
   return (
     <>
-      {planCard}
       <ul className={cn("flex flex-col py-4", className)}>
         {activityIds.map(
           (activityId, i) => {
