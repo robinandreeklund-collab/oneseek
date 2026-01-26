@@ -107,7 +107,7 @@ class TTSRequest(BaseModel):
 class GeneratePodcastRequest(BaseModel):
     content: str = Field(..., description="The content of the podcast")
     locale: str = Field(
-        "en-US", description="Language locale for the podcast (e.g., en-US, zh-CN, sv-SE)"
+        "en-US", description="Language locale for the podcast (e.g., en-US for English, zh-CN for Chinese, sv-SE for Swedish)"
     )
 
 
