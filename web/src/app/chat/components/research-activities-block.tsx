@@ -84,13 +84,13 @@ export function ResearchActivitiesBlock({
 
 const ActivityMessage = React.memo(({ messageId }: { messageId: string }) => {
   const message = useMessage(messageId);
-  if (message?.agent && message.content) {
-    // Show planner messages as plan cards
+  if (message?.agent) {
+    // Show planner messages as plan cards (even if content is empty/streaming)
     if (message.agent === "planner") {
       return <PlanCard message={message} />;
     }
     // Skip reporter messages (they're shown in the Report tab)
-    if (message.agent !== "reporter") {
+    if (message.agent !== "reporter" && message.content) {
       return (
         <div className="px-4 py-2">
           <Markdown animated checkLinkCredibility>
@@ -117,10 +117,7 @@ const PlanCard = React.memo(({ message }: { message: Message }) => {
 
   const hasContent = Boolean(message.content && message.content.trim() !== "");
 
-  if (!hasContent) {
-    return null;
-  }
-
+  // Show the card even if content is empty/streaming
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -137,14 +134,20 @@ const PlanCard = React.memo(({ message }: { message: Message }) => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {plan.thought && (
+          {!hasContent && message.isStreaming && (
+            <div className="flex items-center gap-2 text-sm opacity-70">
+              <LoadingAnimation className="mx-0 my-0" />
+              <span>Creating research plan...</span>
+            </div>
+          )}
+          {hasContent && plan.thought && (
             <div className="break-all whitespace-normal">
               <Markdown className="opacity-80" animated={message.isStreaming}>
                 {plan.thought}
               </Markdown>
             </div>
           )}
-          {plan.steps && plan.steps.length > 0 && (
+          {hasContent && plan.steps && plan.steps.length > 0 && (
             <ul className="my-2 flex list-decimal flex-col gap-4 border-l-[2px] pl-8">
               {plan.steps.map((step, i) => (
                 <li key={`step-${i}`} className="break-all whitespace-normal">
