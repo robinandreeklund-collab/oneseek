@@ -53,8 +53,6 @@ export function ResearchActivitiesBlock({
       <ul className={cn("flex flex-col py-4", className)}>
         {activityIds.map(
           (activityId, i) => {
-            if (i === 0) return null;
-            
             // Performance optimization: limit animations for large lists
             const shouldAnimate = i < MAX_ANIMATED_ITEMS;
             const animationDelay = shouldAnimate ? Math.min(i * ANIMATION_DELAY_MULTIPLIER, 0.5) : 0;
