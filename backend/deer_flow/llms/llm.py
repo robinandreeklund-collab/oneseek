@@ -202,8 +202,7 @@ def get_llm_by_type(llm_type: LLMType) -> BaseChatModel:
 
 def configure_llm_with_thinking(
     llm: BaseChatModel,
-    enable_thinking: bool = False,
-    locale: str = "en-US"
+    enable_thinking: bool = False
 ) -> BaseChatModel:
     """
     Configure LLM with enable_thinking parameter for Qwen3/vLLM models.
@@ -214,15 +213,9 @@ def configure_llm_with_thinking(
     Args:
         llm: The base LLM instance
         enable_thinking: Whether to enable thinking mode
-        locale: Language locale for thinking instructions (reserved for future use)
         
     Returns:
         Configured LLM instance with thinking parameters bound
-        
-    Note:
-        The locale parameter is currently logged but not directly used in the
-        model configuration. It's provided for future enhancements where
-        locale-specific thinking configurations might be needed.
     """
     # Prepare model_kwargs for vLLM/OpenAI-compatible APIs
     # vLLM with Qwen3 expects: extra_body={"chat_template_kwargs": {"enable_thinking": true/false}}
@@ -238,9 +231,11 @@ def configure_llm_with_thinking(
     # This will be applied when invoke() or stream() is called
     try:
         configured_llm = llm.bind(**model_kwargs)
-        logger.debug(f"Configured LLM with enable_thinking={enable_thinking}, locale={locale}")
+        logger.debug(f"Configured LLM with enable_thinking={enable_thinking}")
         return configured_llm
-    except Exception as e:
+    except (TypeError, AttributeError) as e:
+        # TypeError: if bind() is not supported or model_kwargs format is invalid
+        # AttributeError: if the LLM instance doesn't have a bind method
         logger.warning(f"Failed to bind thinking parameters to LLM: {e}. Using original LLM.")
         return llm
 

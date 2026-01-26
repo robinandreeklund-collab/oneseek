@@ -383,10 +383,10 @@ def planner_node(
     if configurable.enable_deep_thinking:
         llm = get_llm_by_type("reasoning")
         # Configure LLM with enable_thinking parameter for vLLM/Qwen3
-        llm = configure_llm_with_thinking(llm, enable_thinking=True, locale=locale)
+        llm = configure_llm_with_thinking(llm, enable_thinking=True)
         
         # Add Swedish language instruction when thinking mode is enabled and locale is Swedish
-        if locale and locale.startswith("sv"):
+        if locale.startswith("sv"):
             messages += [
                 {
                     "role": "system",
@@ -400,11 +400,11 @@ def planner_node(
     elif AGENT_LLM_MAP["planner"] == "basic":
         llm = get_llm_by_type("basic")
         # When not in deep thinking mode, explicitly disable thinking for Qwen3/vLLM
-        llm = configure_llm_with_thinking(llm, enable_thinking=False, locale=locale)
+        llm = configure_llm_with_thinking(llm, enable_thinking=False)
     else:
         llm = get_llm_by_type(AGENT_LLM_MAP["planner"])
         # When not in deep thinking mode, explicitly disable thinking for Qwen3/vLLM
-        llm = configure_llm_with_thinking(llm, enable_thinking=False, locale=locale)
+        llm = configure_llm_with_thinking(llm, enable_thinking=False)
 
     # if the plan iterations is greater than the max plan iterations, return the reporter node
     if plan_iterations >= configurable.max_plan_iterations:
