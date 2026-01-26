@@ -134,17 +134,13 @@ const PlanCard = React.memo(({ message }: { message: Message }) => {
         <CardHeader>
           <CardTitle>
             <Markdown animated={message.isStreaming}>
-              {`### ${
-                plan.title !== undefined && plan.title !== ""
-                  ? plan.title
-                  : t("deepResearch")
-              }`}
+              {`### ${plan.title ?? t("deepResearch")}`}
             </Markdown>
           </CardTitle>
         </CardHeader>
         <CardContent>
           {plan.thought && (
-            <div style={{ wordBreak: 'break-all', whiteSpace: 'normal' }}>
+            <div className="break-all whitespace-normal">
               <Markdown className="opacity-80" animated={message.isStreaming}>
                 {plan.thought}
               </Markdown>
@@ -153,7 +149,7 @@ const PlanCard = React.memo(({ message }: { message: Message }) => {
           {plan.steps && plan.steps.length > 0 && (
             <ul className="my-2 flex list-decimal flex-col gap-4 border-l-[2px] pl-8">
               {plan.steps.map((step, i) => (
-                <li key={`step-${i}`} style={{ wordBreak: 'break-all', whiteSpace: 'normal' }}>
+                <li key={`step-${i}`} className="break-all whitespace-normal">
                   <div className="flex items-start gap-2">
                     <div className="flex-1">
                       <h3 className="mb-1 flex items-center gap-2 text-lg font-medium">
@@ -169,7 +165,7 @@ const PlanCard = React.memo(({ message }: { message: Message }) => {
                       {step.step_type && (
                         <div className="mt-1 text-xs opacity-50">
                           Type: {step.step_type}
-                          {step.need_search !== undefined && ` • Search: ${step.need_search ? 'Yes' : 'No'}`}
+                          {step.need_search ?? false ? ' • Search: Yes' : ' • Search: No'}
                         </div>
                       )}
                     </div>
