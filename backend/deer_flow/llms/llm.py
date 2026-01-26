@@ -214,10 +214,15 @@ def configure_llm_with_thinking(
     Args:
         llm: The base LLM instance
         enable_thinking: Whether to enable thinking mode
-        locale: Language locale for thinking instructions
+        locale: Language locale for thinking instructions (reserved for future use)
         
     Returns:
         Configured LLM instance with thinking parameters bound
+        
+    Note:
+        The locale parameter is currently logged but not directly used in the
+        model configuration. It's provided for future enhancements where
+        locale-specific thinking configurations might be needed.
     """
     # Prepare model_kwargs for vLLM/OpenAI-compatible APIs
     # vLLM with Qwen3 expects: extra_body={"chat_template_kwargs": {"enable_thinking": true/false}}
