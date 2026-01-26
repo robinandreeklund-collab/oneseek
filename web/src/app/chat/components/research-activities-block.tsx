@@ -48,6 +48,16 @@ export function ResearchActivitiesBlock({
   )!;
   const ongoing = useStore((state) => state.ongoingResearchId === researchId);
   
+  // Debug logging
+  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+    console.log('[ResearchActivitiesBlock] Rendering:', {
+      researchId,
+      activityIdsCount: activityIds?.length || 0,
+      activityIds: activityIds,
+      ongoing
+    });
+  }
+  
   return (
     <>
       <ul className={cn("flex flex-col py-4", className)}>
@@ -84,6 +94,18 @@ export function ResearchActivitiesBlock({
 
 const ActivityMessage = React.memo(({ messageId }: { messageId: string }) => {
   const message = useMessage(messageId);
+  
+  // Debug logging
+  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+    console.log('[ActivityMessage] Rendering:', {
+      messageId,
+      hasMessage: !!message,
+      agent: message?.agent,
+      hasContent: !!message?.content,
+      contentLength: message?.content?.length || 0
+    });
+  }
+  
   if (message?.agent) {
     // Show planner messages as plan cards (even if content is empty/streaming)
     if (message.agent === "planner") {
@@ -117,7 +139,18 @@ const PlanCard = React.memo(({ message }: { message: Message }) => {
 
   const hasContent = Boolean(message.content && message.content.trim() !== "");
 
-  // Show the card even if content is empty/streaming
+  // Always render the card, even if content is empty
+  // Log for debugging (will be visible in browser console)
+  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+    console.log('[PlanCard] Rendering:', {
+      hasContent,
+      isStreaming: message.isStreaming,
+      contentLength: message.content?.length || 0,
+      planTitle: plan.title,
+      stepsCount: plan.steps?.length || 0
+    });
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -129,7 +162,7 @@ const PlanCard = React.memo(({ message }: { message: Message }) => {
         <CardHeader>
           <CardTitle>
             <Markdown animated={message.isStreaming}>
-              {`### ${plan.title ?? t("deepResearch")}`}
+              {`### ${plan.title || hasContent ? (plan.title ?? t("deepResearch")) : t("deepResearch")}`}
             </Markdown>
           </CardTitle>
         </CardHeader>
@@ -138,6 +171,11 @@ const PlanCard = React.memo(({ message }: { message: Message }) => {
             <div className="flex items-center gap-2 text-sm opacity-70">
               <LoadingAnimation className="mx-0 my-0" />
               <span>Creating research plan...</span>
+            </div>
+          )}
+          {!hasContent && !message.isStreaming && (
+            <div className="text-sm opacity-50">
+              No plan content available
             </div>
           )}
           {hasContent && plan.thought && (
