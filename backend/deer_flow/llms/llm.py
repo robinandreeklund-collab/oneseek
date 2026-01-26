@@ -222,24 +222,22 @@ def configure_llm_with_thinking(
         If the LLM doesn't support this parameter format or the bind operation fails,
         the original LLM instance is returned with a warning logged.
     """
-    # Prepare model_kwargs for vLLM/OpenAI-compatible APIs
+    # Prepare extra_body for vLLM/OpenAI-compatible APIs
     # vLLM with Qwen3 expects: extra_body={"chat_template_kwargs": {"enable_thinking": true/false}}
-    model_kwargs = {
-        "extra_body": {
-            "chat_template_kwargs": {
-                "enable_thinking": enable_thinking
-            }
+    extra_body = {
+        "chat_template_kwargs": {
+            "enable_thinking": enable_thinking
         }
     }
     
-    # Bind the model_kwargs to the LLM instance
+    # Bind the extra_body to the LLM instance
     # This will be applied when invoke() or stream() is called
     try:
-        configured_llm = llm.bind(**model_kwargs)
+        configured_llm = llm.bind(extra_body=extra_body)
         logger.debug(f"Configured LLM with enable_thinking={enable_thinking}")
         return configured_llm
     except (TypeError, AttributeError) as e:
-        # TypeError: if bind() is not supported or model_kwargs format is invalid
+        # TypeError: if bind() is not supported or extra_body format is invalid
         # AttributeError: if the LLM instance doesn't have a bind method
         logger.warning(f"Failed to bind thinking parameters to LLM ({type(e).__name__}): {e}. Using original LLM.")
         return llm
