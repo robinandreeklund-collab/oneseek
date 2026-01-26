@@ -4,7 +4,7 @@
 # VLLM Configuration (OpenAI-compatible API)
 BASIC_MODEL:
   base_url: "http://localhost:8000/v1"
-  model: "Qwen/Qwen2.5-14B-Instruct-AWQ"
+  model: "/models/Qwen3-8B-FP8"
   api_key: "EMPTY"  # VLLM doesn't require authentication for local deployment
   max_retries: 3
   verify_ssl: false  # Local deployment doesn't need SSL
@@ -14,7 +14,7 @@ BASIC_MODEL:
 # Optional: Use same VLLM for reasoning tasks
 REASONING_MODEL:
   base_url: "http://localhost:8000/v1"
-  model: "Qwen/Qwen2.5-14B-Instruct-AWQ"
+  model: "/models/Qwen3-8B-FP8"
   api_key: "EMPTY"
   max_retries: 3
   verify_ssl: false
@@ -24,7 +24,7 @@ REASONING_MODEL:
 # Optional: Code model (uses same VLLM but with lower temperature)
 CODE_MODEL:
   base_url: "http://localhost:8000/v1"
-  model: "Qwen/Qwen2.5-14B-Instruct-AWQ"
+  model: "/models/Qwen3-8B-FP8"
   api_key: "EMPTY"
   max_retries: 3
   verify_ssl: false
