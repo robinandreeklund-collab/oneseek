@@ -20,7 +20,7 @@ interface ScriptLine {
 }
 
 interface Script {
-  locale: "en" | "zh";
+  locale: "en" | "zh" | "sv";
   lines: ScriptLine[];
 }
 ```

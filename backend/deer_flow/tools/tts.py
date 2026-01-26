@@ -2,9 +2,10 @@
 # SPDX-License-Identifier: MIT
 
 """
-Text-to-Speech module using volcengine TTS API.
+Text-to-Speech module using OpenAI TTS API.
 """
 
+import base64
 import json
 import logging
 import uuid
@@ -130,4 +131,116 @@ class VolcengineTTS:
 
         except Exception as e:
             logger.exception(f"Error in TTS API call: {str(e)}")
+            return {"success": False, "error": "TTS API call error", "audio_data": None}
+
+
+class OpenAITTS:
+    """
+    Client for OpenAI Text-to-Speech API (NoteGPT).
+    """
+
+    def __init__(
+        self,
+        api_key: str,
+        voice: str = "alloy",
+        model: str = "tts-1",
+    ):
+        """
+        Initialize the OpenAI TTS client.
+
+        Args:
+            api_key: OpenAI API key for authentication
+            voice: Voice to use (alloy, echo, fable, onyx, nova, shimmer)
+            model: Model to use (tts-1 or tts-1-hd)
+        """
+        self.api_key = api_key
+        self.voice = voice
+        self.model = model
+        self.api_url = "https://api.openai.com/v1/audio/speech"
+        self.headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+
+    def text_to_speech(
+        self,
+        text: str,
+        encoding: str = "mp3",
+        speed_ratio: float = 1.0,
+        volume_ratio: float = 1.0,
+        pitch_ratio: float = 1.0,
+        text_type: str = "plain",
+        with_frontend: int = 1,
+        frontend_type: str = "unitTson",
+        uid: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Convert text to speech using OpenAI TTS API.
+
+        Args:
+            text: Text to convert to speech
+            encoding: Audio encoding format (mp3, opus, aac, flac)
+            speed_ratio: Speech speed ratio (0.25 to 4.0)
+            volume_ratio: Speech volume ratio (not supported by OpenAI, ignored)
+            pitch_ratio: Speech pitch ratio (not supported by OpenAI, ignored)
+            text_type: Text type (plain or ssml, ignored)
+            with_frontend: Whether to use frontend processing (ignored)
+            frontend_type: Frontend type (ignored)
+            uid: User ID (ignored)
+
+        Returns:
+            Dictionary containing the API response and base64-encoded audio data
+        """
+        # Map encoding to OpenAI format
+        format_map = {
+            "mp3": "mp3",
+            "opus": "opus",
+            "aac": "aac",
+            "flac": "flac",
+        }
+        response_format = format_map.get(encoding.lower(), "mp3")
+
+        # Clamp speed to OpenAI's acceptable range
+        speed = max(0.25, min(4.0, speed_ratio))
+
+        request_data = {
+            "model": self.model,
+            "input": text,
+            "voice": self.voice,
+            "response_format": response_format,
+            "speed": speed,
+        }
+
+        try:
+            text_preview = text.replace("\r\n", "").replace("\n", "")
+            logger.debug(f"Sending OpenAI TTS request for text: {text_preview[:50]}...")
+            
+            response = requests.post(
+                self.api_url,
+                headers=self.headers,
+                json=request_data,
+            )
+
+            if response.status_code != 200:
+                error_msg = response.text
+                try:
+                    error_json = response.json()
+                    error_msg = error_json.get("error", {}).get("message", error_msg)
+                except (ValueError, KeyError):
+                    pass
+                logger.error(f"OpenAI TTS API error: {error_msg}")
+                return {"success": False, "error": error_msg, "audio_data": None}
+
+            # OpenAI returns raw audio bytes, encode to base64 for consistency
+            audio_bytes = response.content
+            audio_data = base64.b64encode(audio_bytes).decode("utf-8")
+
+            return {
+                "success": True,
+                "response": {"status": "success"},
+                "audio_data": audio_data,  # Base64 encoded audio data
+            }
+
+        except Exception as e:
+            logger.exception(f"Error in OpenAI TTS API call: {str(e)}")
             return {"success": False, "error": "TTS API call error", "audio_data": None}

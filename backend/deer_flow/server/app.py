@@ -65,7 +65,7 @@ from backend.deer_flow.server.rag_request import (
     RAGResourceRequest,
     RAGResourcesResponse,
 )
-from backend.deer_flow.tools import VolcengineTTS
+from backend.deer_flow.tools import OpenAITTS
 from backend.deer_flow.utils.json_utils import sanitize_args
 from backend.deer_flow.utils.log_sanitizer import (
     sanitize_agent_name,
@@ -1009,25 +1009,19 @@ def _make_event(event_type: str, data: dict[str, any]):
 
 @app.post("/api/tts")
 async def text_to_speech(request: TTSRequest):
-    """Convert text to speech using volcengine TTS API."""
-    app_id = get_str_env("VOLCENGINE_TTS_APPID", "")
-    if not app_id:
-        raise HTTPException(status_code=400, detail="VOLCENGINE_TTS_APPID is not set")
-    access_token = get_str_env("VOLCENGINE_TTS_ACCESS_TOKEN", "")
-    if not access_token:
-        raise HTTPException(
-            status_code=400, detail="VOLCENGINE_TTS_ACCESS_TOKEN is not set"
-        )
+    """Convert text to speech using OpenAI TTS API."""
+    api_key = get_str_env("OPENAI_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=400, detail="OPENAI_API_KEY is not set")
 
     try:
-        cluster = get_str_env("VOLCENGINE_TTS_CLUSTER", "volcano_tts")
-        voice_type = get_str_env("VOLCENGINE_TTS_VOICE_TYPE", "BV700_V2_streaming")
+        voice = get_str_env("OPENAI_TTS_VOICE", "alloy")
+        model = get_str_env("OPENAI_TTS_MODEL", "tts-1")
 
-        tts_client = VolcengineTTS(
-            appid=app_id,
-            access_token=access_token,
-            cluster=cluster,
-            voice_type=voice_type,
+        tts_client = OpenAITTS(
+            api_key=api_key,
+            voice=voice,
+            model=model,
         )
         # Call the TTS API
         result = tts_client.text_to_speech(
@@ -1069,7 +1063,7 @@ async def generate_podcast(request: GeneratePodcastRequest):
         report_content = request.content
         print(report_content)
         workflow = build_podcast_graph()
-        final_state = workflow.invoke({"input": report_content})
+        final_state = workflow.invoke({"input": report_content, "locale": request.locale})
         audio_bytes = final_state["output"]
         return Response(content=audio_bytes, media_type="audio/mp3")
     except Exception as e:

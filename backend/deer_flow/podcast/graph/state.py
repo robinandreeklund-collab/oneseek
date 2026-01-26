@@ -13,6 +13,7 @@ class PodcastState(MessagesState):
 
     # Input
     input: str = ""
+    locale: str = "en-US"
 
     # Output
     output: Optional[bytes] = None

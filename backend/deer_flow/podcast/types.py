@@ -12,5 +12,5 @@ class ScriptLine(BaseModel):
 
 
 class Script(BaseModel):
-    locale: Literal["en", "zh"] = Field(default="en")
+    locale: Literal["en", "zh", "sv"] = Field(default="en")
     lines: list[ScriptLine] = Field(default=[])
