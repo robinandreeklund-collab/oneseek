@@ -80,11 +80,15 @@ export function parseJSON<T>(json: string | null | undefined, fallback: T) {
       raw = extractValidJSON(raw);
     }
     
-    // Parse the cleaned content
-    return parse(raw) as T;
+    // Try standard JSON.parse first for clean JSON
+    try {
+      return JSON.parse(raw) as T;
+    } catch {
+      // If standard parse fails, try best-effort parser for incomplete/streaming JSON
+      return parse(raw) as T;
+    }
   } catch {
-    // Fallback: try to extract meaningful content from malformed JSON
-    // This is a last-resort attempt to salvage partial data
+    // Fallback: return fallback value for completely malformed JSON
     return fallback;
   }
 }

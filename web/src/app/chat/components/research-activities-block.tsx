@@ -24,9 +24,10 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "~/components/ui/accordion";
+import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Skeleton } from "~/components/ui/skeleton";
 import { findMCPTool } from "~/core/mcp";
-import type { ToolCallRuntime } from "~/core/messages";
+import type { Message, ToolCallRuntime } from "~/core/messages";
 import { useMessage, useStore } from "~/core/store";
 import { parseJSON } from "~/core/utils";
 import { cn } from "~/lib/utils";
@@ -44,16 +45,23 @@ export function ResearchActivitiesBlock({
 }) {
   const activityIds = useStore((state) =>
     state.researchActivityIds.get(researchId),
-  )!;
+  );
   const ongoing = useStore((state) => state.ongoingResearchId === researchId);
+  
+  // Guard against undefined activityIds
+  if (!activityIds || activityIds.length === 0) {
+    return (
+      <>
+        {ongoing && <LoadingAnimation className="mx-4 my-12" />}
+      </>
+    );
+  }
   
   return (
     <>
       <ul className={cn("flex flex-col py-4", className)}>
         {activityIds.map(
           (activityId, i) => {
-            if (i === 0) return null;
-            
             // Performance optimization: limit animations for large lists
             const shouldAnimate = i < MAX_ANIMATED_ITEMS;
             const animationDelay = shouldAnimate ? Math.min(i * ANIMATION_DELAY_MULTIPLIER, 0.5) : 0;
@@ -85,8 +93,14 @@ export function ResearchActivitiesBlock({
 
 const ActivityMessage = React.memo(({ messageId }: { messageId: string }) => {
   const message = useMessage(messageId);
-  if (message?.agent && message.content) {
-    if (message.agent !== "reporter" && message.agent !== "planner") {
+  
+  if (message?.agent) {
+    // Show planner messages as plan cards (even if content is empty/streaming)
+    if (message.agent === "planner") {
+      return <PlanCard message={message} />;
+    }
+    // Skip reporter messages (they're shown in the Report tab)
+    if (message.agent !== "reporter" && message.content) {
       return (
         <div className="px-4 py-2">
           <Markdown animated checkLinkCredibility>
@@ -99,6 +113,88 @@ const ActivityMessage = React.memo(({ messageId }: { messageId: string }) => {
   return null;
 });
 ActivityMessage.displayName = "ActivityMessage";
+
+// Component to display the research plan
+const PlanCard = React.memo(({ message }: { message: Message }) => {
+  const t = useTranslations("chat.research");
+  const plan = useMemo<{
+    title?: string;
+    thought?: string;
+    steps?: { title?: string; description?: string; step_type?: string; need_search?: boolean }[];
+  }>(() => {
+    return parseJSON(message.content ?? "", {});
+  }, [message.content]);
+
+  const hasContent = Boolean(message.content && message.content.trim() !== "");
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: "easeOut" }}
+      className="mb-4"
+    >
+      <Card className="w-full">
+        <CardHeader>
+          <CardTitle>
+            <Markdown animated={message.isStreaming}>
+              {`### ${plan.title || hasContent ? (plan.title ?? t("deepResearch")) : t("deepResearch")}`}
+            </Markdown>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!hasContent && message.isStreaming && (
+            <div className="flex items-center gap-2 text-sm opacity-70">
+              <LoadingAnimation className="mx-0 my-0" />
+              <span>Creating research plan...</span>
+            </div>
+          )}
+          {!hasContent && !message.isStreaming && (
+            <div className="text-sm opacity-50">
+              No plan content available
+            </div>
+          )}
+          {hasContent && plan.thought && (
+            <div className="break-all whitespace-normal">
+              <Markdown className="opacity-80" animated={message.isStreaming}>
+                {plan.thought}
+              </Markdown>
+            </div>
+          )}
+          {hasContent && plan.steps && plan.steps.length > 0 && (
+            <ul className="my-2 flex list-decimal flex-col gap-4 border-l-[2px] pl-8">
+              {plan.steps.map((step, i) => (
+                <li key={`step-${i}`} className="break-all whitespace-normal">
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1">
+                      <h3 className="mb-1 flex items-center gap-2 text-lg font-medium">
+                        <Markdown animated={false}>
+                          {step.title ?? `Step ${i + 1}`}
+                        </Markdown>
+                      </h3>
+                      {step.description && (
+                        <Markdown className="text-sm opacity-70" animated={false}>
+                          {step.description}
+                        </Markdown>
+                      )}
+                      {step.step_type && (
+                        <div className="mt-1 text-xs opacity-50">
+                          Type: {step.step_type}
+                          {step.need_search ?? false ? ' • Search: Yes' : ' • Search: No'}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+});
+PlanCard.displayName = "PlanCard";
 
 const ActivityListItem = React.memo(({ messageId }: { messageId: string }) => {
   const message = useMessage(messageId);
