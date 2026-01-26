@@ -176,10 +176,8 @@ def _create_llm_use_conf(llm_type: LLMType, conf: Dict[str, Any]) -> BaseChatMod
 
     # Check if base_url is dashscope endpoint
     if "base_url" in merged_conf and "dashscope." in merged_conf["base_url"]:
-        if llm_type == "reasoning":
-            merged_conf["extra_body"] = {"enable_thinking": True}
-        else:
-            merged_conf["extra_body"] = {"enable_thinking": False}
+        # Don't set enable_thinking here - it will be configured dynamically per-request
+        # using configure_llm_with_thinking() function
         return ChatDashscope(**merged_conf)
 
     if llm_type == "reasoning":
@@ -200,6 +198,46 @@ def get_llm_by_type(llm_type: LLMType) -> BaseChatModel:
     llm = _create_llm_use_conf(llm_type, conf)
     _llm_cache[llm_type] = llm
     return llm
+
+
+def configure_llm_with_thinking(
+    llm: BaseChatModel,
+    enable_thinking: bool = False,
+    locale: str = "en-US"
+) -> BaseChatModel:
+    """
+    Configure LLM with enable_thinking parameter for Qwen3/vLLM models.
+    
+    For vLLM with Qwen3, this uses chat_template_kwargs to control thinking mode.
+    For other OpenAI-compatible APIs, this uses extra_body parameter.
+    
+    Args:
+        llm: The base LLM instance
+        enable_thinking: Whether to enable thinking mode
+        locale: Language locale for thinking instructions
+        
+    Returns:
+        Configured LLM instance with thinking parameters bound
+    """
+    # Prepare model_kwargs for vLLM/OpenAI-compatible APIs
+    # vLLM with Qwen3 expects: extra_body={"chat_template_kwargs": {"enable_thinking": true/false}}
+    model_kwargs = {
+        "extra_body": {
+            "chat_template_kwargs": {
+                "enable_thinking": enable_thinking
+            }
+        }
+    }
+    
+    # Bind the model_kwargs to the LLM instance
+    # This will be applied when invoke() or stream() is called
+    try:
+        configured_llm = llm.bind(**model_kwargs)
+        logger.debug(f"Configured LLM with enable_thinking={enable_thinking}, locale={locale}")
+        return configured_llm
+    except Exception as e:
+        logger.warning(f"Failed to bind thinking parameters to LLM: {e}. Using original LLM.")
+        return llm
 
 
 def get_configured_llm_models() -> dict[str, list[str]]:

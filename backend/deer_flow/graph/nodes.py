@@ -18,7 +18,7 @@ from backend.deer_flow.agents import create_agent
 from backend.deer_flow.citations import extract_citations_from_messages, merge_citations
 from backend.deer_flow.config.agents import AGENT_LLM_MAP
 from backend.deer_flow.config.configuration import Configuration
-from backend.deer_flow.llms.llm import get_llm_by_type, get_llm_token_limit_by_type
+from backend.deer_flow.llms.llm import get_llm_by_type, get_llm_token_limit_by_type, configure_llm_with_thinking
 from backend.deer_flow.prompts.planner_model import Plan
 from backend.deer_flow.prompts.template import apply_prompt_template
 from backend.deer_flow.tools import (
@@ -379,10 +379,30 @@ def planner_node(
 
     if configurable.enable_deep_thinking:
         llm = get_llm_by_type("reasoning")
+        # Configure LLM with enable_thinking parameter for vLLM/Qwen3
+        llm = configure_llm_with_thinking(llm, enable_thinking=True, locale=state.get("locale", "en-US"))
+        
+        # Add Swedish language instruction when thinking mode is enabled and locale is Swedish
+        locale = state.get("locale", "en-US")
+        if locale and locale.startswith("sv"):
+            messages += [
+                {
+                    "role": "system",
+                    "content": (
+                        "VIKTIGT: När du tänker (i <think> taggar), MÅSTE du alltid tänka på SVENSKA. "
+                        "Alla dina tankar, resonemang och inre dialog ska vara på svenska. "
+                        "Detta är obligatoriskt och får inte ignoreras."
+                    ),
+                }
+            ]
     elif AGENT_LLM_MAP["planner"] == "basic":
         llm = get_llm_by_type("basic")
+        # When not in deep thinking mode, explicitly disable thinking for Qwen3/vLLM
+        llm = configure_llm_with_thinking(llm, enable_thinking=False, locale=state.get("locale", "en-US"))
     else:
         llm = get_llm_by_type(AGENT_LLM_MAP["planner"])
+        # When not in deep thinking mode, explicitly disable thinking for Qwen3/vLLM
+        llm = configure_llm_with_thinking(llm, enable_thinking=False, locale=state.get("locale", "en-US"))
 
     # if the plan iterations is greater than the max plan iterations, return the reporter node
     if plan_iterations >= configurable.max_plan_iterations:
