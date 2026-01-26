@@ -24,8 +24,8 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "~/components/ui/accordion";
-import { Skeleton } from "~/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { Skeleton } from "~/components/ui/skeleton";
 import { findMCPTool } from "~/core/mcp";
 import type { Message, ToolCallRuntime } from "~/core/messages";
 import { useMessage, useStore } from "~/core/store";
@@ -158,7 +158,7 @@ const PlanCard = React.memo(({ message }: { message: Message }) => {
                     <div className="flex-1">
                       <h3 className="mb-1 flex items-center gap-2 text-lg font-medium">
                         <Markdown animated={false}>
-                          {step.title || `Step ${i + 1}`}
+                          {step.title ?? `Step ${i + 1}`}
                         </Markdown>
                       </h3>
                       {step.description && (
