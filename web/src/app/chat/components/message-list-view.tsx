@@ -487,8 +487,9 @@ function PlanCard({
   // 判断是否正在思考：有推理内容但还没有主要内容
   const isThinking = Boolean(reasoningContent && !hasMainContent);
 
-  // 判断是否应该显示计划：有主要内容就显示（无论是否还在流式传输）
-  const shouldShowPlan = hasMainContent;
+  // 判断是否应该显示计划：显示如果有内容，或者正在流式传输
+  // Show plan if we have content OR if we're still streaming (to show loading state)
+  const shouldShowPlan = hasMainContent || message.isStreaming;
   const handleAccept = useCallback(async () => {
     if (onSendMessage) {
       onSendMessage(
@@ -528,46 +529,54 @@ function PlanCard({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div style={{ wordBreak: 'break-all', whiteSpace: 'normal' }}>
-                <Markdown className="opacity-80" animated={false}>
-                  {plan.thought}
-                </Markdown>
-                {plan.steps && (
-                  <ul className="my-2 flex list-decimal flex-col gap-4 border-l-[2px] pl-8">
-                    {plan.steps.map((step, i) => (
-                      <li key={`step-${i}`} style={{ wordBreak: 'break-all', whiteSpace: 'normal' }}>
-                        <div className="flex items-start gap-2">
-                          <div className="flex-1">
-                            <h3 className="mb flex items-center gap-2 text-lg font-medium">
-                              <Markdown animated={false}>
-                                {step.title}
-                              </Markdown>
+              {!hasMainContent && message.isStreaming && (
+                <div className="flex items-center gap-2 text-sm opacity-70 p-4">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+                  <span>Creating research plan...</span>
+                </div>
+              )}
+              {hasMainContent && (
+                <div style={{ wordBreak: 'break-all', whiteSpace: 'normal' }}>
+                  <Markdown className="opacity-80" animated={false}>
+                    {plan.thought}
+                  </Markdown>
+                  {plan.steps && (
+                    <ul className="my-2 flex list-decimal flex-col gap-4 border-l-[2px] pl-8">
+                      {plan.steps.map((step, i) => (
+                        <li key={`step-${i}`} style={{ wordBreak: 'break-all', whiteSpace: 'normal' }}>
+                          <div className="flex items-start gap-2">
+                            <div className="flex-1">
+                              <h3 className="mb flex items-center gap-2 text-lg font-medium">
+                                <Markdown animated={false}>
+                                  {step.title}
+                                </Markdown>
+                                {step.tools && step.tools.length > 0 && (
+                                  <Tooltip
+                                    title={`Uses ${step.tools.length} MCP tool${step.tools.length > 1 ? "s" : ""}`}
+                                  >
+                                    <div className="flex items-center gap-1 rounded-full bg-blue-100 px-2 py-1 text-xs text-blue-800">
+                                      <Wrench size={12} />
+                                      <span>{step.tools.length}</span>
+                                    </div>
+                                  </Tooltip>
+                                )}
+                              </h3>
+                              <div className="text-muted-foreground text-sm" style={{ wordBreak: 'break-all', whiteSpace: 'normal' }}>
+                                <Markdown animated={false}>
+                                  {step.description}
+                                </Markdown>
+                              </div>
                               {step.tools && step.tools.length > 0 && (
-                                <Tooltip
-                                  title={`Uses ${step.tools.length} MCP tool${step.tools.length > 1 ? "s" : ""}`}
-                                >
-                                  <div className="flex items-center gap-1 rounded-full bg-blue-100 px-2 py-1 text-xs text-blue-800">
-                                    <Wrench size={12} />
-                                    <span>{step.tools.length}</span>
-                                  </div>
-                                </Tooltip>
+                                <ToolsDisplay tools={step.tools} />
                               )}
-                            </h3>
-                            <div className="text-muted-foreground text-sm" style={{ wordBreak: 'break-all', whiteSpace: 'normal' }}>
-                              <Markdown animated={false}>
-                                {step.description}
-                              </Markdown>
                             </div>
-                            {step.tools && step.tools.length > 0 && (
-                              <ToolsDisplay tools={step.tools} />
-                            )}
                           </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
             </CardContent>
             <CardFooter className="flex justify-end">
               {!message.isStreaming && interruptMessage?.options?.length && (
