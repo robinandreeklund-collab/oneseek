@@ -1525,6 +1525,9 @@ Provide a comprehensive comparison report with citations.""",
     )
     
     comparison_plan = Plan(
+        locale=state.get("locale", "en-US"),  # Get locale from state, default to en-US
+        has_enough_context=False,  # We need to execute this comparison step
+        thought="Running AI comparison across multiple models to provide comprehensive analysis.",
         title=research_topic,
         steps=[comparison_step]
     )
