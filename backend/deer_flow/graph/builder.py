@@ -80,9 +80,10 @@ def _build_base_graph():
     builder.add_node("coder", coder_node)
     builder.add_node("human_feedback", human_feedback_node)
     builder.add_edge("background_investigator", "planner")
-    # AI comparison returns Command(goto="research_team") to follow normal flow:
-    # ai_comparison -> research_team -> planner -> reporter
-    # This ensures fact-checking happens BEFORE report generation, not after.
+    # AI comparison returns Command(goto="reporter") to go directly to reporter.
+    # This avoids looping through research_team which would trigger researcher repeatedly.
+    # The ai_comparison agent executes all tools (query models, fact_check, meta_analysis, synthesize)
+    # internally before routing to reporter, ensuring fact-checking happens before report generation.
     builder.add_conditional_edges(
         "research_team",
         continue_to_running_research_team,

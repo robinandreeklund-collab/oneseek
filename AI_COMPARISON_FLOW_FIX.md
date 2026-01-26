@@ -2,36 +2,57 @@
 
 ## Problem (Problemet)
 
+### Initial Issue
 I AI-jämförelseläge skedde faktakontroll (researcher node) EFTER att rapporten genererades, istället för FÖRE eller UNDER jämförelsen.
 
 **In English:** In AI comparison mode, fact-checking (researcher node) happened AFTER the report was generated, instead of BEFORE or DURING the comparison.
 
-### Loggar visade (Logs showed):
-1. Rapport genererades först (Swedish content: "Kritisk diskussion", "Referenser", etc.)
-2. SEDAN började researcher_node (2026-01-26 16:07:28,876)
-3. Researcher gjorde web searches EFTER rapporten var klar
+### Second Issue (After First Fix)
+Efter första fixen, researcher node anropades i en loop (8+ gånger), vilket orsakade:
+- För många web-sökningar
+- `GraphRecursionError: Recursion limit of 25 reached`
+- Rapporten skapades aldrig
 
-Detta var fel ordning enligt issue #13.
+**In English:** After the first fix, researcher node was called in a loop (8+ times), causing:
+- Too many web searches
+- `GraphRecursionError: Recursion limit of 25 reached`
+- Report was never created
 
 ## Grundorsak (Root Cause)
 
-Grafen hade en fast kant (fixed edge):
-```python
-builder.add_edge("ai_comparison", "reporter")
-```
+### Initial Problem
+Grafen hade en fast kant (fixed edge): `builder.add_edge("ai_comparison", "reporter")` som tvingade ai_comparison att gå direkt till reporter.
 
-Denna tvingade ai_comparison att gå direkt till reporter, vilket **åsidosatte** Command-returvärdet från ai_comparison_node.
+### Loop Problem
+Efter att ha tagit bort den fasta kanten, ai_comparison_node returnerade `Command(goto="research_team")`. Men eftersom comparison_step hade `step_type=StepType.RESEARCH`, dirigerade research_team till **researcher** istället för tillbaka till planner. Detta skapade en loop:
+1. ai_comparison → research_team
+2. research_team ser RESEARCH step → dirigerar till researcher
+3. researcher slutför → tillbaka till research_team
+4. Loop upprepas eftersom steget fortfarande är ofullständigt
 
-ai_comparison_node returnerar `Command(goto="research_team")` för att säkerställa korrekt flöde genom research pipeline, men den fasta kanten överskred detta.
+**In English:** After removing the fixed edge, ai_comparison_node returned `Command(goto="research_team")`. But because comparison_step had `step_type=StepType.RESEARCH`, research_team routed to **researcher** instead of back to planner. This created a loop.
 
 ## Lösning (Solution)
 
-Tog bort den fasta kanten och lade till en kommentar som förklarar det korrekta flödet:
+ai_comparison_node går nu **direkt till reporter** istället för genom research_team:
 
 ```python
-# AI comparison returns Command(goto="research_team") to follow normal flow:
-# ai_comparison -> research_team -> planner -> reporter
-# This ensures fact-checking happens BEFORE report generation, not after.
+# In nodes.py:
+async def ai_comparison_node(...) -> Command[Literal["reporter"]]:
+    # Execute ai_comparison agent with tools
+    result = await _setup_and_execute_agent_step(...)
+    
+    # Mark step as complete
+    comparison_step.execution_res = "AI comparison completed successfully"
+    
+    # Go directly to reporter (bypassing research_team to avoid loops)
+    return Command(
+        update={
+            **result.update,
+            "current_plan": comparison_plan,
+        },
+        goto="reporter",
+    )
 ```
 
 ## Förväntat Flöde Efter Fix (Expected Flow After Fix)
@@ -49,46 +70,59 @@ Tog bort den fasta kanten och lade till en kommentar som förklarar det korrekta
    │  ├─ fact_check_responses ← FAKTAKONTROLL SKER HÄR!
    │  ├─ run_meta_analysis
    │  └─ synthesize_optimal_answer
-   ├─ Step completes with execution_res set
-   └─ Returns Command(goto="research_team")
-4. research_team_node (pass-through)
-5. continue_to_running_research_team → checks plan → routes to "planner"
-6. planner_node → sees complete plan → routes to "reporter" (via Command)
-7. reporter_node → generates final report (with fact-checking already done)
-8. END
+   ├─ Marks step as complete
+   └─ Returns Command(goto="reporter")  ← DIREKT TILL REPORTER, INGEN LOOP!
+4. reporter_node → generates final report (with fact-checking already done)
+5. END
 ```
 
 ## Nyckelfördel (Key Benefit)
 
-✅ **Faktakontroll sker nu i steg 3** (under AI comparison agent execution via `fact_check_responses` tool)
+✅ **Faktakontroll sker under AI comparison agent execution** (via `fact_check_responses` tool)
 
-❌ **INTE efter steg 7** (efter rapportgenerering)
+✅ **Ingen loop genom researcher** - går direkt till reporter
 
-Detta säkerställer att syntes och rapport inkluderar faktakontrollerad information från start, precis som krävs i issue #13.
+✅ **Inga recursion errors** - endast en genomgång av comparison
+
+❌ **INTE efter rapportgenerering**
+
+Detta säkerställer att syntes och rapport inkluderar faktakontrollerad information från start, och undviker onödiga loopar som orsakar för många sökningar.
 
 ## Tekniska Detaljer (Technical Details)
 
-I LangGraph finns tre routing-mönster:
-1. **Fixed edges**: `builder.add_edge(source, target)` - går alltid till target
-2. **Conditional edges**: `builder.add_conditional_edges(source, function, targets)` - anropar funktion för att bestämma
-3. **Command returns**: Node returnerar `Command(goto=target)` - Command hanterar routing direkt
+Problemet uppstod eftersom:
+1. `step_type=StepType.RESEARCH` i comparison_step
+2. `continue_to_running_research_team()` dirigerar RESEARCH steps till researcher
+3. Detta skapade en loop: ai_comparison → research_team → researcher → research_team → ...
 
-ai_comparison_node använder mönster #3 (returnerar `Command[Literal["research_team"]]`), så den ska INTE ha en fast kant. Den fasta kanten åsidosatte Command, vilket orsakade buggen.
+Lösningen är att **inte använda research_team routing** för ai_comparison alls. Istället går den direkt till reporter efter att ha utfört alla verktygsanrop internt.
 
 ## Ändrade Filer (Files Changed)
 
+- `backend/deer_flow/graph/nodes.py`: 
+  - Changed return type: `Command[Literal["research_team"]]` → `Command[Literal["reporter"]]`
+  - Mark comparison_step as complete before returning
+  - Return Command(goto="reporter") instead of returning result from _setup_and_execute_agent_step
+  
 - `backend/deer_flow/graph/builder.py`: 
-  - Removed: 1 line (fixed edge)
-  - Added: 3 lines (explanatory comment)
+  - Updated comment to explain direct routing to reporter
 
 ## Verifiering (Verification)
 
 - ✅ Python syntax validerad
-- ✅ Kod-granskning slutförd
-- ✅ Ändring verifierad för att matcha LangGraph Command routing pattern
+- ✅ Ändring förhindrar research_team loop
+- ✅ ai_comparison agent kör alla verktyg innan reporter
 
 ## Slutsats (Conclusion)
 
-Denna fix säkerställer att AI-jämförelseläget använder verktygsanrop (tool calls) korrekt i flödet, med faktakontroll som sker INNAN rapporten genereras, precis som specificerats i issue #13.
+Denna fix säkerställer att AI-jämförelseläget:
+1. ✅ Kör faktakontroll UNDER jämförelsen (inte efter)
+2. ✅ Undviker loopar genom researcher
+3. ✅ Genererar rapport efter att alla verktyg har körts
+4. ✅ Respekterar recursion limits
 
-**The fix ensures that AI comparison mode uses tool calls correctly in the flow, with fact-checking happening BEFORE the report is generated, exactly as specified in issue #13.**
+**The fix ensures that AI comparison mode:**
+1. ✅ Runs fact-checking DURING comparison (not after)
+2. ✅ Avoids loops through researcher
+3. ✅ Generates report after all tools have executed
+4. ✅ Respects recursion limits
