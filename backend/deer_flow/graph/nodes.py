@@ -1501,6 +1501,7 @@ async def ai_comparison_node(
     from backend.deer_flow.prompts.planner_model import Plan, Step, StepType
     
     comparison_step = Step(
+        need_search=False,  # AI comparison doesn't need web search, it queries AI models
         step_type=StepType.RESEARCH,
         title="AI Model Comparison",
         description=f"""Query and compare responses from multiple AI models for: {research_topic}
