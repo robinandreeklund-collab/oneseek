@@ -19,10 +19,26 @@ from .nodes import (
     researcher_node,
 )
 from .types import State
+import json
+from backend.deer_flow.utils.json_utils import repair_json_output, extract_plan_content
+from backend.deer_flow.prompts.planner_model import Plan
 
 
 def continue_to_running_research_team(state: State):
     current_plan = state.get("current_plan")
+    
+    # Handle case where current_plan is a string (from planner when AI comparison is enabled)
+    if isinstance(current_plan, str):
+        try:
+            # Parse JSON string to Plan object
+            plan_dict = json.loads(repair_json_output(current_plan))
+            plan_content = extract_plan_content(plan_dict)
+            plan_dict = json.loads(repair_json_output(plan_content))
+            current_plan = Plan.model_validate(plan_dict)
+        except Exception:
+            # If parsing fails, route to planner
+            return "planner"
+    
     if not current_plan or not current_plan.steps:
         return "planner"
 
