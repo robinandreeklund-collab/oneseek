@@ -338,36 +338,11 @@ def background_investigation_node(state: State, config: RunnableConfig):
 
 def planner_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["human_feedback", "reporter", "ai_comparison", "debate"]]:
+) -> Command[Literal["human_feedback", "reporter"]]:
     """Planner node that generate the full plan."""
     logger.info("Planner generating full plan with locale: %s", state.get("locale", "en-US"))
     configurable = Configuration.from_runnable_config(config)
     plan_iterations = state["plan_iterations"] if state.get("plan_iterations", 0) else 0
-
-    # Early routing for special modes - skip plan generation
-    # Check if AI comparison mode is enabled - route directly
-    if state.get("enable_ai_comparison", False):
-        logger.info("Planner: AI comparison mode enabled, routing directly to ai_comparison node (skipping plan generation)")
-        return Command(
-            update={
-                "messages": [AIMessage(content="AI Comparison mode activated", name="planner")],
-                "current_plan": "AI Comparison",
-                **preserve_state_meta_fields(state),
-            },
-            goto="ai_comparison",
-        )
-    
-    # Check if debate mode is enabled - route directly
-    if state.get("enable_debate_mode", False):
-        logger.info("Planner: Debate mode enabled, routing directly to debate node (skipping plan generation)")
-        return Command(
-            update={
-                "messages": [AIMessage(content="Debate mode activated", name="planner")],
-                "current_plan": "Multi-Round Debate",
-                **preserve_state_meta_fields(state),
-            },
-            goto="debate",
-        )
 
     # For clarification feature: use the clarified research topic (complete history)
     if state.get("enable_clarification", False) and state.get(
@@ -501,9 +476,29 @@ def planner_node(
             },
             goto="reporter",
         )
+    # Check if AI comparison mode is enabled
+    if state.get("enable_ai_comparison", False):
+        logger.info("Planner: AI comparison mode enabled, routing to ai_comparison node")
+        return Command(
+            update={
+                "messages": [AIMessage(content=full_response, name="planner")],
+                "current_plan": full_response,
+                **preserve_state_meta_fields(state),
+            },
+            goto="ai_comparison",
+        )
     
-    # Note: AI comparison and debate mode checks moved to early routing at function start
-    # to avoid unnecessary plan generation
+    # Check if debate mode is enabled - route to debate node
+    if state.get("enable_debate_mode", False):
+        logger.info("Planner: Debate mode enabled, routing to debate node")
+        return Command(
+            update={
+                "messages": [AIMessage(content=full_response, name="planner")],
+                "current_plan": full_response,
+                **preserve_state_meta_fields(state),
+            },
+            goto="debate",
+        )
     
     return Command(
         update={
