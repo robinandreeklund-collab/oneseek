@@ -1580,14 +1580,13 @@ async def analyst_node(
 
 async def ai_comparison_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["research_team"]]:
+) -> Command[Literal["reporter"]]:
     """
     AI Comparison node that runs sequential queries across multiple AI models.
     Implements Debate OS functionality for DeerFlow with real-time streaming.
     
-    Creates a simple plan with one step and uses the standard execution path
-    (_setup_and_execute_agent_step) to ensure identical streaming behavior
-    to researcher/coder agents.
+    Executes AI comparison agent with tools, then goes directly to reporter.
+    Does NOT use research_team routing to avoid loops.
     """
     logger.info("AI Comparison node starting - Debate OS mode")
     
@@ -1667,13 +1666,21 @@ Provide a comprehensive comparison report with citations.""",
             tools,
         )
         
-        # Return to research_team like researcher/coder do
-        # This triggers the sidebar to open in the frontend
-        # research_team will then route to planner → reporter automatically
-        logger.info("AI comparison complete, returning to research_team for sidebar display")
+        # Mark the comparison step as complete to prevent research_team from routing to researcher
+        comparison_step.execution_res = "AI comparison completed successfully"
         
-        # Return the result as-is - it already has goto="research_team" from _setup_and_execute_agent_step
-        return result
+        # Go directly to reporter instead of research_team to avoid researcher loops
+        # The ai_comparison agent has already executed all tools (query models, fact_check, meta_analysis, synthesize)
+        logger.info("AI comparison complete, routing directly to reporter")
+        
+        # Return updated state with completed step and goto reporter
+        return Command(
+            update={
+                **result.update,
+                "current_plan": comparison_plan,  # Update with completed step
+            },
+            goto="reporter",
+        )
     finally:
         # Restore original recursion limit
         if original_recursion_limit is not None:

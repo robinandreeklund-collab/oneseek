@@ -20,6 +20,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 
 from backend.deer_flow.tools import get_web_search_tool, get_retriever_tool, crawl_tool
+from backend.deer_flow.llms.llm import get_llm_by_type
 
 logger = logging.getLogger(__name__)
 
@@ -142,20 +143,32 @@ class AIComparisonFlow:
             except Exception as e:
                 logger.warning(f"Failed to initialize Grok-4 Fast Reasoning: {e}")
         
-        # OneSeek Local (vLLM)
-        vllm_url = os.getenv("VLLM_URL", "http://localhost:8000/v1")
-        vllm_model = os.getenv("VLLM_MODEL", "Qwen/Qwen2.5-14B-Instruct-AWQ")
+        # OneSeek Local (vLLM) - use configuration from conf.yaml
         try:
-            models["oneseek-local"] = ChatOpenAI(
-                base_url=vllm_url,
-                api_key="EMPTY",
-                model=vllm_model,
-                temperature=0.7,
-                max_tokens=2048,
-            )
-            logger.info(f"OneSeek Local model initialized: {vllm_model}")
+            # Get the local LLM from deer_flow configuration (uses conf.yaml)
+            # This ensures we use the same model configuration as the rest of the system
+            local_llm = get_llm_by_type("basic")
+            models["oneseek-local"] = local_llm
+            
+            # Log the model name if available
+            model_name = getattr(local_llm, 'model_name', 'unknown')
+            logger.info(f"OneSeek Local model initialized from conf.yaml: {model_name}")
         except Exception as e:
-            logger.warning(f"Failed to initialize OneSeek Local: {e}")
+            logger.warning(f"Failed to initialize OneSeek Local from conf.yaml: {e}")
+            # Fallback to environment variable if conf.yaml fails
+            try:
+                vllm_url = os.getenv("VLLM_URL", "http://localhost:8000/v1")
+                vllm_model = os.getenv("VLLM_MODEL", "Qwen/Qwen2.5-14B-Instruct-AWQ")
+                models["oneseek-local"] = ChatOpenAI(
+                    base_url=vllm_url,
+                    api_key="EMPTY",
+                    model=vllm_model,
+                    temperature=0.7,
+                    max_tokens=2048,
+                )
+                logger.info(f"OneSeek Local model initialized from environment: {vllm_model}")
+            except Exception as e2:
+                logger.warning(f"Failed to initialize OneSeek Local from environment: {e2}")
         
         return models
 
@@ -286,13 +299,8 @@ class AIComparisonFlow:
             "consensus_points": [],
         }
         
-        # Extract key claims from responses
-        successful_responses = [r for r in model_responses if r["success"]]
-        if not successful_responses:
-            logger.warning("No successful responses to analyze")
-            return analysis
-        
-        # Use web search tool for fact-checking if available
+        # Always perform web search for fact-checking if available
+        # This provides external validation regardless of model responses
         if self.search_tool:
             try:
                 logger.info("Performing web search for fact-checking")
@@ -313,15 +321,20 @@ class AIComparisonFlow:
             except Exception as e:
                 logger.warning(f"RAG retrieval failed during fact-checking: {e}")
         
-        # Identify consensus and contradictions
-        response_texts = [r["response"] for r in successful_responses if r["response"]]
-        
-        # Simple consensus detection (can be enhanced with semantic similarity)
-        if len(response_texts) >= 2:
-            # Look for common themes (simplified version)
-            analysis["consensus_points"] = [
-                "Multiple models provided responses (detailed analysis requires semantic comparison)"
-            ]
+        # Extract key claims from responses if provided
+        successful_responses = [r for r in model_responses if r.get("success")]
+        if not successful_responses:
+            logger.info("No model responses provided or all failed, but fact-checking via web search was still performed")
+        else:
+            # Identify consensus and contradictions from model responses
+            response_texts = [r["response"] for r in successful_responses if r.get("response")]
+            
+            # Simple consensus detection (can be enhanced with semantic similarity)
+            if len(response_texts) >= 2:
+                # Look for common themes (simplified version)
+                analysis["consensus_points"] = [
+                    "Multiple models provided responses (detailed analysis requires semantic comparison)"
+                ]
         
         logger.info("Fact-check analysis completed")
         return analysis
@@ -330,8 +343,13 @@ class AIComparisonFlow:
         self, query: str, model_responses: List[Dict[str, Any]], analysis: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Run parallel meta-agents for deeper analysis.
-        Meta-agents: Counterfactual, Robustness, Consistency, Truth-Pressure
+        Run parallel meta-agents for deeper analysis with scoring.
+        
+        4 Meta-Agent Categories with 4 dimensions each (scored 1-10):
+        1. Cognitive Properties: Meta-reflection, Reasoning depth, Synthesis capacity, Bias detection
+        2. Integrity & Objectivity: Objectivity degree, Integrity index, Transparency degree, Epistemic humility
+        3. Stability & Emotional Profile: Emotional distance, Conflict neutrality, Stability coefficient, Cognitive redundancy
+        4. Adaptivity & System Role: Context elasticity, System loyalty, Adaptive precision, Structural clarity
         
         Args:
             query: Original user query
@@ -339,15 +357,15 @@ class AIComparisonFlow:
             analysis: Initial fact-check analysis
             
         Returns:
-            Meta-agent analysis results
+            Meta-agent analysis results with scores for each dimension
         """
-        logger.info("Running parallel meta-agents")
+        logger.info("Running 4 parallel meta-agents with dimensional scoring")
         
         meta_results = {
-            "counterfactual": None,
-            "robustness": None,
-            "consistency": None,
-            "truth_pressure": None,
+            "cognitive_properties": None,
+            "integrity_objectivity": None,
+            "stability_emotional": None,
+            "adaptivity_system": None,
         }
         
         # Use OneSeek local model for meta-agent analysis if available
@@ -357,12 +375,117 @@ class AIComparisonFlow:
         
         local_model = self.models["oneseek-local"]
         
-        # Define meta-agent prompts
+        # Prepare responses summary for analysis with display names
+        responses_text = "\n\n".join([
+            f"**{resp.get('display_name', resp.get('model', 'Unknown'))}**:\n{resp.get('response', '')[:500]}..."
+            for resp in model_responses if resp.get('success')
+        ])
+        
+        # Define meta-agent prompts with scoring instructions
         meta_prompts = {
-            "counterfactual": f"Analyze the following responses and identify potential counterfactual scenarios or alternative explanations:\n\nQuery: {query}\n\nResponses: {model_responses}",
-            "robustness": f"Evaluate the robustness and reliability of these AI responses:\n\nQuery: {query}\n\nResponses: {model_responses}",
-            "consistency": f"Check for consistency and contradictions across these AI responses:\n\nQuery: {query}\n\nResponses: {model_responses}",
-            "truth_pressure": f"Apply critical truth-pressure analysis to these responses, identifying claims that need verification:\n\nQuery: {query}\n\nResponses: {model_responses}",
+            "cognitive_properties": f"""Analysera AI-modellernas kognitiva egenskaper för denna fråga:
+
+Fråga: {query}
+
+Svar från modellerna:
+{responses_text}
+
+Betygsätt varje modell på dessa 4 dimensioner (1-10).
+
+**VIKTIGT:** Använd de exakta modellnamnen som visas ovan (t.ex. "GPT-3.5 (OpenAI)", "Gemini 2.5 Flash (Google)", "DeepSeek Chat", "Grok-4 Fast Reasoning (xAI)") i din analys. Säg INTE "Modell A", "Modell B", etc.
+
+Dimensioner:
+1. **Meta-reflektionsnivå** - Förmåga att analysera hur resonemang uppstår
+   (1 = ingen meta-reflektion, 10 = avancerad meta-analys)
+
+2. **Resonemangsdjup** - Hur många lager av logik och konsekvens modellen arbetar med
+   (1 = ytligt, 10 = multilager-tänkande)
+
+3. **Synteskapacitet** - Förmåga att förena perspektiv till en helhet
+   (1 = fragmenterat, 10 = sömlös syntes)
+
+4. **Bias-detektion** - Förmåga att upptäcka dolda antaganden och vinklingar
+   (1 = blind, 10 = hög precision)
+
+Ge konkreta poäng (exakt siffra 1-10) och korta motiveringar för varje dimension och modell.""",
+
+            "integrity_objectivity": f"""Analysera AI-modellernas integritet och objektivitet för denna fråga:
+
+Fråga: {query}
+
+Svar från modellerna:
+{responses_text}
+
+Betygsätt varje modell på dessa 4 dimensioner (1-10).
+
+**VIKTIGT:** Använd de exakta modellnamnen som visas ovan (t.ex. "GPT-3.5 (OpenAI)", "Gemini 2.5 Flash (Google)", "DeepSeek Chat", "Grok-4 Fast Reasoning (xAI)") i din analys. Säg INTE "Modell A", "Modell B", etc.
+
+Dimensioner:
+1. **Objektivitetsgrad** - Grad av neutralitet och frånvaro av partiskhet
+   (1 = stark bias, 10 = konsekvent objektiv)
+
+2. **Integritetsindex** - Hur strikt modellen följer metod och logik
+   (1 = opportunistisk, 10 = principfast)
+
+3. **Transparensgrad** - Hur tydligt resonemang och metod redovisas
+   (1 = svart låda, 10 = full transparens)
+
+4. **Epistemisk ödmjukhet** - Förmåga att erkänna osäkerhet och alternativa tolkningar
+   (1 = dogmatisk, 10 = ödmjuk)
+
+Ge konkreta poäng (exakt siffra 1-10) och korta motiveringar för varje dimension och modell.""",
+
+            "stability_emotional": f"""Analysera AI-modellernas stabilitet och emotionella profil för denna fråga:
+
+Fråga: {query}
+
+Svar från modellerna:
+{responses_text}
+
+Betygsätt varje modell på dessa 4 dimensioner (1-10).
+
+**VIKTIGT:** Använd de exakta modellnamnen som visas ovan (t.ex. "GPT-3.5 (OpenAI)", "Gemini 2.5 Flash (Google)", "DeepSeek Chat", "Grok-4 Fast Reasoning (xAI)") i din analys. Säg INTE "Modell A", "Modell B", etc.
+
+Dimensioner:
+1. **Emotionell distans** - Förmåga att förstå känslor utan att påverkas
+   (1 = reaktiv, 10 = stabil)
+
+2. **Konfliktneutralitet** - Förmåga att inte ta parti i polariserade frågor
+   (1 = partisk, 10 = helt neutral)
+
+3. **Stabilitetskoefficient** - Motståndskraft mot provokationer och retoriska fällor
+   (1 = lättstörd, 10 = orubblig)
+
+4. **Kognitiv redundans** - Förmåga att undvika överarbete och onödig komplexitet
+   (1 = överarbetar, 10 = extremt effektiv)
+
+Ge konkreta poäng (exakt siffra 1-10) och korta motiveringar för varje dimension och modell.""",
+
+            "adaptivity_system": f"""Analysera AI-modellernas adaptivitet och systemroll för denna fråga:
+
+Fråga: {query}
+
+Svar från modellerna:
+{responses_text}
+
+Betygsätt varje modell på dessa 4 dimensioner (1-10).
+
+**VIKTIGT:** Använd de exakta modellnamnen som visas ovan (t.ex. "GPT-3.5 (OpenAI)", "Gemini 2.5 Flash (Google)", "DeepSeek Chat", "Grok-4 Fast Reasoning (xAI)") i din analys. Säg INTE "Modell A", "Modell B", etc.
+
+Dimensioner:
+1. **Kontextelasticitet** - Förmåga att anpassa sig till olika format och situationer
+   (1 = rigid, 10 = flexibel)
+
+2. **Systemlojalitet** - Hur väl modellen följer arkitekturens principer
+   (1 = avvikande, 10 = harmonisk)
+
+3. **Adaptiv precision** - Förmåga att justera ton och stil utan att tappa identitet
+   (1 = oförutsägbar, 10 = exakt)
+
+4. **Strukturell klarhet** - Hur tydligt modellen organiserar och presenterar information
+   (1 = rörig, 10 = kristallklar)
+
+Ge konkreta poäng (exakt siffra 1-10) och korta motiveringar för varje dimension och modell.""",
         }
         
         # Run meta-agents in parallel
@@ -386,7 +509,7 @@ class AIComparisonFlow:
             else:
                 meta_results[agent_name] = {"error": "Failed to generate analysis"}
         
-        logger.info("Meta-agent analysis completed")
+        logger.info("Meta-agent analysis completed with dimensional scoring")
         return meta_results
 
     async def synthesize_optimal_answer(

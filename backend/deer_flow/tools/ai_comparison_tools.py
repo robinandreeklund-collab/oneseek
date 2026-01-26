@@ -148,15 +148,50 @@ async def fact_check_responses(query: str, model_responses_summary: str) -> str:
         # Run fact-check (this would ideally use the full responses, but we work with what we have)
         analysis = await comparison_flow.analyze_with_fact_check(query, [])
         
-        # Format results
+        # Parse and format search results nicely
+        import json
         result = f"## Fact-Check Analysis\n\n"
-        result += f"**Sources Found**: {len(analysis.get('sources', []))}\n\n"
         
-        if analysis.get("sources"):
-            result += "### Sources:\n"
-            for source in analysis.get("sources", [])[:5]:  # Limit to first 5
-                result += f"- {source}\n"
-            result += "\n"
+        sources = analysis.get('sources', [])
+        if sources:
+            # Parse JSON if it's a string
+            parsed_sources = []
+            for source in sources:
+                if isinstance(source, str):
+                    try:
+                        source_data = json.loads(source)
+                        if isinstance(source_data, dict) and 'results' in source_data:
+                            parsed_sources.extend(source_data['results'])
+                        else:
+                            parsed_sources.append(source_data)
+                    except json.JSONDecodeError:
+                        # If it's not JSON, treat it as plain text
+                        parsed_sources.append({'content': source})
+                else:
+                    parsed_sources.append(source)
+            
+            result += f"**Sources Found**: {len(parsed_sources)}\n\n"
+            result += "### Search Results:\n\n"
+            
+            for i, source in enumerate(parsed_sources[:5], 1):  # Limit to first 5
+                if isinstance(source, dict):
+                    title = source.get('title', 'No title')
+                    url = source.get('url', '')
+                    content = source.get('content', '')
+                    
+                    result += f"**{i}. {title}**\n"
+                    if url:
+                        result += f"🔗 {url}\n"
+                    if content:
+                        # Truncate content to reasonable length
+                        content_preview = content[:200] + "..." if len(content) > 200 else content
+                        result += f"📄 {content_preview}\n"
+                    result += "\n"
+                else:
+                    result += f"{i}. {str(source)[:200]}...\n\n"
+        else:
+            result += "**Sources Found**: 0\n\n"
+            result += "No search results were found for fact-checking.\n\n"
         
         if analysis.get("fact_check_summary"):
             result += f"### Summary:\n{analysis['fact_check_summary']}\n"
@@ -171,38 +206,54 @@ async def fact_check_responses(query: str, model_responses_summary: str) -> str:
 @tool
 async def run_meta_analysis(query: str, responses_context: str) -> str:
     """
-    Run meta-analysis agents (Counterfactual, Robustness, Consistency, Truth-Pressure) on the responses.
+    Run 4 meta-analysis agents with dimensional scoring (1-10) on each AI model response.
+    
+    Meta-Agents:
+    1. Cognitive Properties: Meta-reflection, Reasoning depth, Synthesis capacity, Bias detection
+    2. Integrity & Objectivity: Objectivity, Integrity, Transparency, Epistemic humility
+    3. Stability & Emotional Profile: Emotional distance, Conflict neutrality, Stability, Cognitive redundancy
+    4. Adaptivity & System Role: Context elasticity, System loyalty, Adaptive precision, Structural clarity
     
     Args:
         query: The original question
         responses_context: Context about the model responses
         
     Returns:
-        Meta-analysis results from all four analytical frameworks
+        Meta-analysis results with dimensional scores from all four analytical frameworks
     """
     try:
         comparison_flow = get_ai_comparison_flow(max_search_results=3, resources=[])
         
-        logger.info("Starting meta-agent analysis")
+        logger.info("Starting 4-category meta-agent analysis with dimensional scoring")
         
-        # Run meta-agents
+        # Run meta-agents (they now use the new 4-category system)
         meta_results = await comparison_flow.run_meta_agents(query, [], {})
         
         # Format results
-        result = f"## Meta-Analysis Results\n\n"
+        result = f"## Meta-Analysis Results (4 Categories)\n\n"
         successful = sum(1 for v in meta_results.values() if v.get("success"))
-        result += f"**Completed**: {successful}/4 meta-agents\n\n"
+        result += f"**Completed**: {successful}/4 meta-agent categories\n\n"
+        
+        # Map agent names to display names
+        agent_display_names = {
+            "cognitive_properties": "Kognitiva Egenskaper (Cognitive Properties)",
+            "integrity_objectivity": "Integritet & Objektivitet (Integrity & Objectivity)",
+            "stability_emotional": "Stabilitet & Emotionell Profil (Stability & Emotional Profile)",
+            "adaptivity_system": "Adaptivitet & Systemroll (Adaptivity & System Role)",
+        }
         
         for agent_name, agent_result in meta_results.items():
             status = "✓" if agent_result.get("success") else "✗"
-            display_name = agent_name.replace("_", " ").title()
+            display_name = agent_display_names.get(agent_name, agent_name.replace("_", " ").title())
             result += f"### {status} {display_name}\n\n"
             
             if agent_result.get("success"):
-                analysis = agent_result.get("analysis", "No analysis available")[:300]
-                if len(agent_result.get("analysis", "")) > 300:
-                    analysis += "... [truncated]"
-                result += f"{analysis}\n\n"
+                analysis = agent_result.get("analysis", "No analysis available")
+                # Show more of the analysis since it contains scores
+                analysis_preview = analysis[:500] if len(analysis) > 500 else analysis
+                if len(analysis) > 500:
+                    analysis_preview += "... [truncated for brevity]"
+                result += f"{analysis_preview}\n\n"
             else:
                 result += f"Error: {agent_result.get('error', 'Unknown error')}\n\n"
         
@@ -267,13 +318,22 @@ def get_ai_comparison_tools():
     NOTE: OneSeek Local is NOT included as a tool because it serves as the 
     synthesizing agent that analyzes responses from other models, rather than
     being queried as one of the models to compare.
+    
+    The web_search tool is included directly so the frontend can display
+    search results with the same rich UI as deep research mode.
     """
+    # Import web_search tool from deer_flow
+    from backend.deer_flow.tools import get_web_search_tool
+    
+    # Get web search tool with default 3 results
+    web_search = get_web_search_tool(max_search_results=3)
+    
     return [
         query_gpt35,
         query_gemini_flash,
         query_deepseek,
         query_grok4,
-        fact_check_responses,
+        web_search,  # Direct web search for fact-checking
         run_meta_analysis,
         synthesize_optimal_answer,
     ]

@@ -838,6 +838,12 @@ async def _astream_workflow_generator(
 
     # Prepare workflow input
     logger.debug(f"[{safe_thread_id}] Preparing workflow input")
+    
+    # If AI comparison mode is enabled, automatically use AI_COMPARISON report style
+    if enable_ai_comparison:
+        logger.info(f"[{safe_thread_id}] AI comparison mode enabled, using AI_COMPARISON report style")
+        report_style = ReportStyle.AI_COMPARISON
+    
     workflow_input = {
         "messages": messages,
         "plan_iterations": 0,
