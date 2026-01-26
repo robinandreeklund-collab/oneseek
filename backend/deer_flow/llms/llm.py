@@ -207,15 +207,20 @@ def configure_llm_with_thinking(
     """
     Configure LLM with enable_thinking parameter for Qwen3/vLLM models.
     
-    For vLLM with Qwen3, this uses chat_template_kwargs to control thinking mode.
-    For other OpenAI-compatible APIs, this uses extra_body parameter.
+    This function is specifically designed for vLLM with Qwen3 models. It uses
+    the vLLM-specific chat_template_kwargs to control thinking mode.
     
     Args:
         llm: The base LLM instance
-        enable_thinking: Whether to enable thinking mode
+        enable_thinking: Whether to enable thinking mode (generates <think> tags)
         
     Returns:
         Configured LLM instance with thinking parameters bound
+        
+    Note:
+        The function binds extra_body parameters to the LLM using the .bind() method.
+        If the LLM doesn't support this parameter format or the bind operation fails,
+        the original LLM instance is returned with a warning logged.
     """
     # Prepare model_kwargs for vLLM/OpenAI-compatible APIs
     # vLLM with Qwen3 expects: extra_body={"chat_template_kwargs": {"enable_thinking": true/false}}

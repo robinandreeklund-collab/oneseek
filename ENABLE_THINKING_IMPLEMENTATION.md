@@ -22,8 +22,7 @@ This implementation adds support for Qwen3 model's built-in thinking functionali
 ```python
 def configure_llm_with_thinking(
     llm: BaseChatModel,
-    enable_thinking: bool = False,
-    locale: str = "en-US"
+    enable_thinking: bool = False
 ) -> BaseChatModel
 ```
 
@@ -31,7 +30,7 @@ This function dynamically configures the LLM with the `enable_thinking` paramete
 
 - **For vLLM with Qwen3**: Uses `extra_body` with `chat_template_kwargs: {"enable_thinking": true/false}`
 - **Binds parameters** to the LLM instance using `.bind()` method
-- **Graceful fallback**: Returns original LLM if binding fails
+- **Graceful fallback**: Returns original LLM if binding fails (catches TypeError and AttributeError)
 
 #### Removed Hardcoded Configuration
 
