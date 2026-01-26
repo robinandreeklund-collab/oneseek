@@ -484,10 +484,9 @@ function PlanCard({
     message.content && message.content.trim() !== "",
   );
 
-  // 判断是否正在思考：有推理内容但还没有主要内容
+  // Check if thinking: has reasoning content but no main content yet
   const isThinking = Boolean(reasoningContent && !hasMainContent);
 
-  // 判断是否应该显示计划：显示如果有内容，或者正在流式传输
   // Show plan if we have content OR if we're still streaming (to show loading state)
   const shouldShowPlan = hasMainContent || message.isStreaming;
   const handleAccept = useCallback(async () => {
