@@ -20,6 +20,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 
 from backend.deer_flow.tools import get_web_search_tool, get_retriever_tool, crawl_tool
+from backend.deer_flow.llms.llm import get_llm_by_type
 
 logger = logging.getLogger(__name__)
 
@@ -142,20 +143,32 @@ class AIComparisonFlow:
             except Exception as e:
                 logger.warning(f"Failed to initialize Grok-4 Fast Reasoning: {e}")
         
-        # OneSeek Local (vLLM)
-        vllm_url = os.getenv("VLLM_URL", "http://localhost:8000/v1")
-        vllm_model = os.getenv("VLLM_MODEL", "Qwen/Qwen2.5-14B-Instruct-AWQ")
+        # OneSeek Local (vLLM) - use configuration from conf.yaml
         try:
-            models["oneseek-local"] = ChatOpenAI(
-                base_url=vllm_url,
-                api_key="EMPTY",
-                model=vllm_model,
-                temperature=0.7,
-                max_tokens=2048,
-            )
-            logger.info(f"OneSeek Local model initialized: {vllm_model}")
+            # Get the local LLM from deer_flow configuration (uses conf.yaml)
+            # This ensures we use the same model configuration as the rest of the system
+            local_llm = get_llm_by_type("basic")
+            models["oneseek-local"] = local_llm
+            
+            # Log the model name if available
+            model_name = getattr(local_llm, 'model_name', 'unknown')
+            logger.info(f"OneSeek Local model initialized from conf.yaml: {model_name}")
         except Exception as e:
-            logger.warning(f"Failed to initialize OneSeek Local: {e}")
+            logger.warning(f"Failed to initialize OneSeek Local from conf.yaml: {e}")
+            # Fallback to environment variable if conf.yaml fails
+            try:
+                vllm_url = os.getenv("VLLM_URL", "http://localhost:8000/v1")
+                vllm_model = os.getenv("VLLM_MODEL", "Qwen/Qwen2.5-14B-Instruct-AWQ")
+                models["oneseek-local"] = ChatOpenAI(
+                    base_url=vllm_url,
+                    api_key="EMPTY",
+                    model=vllm_model,
+                    temperature=0.7,
+                    max_tokens=2048,
+                )
+                logger.info(f"OneSeek Local model initialized from environment: {vllm_model}")
+            except Exception as e2:
+                logger.warning(f"Failed to initialize OneSeek Local from environment: {e2}")
         
         return models
 
