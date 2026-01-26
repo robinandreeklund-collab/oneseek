@@ -1576,7 +1576,21 @@ Provide a comprehensive comparison report with citations.""",
             "ai_comparison",
             tools,
         )
-        return result
+        
+        # AI comparison is a complete standalone operation - go directly to reporter
+        # instead of going through research_team → planner → reporter
+        logger.info("AI comparison complete, routing directly to reporter")
+        
+        # Mark the step as complete
+        if state.get("current_plan") and state["current_plan"].steps:
+            state["current_plan"].steps[0].completed = True
+            state["current_plan"].steps[0].execution_res = "AI comparison analysis completed successfully"
+        
+        # Override the goto to go directly to reporter
+        return Command(
+            goto="reporter",
+            update=result.get("update", {}) if isinstance(result, dict) else {}
+        )
     finally:
         # Restore original recursion limit
         if original_recursion_limit is not None:
