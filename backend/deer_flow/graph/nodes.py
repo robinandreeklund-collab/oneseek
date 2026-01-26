@@ -488,6 +488,18 @@ def planner_node(
             goto="ai_comparison",
         )
     
+    # Check if debate mode is enabled - route to debate node
+    if state.get("enable_debate_mode", False):
+        logger.info("Planner: Debate mode enabled, routing to debate node")
+        return Command(
+            update={
+                "messages": [AIMessage(content=full_response, name="planner")],
+                "current_plan": full_response,
+                **preserve_state_meta_fields(state),
+            },
+            goto="debate",
+        )
+    
     return Command(
         update={
             "messages": [AIMessage(content=full_response, name="planner")],
@@ -633,7 +645,7 @@ def human_feedback_node(
 
 def coordinator_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["planner", "background_investigator", "ai_comparison", "coordinator", "__end__"]]:
+) -> Command[Literal["planner", "background_investigator", "ai_comparison", "debate", "coordinator", "__end__"]]:
     """Coordinator node that communicate with customers and handle clarification."""
     logger.info("Coordinator talking.")
     configurable = Configuration.from_runnable_config(config)
@@ -678,12 +690,16 @@ def coordinator_node(
 
                     if tool_name == "handoff_to_planner":
                         logger.info("Handing off to planner")
-                        # Always route to planner first (planner will route to ai_comparison if needed)
+                        # Always route to planner first (planner will route to ai_comparison/debate if needed)
                         goto = "planner"
                         
                         # Log if AI comparison mode is enabled (planner will handle routing)
                         if state.get("enable_ai_comparison", False):
                             logger.info("AI comparison mode enabled, planner will route to ai_comparison")
+                        
+                        # Log if debate mode is enabled (planner will handle routing)
+                        if state.get("enable_debate_mode", False):
+                            logger.info("Debate mode enabled, planner will route to debate")
 
                         # Extract research_topic if provided
                         if tool_args.get("research_topic"):
@@ -911,8 +927,8 @@ def coordinator_node(
             logger.info("No tool calls in legacy mode - ending workflow gracefully")
 
     # Apply background_investigation routing if enabled (unified logic)
-    # But skip if AI comparison mode is enabled (comparison doesn't need background investigation)
-    if goto == "planner" and state.get("enable_background_investigation") and not state.get("enable_ai_comparison"):
+    # But skip if AI comparison or debate mode is enabled (they don't need background investigation)
+    if goto == "planner" and state.get("enable_background_investigation") and not state.get("enable_ai_comparison") and not state.get("enable_debate_mode"):
         goto = "background_investigator"
 
     # Set default values for state variables (in case they're not defined in legacy mode)
@@ -1683,6 +1699,130 @@ Provide a comprehensive comparison report with citations.""",
             update={
                 **result.update,
                 "current_plan": comparison_plan,  # Update with completed step
+            },
+            goto="reporter",
+        )
+    finally:
+        # Restore original recursion limit
+        if original_recursion_limit is not None:
+            os.environ["AGENT_RECURSION_LIMIT"] = original_recursion_limit
+        elif "AGENT_RECURSION_LIMIT" in os.environ:
+            del os.environ["AGENT_RECURSION_LIMIT"]
+
+
+async def debate_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["reporter"]]:
+    """
+    Multi-Round Debate node that orchestrates a 3-round debate between AI models.
+    
+    All models (including OneSeek) participate as equal debaters with:
+    - Randomized order each round
+    - Sequential chain-of-thought flow
+    - Strict context control between rounds
+    - OneSeek synthesis in round 3
+    - External model voting after round 3
+    
+    Routes directly to reporter to avoid research_team loops.
+    """
+    logger.info("Debate node starting - Multi-Round Debate Engine")
+    
+    configurable = Configuration.from_runnable_config(config)
+    
+    # Get debate tools
+    from backend.deer_flow.tools import get_debate_tools
+    tools = get_debate_tools()
+    logger.info(f"Debate tools count: {len(tools)}")
+    
+    # Get locale and research topic from state
+    locale = state.get("locale", "en-US")
+    research_topic = state.get("research_topic", "Unknown topic")
+    logger.info(f"Research topic: {research_topic}")
+    logger.info(f"Locale: {locale}")
+    
+    # Create a simple plan with one step for the debate
+    # This allows us to use _setup_and_execute_agent_step() which works for streaming
+    from backend.deer_flow.prompts.planner_model import Plan, Step, StepType
+    
+    debate_step = Step(
+        need_search=False,  # Debate uses internal web search via tools
+        step_type=StepType.RESEARCH,
+        title="Multi-Round Debate",
+        description=f"""Orchestrate a 3-round debate for: {research_topic}
+
+Follow the debate protocol:
+
+**Round 1:**
+1. start_debate_round(1, "{research_topic}", "{locale}")
+2. Query each model ONE AT A TIME in randomized order using query_model_in_round
+3. Run run_internal_analysis after each model response
+
+**Round 2:**
+1. start_debate_round(2, "{research_topic}", "{locale}")
+2. Query each model ONE AT A TIME in randomized order using query_model_in_round
+3. Run run_internal_analysis after each model response
+
+**Round 3:**
+1. start_debate_round(3, "{research_topic}", "{locale}")
+2. Query each model ONE AT A TIME in randomized order using query_model_in_round
+3. OneSeek creates synthesis when it's OneSeek's turn
+4. Run run_internal_analysis after each model response
+
+**Voting:**
+1. collect_debate_votes("{research_topic}")
+
+**Summary:**
+1. get_debate_summary()
+
+Provide a comprehensive debate report with all rounds, voting results, and conclusions.""",
+        execution_res=None
+    )
+    
+    debate_plan = Plan(
+        locale=state.get("locale", "en-US"),
+        has_enough_context=False,  # We need to execute this debate step
+        thought="Running multi-round debate with all AI models to provide comprehensive, debated analysis.",
+        title=research_topic,
+        steps=[debate_step]
+    )
+    
+    # Update state with debate plan
+    state["current_plan"] = debate_plan
+    state["locale"] = locale
+    state["research_topic"] = research_topic
+    
+    logger.info("Created debate plan with 1 step, using standard execution path")
+    
+    # Set a higher recursion limit for debate since it needs many sequential tool calls
+    # 3 rounds × ~5 models × 2 tools per model = ~30 calls minimum
+    # Plus voting and summary = ~35 calls
+    # We set to 100 to give plenty of buffer
+    import os
+    original_recursion_limit = os.getenv("AGENT_RECURSION_LIMIT")
+    os.environ["AGENT_RECURSION_LIMIT"] = "100"
+    
+    try:
+        logger.info("Executing debate step via standard agent execution path")
+        
+        # Use the EXACT SAME execution path as ai_comparison and researcher
+        result = await _setup_and_execute_agent_step(
+            state,
+            config,
+            "debate",
+            tools,
+        )
+        
+        # Mark the debate step as complete
+        debate_step.execution_res = "Multi-round debate completed successfully"
+        
+        # Go directly to reporter to avoid research_team loops
+        logger.info("Debate complete, routing directly to reporter")
+        
+        # Return updated state with completed step and goto reporter
+        return Command(
+            update={
+                **result.update,
+                "current_plan": debate_plan,
             },
             goto="reporter",
         )
