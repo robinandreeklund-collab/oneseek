@@ -1528,20 +1528,18 @@ Provide a comprehensive comparison report with citations.""",
         steps=[comparison_step]
     )
     
-    # Update state with the comparison plan
-    updated_state = {
-        **state,
-        "current_plan": comparison_plan,
-        "locale": locale,
-        "research_topic": research_topic
-    }
+    # Update state directly with the comparison plan
+    # State is a dict-like object, so we can mutate it
+    state["current_plan"] = comparison_plan
+    state["locale"] = locale
+    state["research_topic"] = research_topic
     
     logger.info("Created comparison plan with 1 step, using standard execution path")
     
     # Use the EXACT SAME execution path as researcher/coder
     # This is what makes streaming work correctly!
     return await _setup_and_execute_agent_step(
-        updated_state,
+        state,
         config,
         "ai_comparison",
         tools,
