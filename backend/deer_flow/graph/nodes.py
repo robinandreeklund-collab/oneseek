@@ -456,6 +456,18 @@ def planner_node(
             },
             goto="reporter",
         )
+    # Check if AI comparison mode is enabled
+    if state.get("enable_ai_comparison", False):
+        logger.info("Planner: AI comparison mode enabled, routing to ai_comparison node")
+        return Command(
+            update={
+                "messages": [AIMessage(content=full_response, name="planner")],
+                "current_plan": full_response,
+                **preserve_state_meta_fields(state),
+            },
+            goto="ai_comparison",
+        )
+    
     return Command(
         update={
             "messages": [AIMessage(content=full_response, name="planner")],
@@ -645,12 +657,12 @@ def coordinator_node(
 
                     if tool_name == "handoff_to_planner":
                         logger.info("Handing off to planner")
-                        # Check if AI comparison mode is enabled
+                        # Always route to planner first (planner will route to ai_comparison if needed)
+                        goto = "planner"
+                        
+                        # Log if AI comparison mode is enabled (planner will handle routing)
                         if state.get("enable_ai_comparison", False):
-                            logger.info("AI comparison mode enabled, routing to ai_comparison node")
-                            goto = "ai_comparison"
-                        else:
-                            goto = "planner"
+                            logger.info("AI comparison mode enabled, planner will route to ai_comparison")
 
                         # Extract research_topic if provided
                         if tool_args.get("research_topic"):
@@ -834,12 +846,12 @@ def coordinator_node(
 
                 if tool_name in ["handoff_to_planner", "handoff_after_clarification"]:
                     logger.info("Handing off to planner")
-                    # Check if AI comparison mode is enabled
+                    # Always route to planner first (planner will route to ai_comparison if needed)
+                    goto = "planner"
+                    
+                    # Log if AI comparison mode is enabled (planner will handle routing)
                     if state.get("enable_ai_comparison", False):
-                        logger.info("AI comparison mode enabled, routing to ai_comparison node")
-                        goto = "ai_comparison"
-                    else:
-                        goto = "planner"
+                        logger.info("AI comparison mode enabled, planner will route to ai_comparison")
 
                     if not enable_clarification and tool_args.get("research_topic"):
                         research_topic = tool_args["research_topic"]
@@ -1560,21 +1572,6 @@ Provide a comprehensive comparison report with citations.""",
     
     logger.info("Created comparison plan with 1 step, using standard execution path")
     
-    # CRITICAL: Send a "planner" message so frontend recognizes research has started
-    # The frontend looks for a planner message to initialize the research UI/sidebar
-    import json
-    from langchain_core.messages import AIMessage
-    
-    plan_json = comparison_plan.model_dump_json(indent=2)
-    planner_message = AIMessage(
-        content=f"I've created a research plan for AI model comparison:\n\n```json\n{plan_json}\n```",
-        name="planner",  # Critical: must be tagged as "planner" for frontend to recognize
-    )
-    
-    # Add planner message to state so it gets streamed to frontend
-    state["messages"].append(planner_message)
-    logger.info("Added planner message to state for frontend research initialization")
-    
     # Set a higher recursion limit for AI comparison since it needs to call 8+ tools sequentially
     # Each tool call counts as ~2-3 recursion steps, so 8 tools = ~24 steps minimum
     # We set to 50 to give plenty of buffer
@@ -1583,6 +1580,10 @@ Provide a comprehensive comparison report with citations.""",
     os.environ["AGENT_RECURSION_LIMIT"] = "50"
     
     try:
+        # Planner node already created the planner message before routing to ai_comparison
+        # So we don't need to create it again here - it already exists in state["messages"]
+        logger.info("Planner already created planner message, executing AI comparison step")
+        
         # Use the EXACT SAME execution path as researcher/coder
         # This is what makes streaming work correctly!
         result = await _setup_and_execute_agent_step(
