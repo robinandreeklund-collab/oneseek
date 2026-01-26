@@ -311,12 +311,9 @@ function appendResearch(researchId: string) {
   }
   
   // Build activity IDs - avoid duplicates if researchId is the same as planMessage.id
-  const messageIds = researchId === planMessage?.id ? [researchId] : [researchId];
+  const messageIds = [researchId];
   if (planMessage && planMessage.id !== researchId) {
     messageIds.unshift(planMessage.id);
-  } else if (planMessage && planMessage.id === researchId) {
-    // researchId IS the planner message, so messageIds already contains it
-    // No need to unshift
   }
   
   useStore.setState({
@@ -324,7 +321,7 @@ function appendResearch(researchId: string) {
     researchIds: [...useStore.getState().researchIds, researchId],
     researchPlanIds: new Map(useStore.getState().researchPlanIds).set(
       researchId,
-      planMessage!.id,
+      planMessage?.id ?? researchId,
     ),
     researchActivityIds: new Map(useStore.getState().researchActivityIds).set(
       researchId,
