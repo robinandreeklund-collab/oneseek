@@ -152,6 +152,7 @@ export async function sendMessage(
       enable_background_investigation:
         settings.enableBackgroundInvestigation ?? true,
       enable_ai_comparison: settings.enableAiComparison ?? false,
+      enable_debate_mode: settings.enableDebateMode ?? false,
       enable_web_search: settings.enableWebSearch ?? true,
       max_plan_iterations: settings.maxPlanIterations,
       max_step_num: settings.maxStepNum,

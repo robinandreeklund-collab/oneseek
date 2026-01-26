@@ -8,3 +8,4 @@ class ReportStyle(enum.Enum):
     SOCIAL_MEDIA = "social_media"
     STRATEGIC_INVESTMENT = "strategic_investment"
     AI_COMPARISON = "ai_comparison"
+    DEBATE = "debate"
