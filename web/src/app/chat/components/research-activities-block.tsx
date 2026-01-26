@@ -45,17 +45,16 @@ export function ResearchActivitiesBlock({
 }) {
   const activityIds = useStore((state) =>
     state.researchActivityIds.get(researchId),
-  )!;
+  );
   const ongoing = useStore((state) => state.ongoingResearchId === researchId);
   
-  // Debug logging
-  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-    console.log('[ResearchActivitiesBlock] Rendering:', {
-      researchId,
-      activityIdsCount: activityIds?.length || 0,
-      activityIds: activityIds,
-      ongoing
-    });
+  // Guard against undefined activityIds
+  if (!activityIds || activityIds.length === 0) {
+    return (
+      <>
+        {ongoing && <LoadingAnimation className="mx-4 my-12" />}
+      </>
+    );
   }
   
   return (
@@ -95,17 +94,6 @@ export function ResearchActivitiesBlock({
 const ActivityMessage = React.memo(({ messageId }: { messageId: string }) => {
   const message = useMessage(messageId);
   
-  // Debug logging
-  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-    console.log('[ActivityMessage] Rendering:', {
-      messageId,
-      hasMessage: !!message,
-      agent: message?.agent,
-      hasContent: !!message?.content,
-      contentLength: message?.content?.length || 0
-    });
-  }
-  
   if (message?.agent) {
     // Show planner messages as plan cards (even if content is empty/streaming)
     if (message.agent === "planner") {
@@ -138,18 +126,6 @@ const PlanCard = React.memo(({ message }: { message: Message }) => {
   }, [message.content]);
 
   const hasContent = Boolean(message.content && message.content.trim() !== "");
-
-  // Always render the card, even if content is empty
-  // Log for debugging (will be visible in browser console)
-  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-    console.log('[PlanCard] Rendering:', {
-      hasContent,
-      isStreaming: message.isStreaming,
-      contentLength: message.content?.length || 0,
-      planTitle: plan.title,
-      stepsCount: plan.steps?.length || 0
-    });
-  }
 
   return (
     <motion.div
