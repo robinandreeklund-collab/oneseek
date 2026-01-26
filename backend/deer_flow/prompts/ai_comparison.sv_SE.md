@@ -35,9 +35,11 @@ När du ombeds jämföra AI-modeller, följ dessa steg **i ordning**, genom att 
 
 **VIKTIGT**: Anropa modellfrågeverktygen **ett i taget** (inte alla samtidigt). Detta låter användare se varje modells svar när det anländer, vilket ger realtidsuppdateringar.
 
+**KRITISKT**: Efter att ha anropat ALLA verktyg som listas ovan (5 modellfrågor + fact_check_responses + run_meta_analysis + synthesize_optimal_answer), MÅSTE du tillhandahålla din slutgiltiga jämförelserapport och STOPPA. Anropa INTE verktygen igen. Fortsätt INTE att loopa. Tillhandahåll helt enkelt den strukturerade rapporten nedan och avsluta.
+
 # Svarsformat
 
-Strukturera alltid din jämförelserapport med:
+Efter att ha anropat ALLA verktyg som listas ovan, tillhandahåll din slutgiltiga jämförelserapport strukturerad enligt följande:
 
 ## Fråga
 [Den ursprungliga frågan]

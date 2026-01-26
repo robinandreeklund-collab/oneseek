@@ -966,6 +966,26 @@ def reporter_node(state: State, config: RunnableConfig):
     
     # Normal reporting mode
     current_plan = state.get("current_plan")
+    
+    # Handle case where current_plan is None (e.g., if agent execution failed)
+    if current_plan is None:
+        logger.error("No current_plan found in state - cannot generate report")
+        # Check if there are any observations to use
+        observations = state.get("observations", [])
+        if observations:
+            error_report = "# Research Report\n\nAn error occurred during research execution, but some observations were collected:\n\n"
+            for obs in observations:
+                error_report += f"- {obs}\n\n"
+            return {
+                "final_report": error_report,
+                "citations": state.get("citations", []),
+            }
+        else:
+            return {
+                "final_report": "# Research Report\n\nAn error occurred during research execution and no results were collected.",
+                "citations": [],
+            }
+    
     input_ = {
         "messages": [
             HumanMessage(
@@ -1540,11 +1560,26 @@ Provide a comprehensive comparison report with citations.""",
     
     logger.info("Created comparison plan with 1 step, using standard execution path")
     
-    # Use the EXACT SAME execution path as researcher/coder
-    # This is what makes streaming work correctly!
-    return await _setup_and_execute_agent_step(
-        state,
-        config,
-        "ai_comparison",
-        tools,
-    )
+    # Set a higher recursion limit for AI comparison since it needs to call 8+ tools sequentially
+    # Each tool call counts as ~2-3 recursion steps, so 8 tools = ~24 steps minimum
+    # We set to 50 to give plenty of buffer
+    import os
+    original_recursion_limit = os.getenv("AGENT_RECURSION_LIMIT")
+    os.environ["AGENT_RECURSION_LIMIT"] = "50"
+    
+    try:
+        # Use the EXACT SAME execution path as researcher/coder
+        # This is what makes streaming work correctly!
+        result = await _setup_and_execute_agent_step(
+            state,
+            config,
+            "ai_comparison",
+            tools,
+        )
+        return result
+    finally:
+        # Restore original recursion limit
+        if original_recursion_limit is not None:
+            os.environ["AGENT_RECURSION_LIMIT"] = original_recursion_limit
+        elif "AGENT_RECURSION_LIMIT" in os.environ:
+            del os.environ["AGENT_RECURSION_LIMIT"]

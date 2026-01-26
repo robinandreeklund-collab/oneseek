@@ -35,9 +35,11 @@ When asked to compare AI models, follow these steps **in order**, calling one to
 
 **IMPORTANT**: Call the model query tools **one at a time** (not all at once). This allows users to see each model's response as it arrives, providing real-time progress updates.
 
+**CRITICAL**: After calling all the tools listed above (5 model queries + fact_check_responses + run_meta_analysis + synthesize_optimal_answer), you MUST provide your final comparison report and STOP. Do NOT call the tools again. Do NOT continue looping. Simply provide the structured report below and finish.
+
 # Response Format
 
-Always structure your comparison report with:
+After calling ALL the tools listed above, provide your final comparison report structured as follows:
 
 ## Query
 [The original question]
