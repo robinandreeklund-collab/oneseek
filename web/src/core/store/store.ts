@@ -256,6 +256,7 @@ function findMessageByToolCallId(toolCallId: string) {
 
 function appendMessage(message: Message) {
   if (
+    message.agent === "planner" ||
     message.agent === "coder" ||
     message.agent === "reporter" ||
     message.agent === "researcher" ||
@@ -263,11 +264,16 @@ function appendMessage(message: Message) {
     message.agent === "ai_comparison"
   ) {
     if (!getOngoingResearchId()) {
+      // For planner, use the planner message as the research ID
+      // For others, use their own ID
       const id = message.id;
       appendResearch(id);
       openResearch(id);
     }
-    appendResearchActivity(message);
+    // Add to research activities (planner is already added in appendResearch, so skip it)
+    if (message.agent !== "planner") {
+      appendResearchActivity(message);
+    }
   }
   useStore.getState().appendMessage(message);
 }
@@ -303,8 +309,16 @@ function appendResearch(researchId: string) {
       break;
     }
   }
-  const messageIds = [researchId];
-  messageIds.unshift(planMessage!.id);
+  
+  // Build activity IDs - avoid duplicates if researchId is the same as planMessage.id
+  const messageIds = researchId === planMessage?.id ? [researchId] : [researchId];
+  if (planMessage && planMessage.id !== researchId) {
+    messageIds.unshift(planMessage.id);
+  } else if (planMessage && planMessage.id === researchId) {
+    // researchId IS the planner message, so messageIds already contains it
+    // No need to unshift
+  }
+  
   useStore.setState({
     ongoingResearchId: researchId,
     researchIds: [...useStore.getState().researchIds, researchId],
