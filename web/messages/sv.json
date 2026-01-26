@@ -19,8 +19,8 @@
     "title": "Oneseek"
   },
   "hero": {
-    "title": "Kunskap Utan Fluff.",
-    "subtitle": "Insyn Utan Gränser.",
+    "title": "AI med insyn, beslut med ansvar.",
+    "subtitle": "",
     "description": "Möt OneSeek, din hyperintelligenta forskningsmotor från framtiden. Den kombinerar kraftfull sökteknik med ett avancerat debatt‑ och jämförelseläge där flera AI‑modeller duellerar för att ge dig de mest robusta insikterna. All aktivitet säkras i en blockchain‑ledger och du förblir helt anonym. AI med insyn, beslut med ansvar — levererat som blixtsnabba svar, djupgående analyser och visionära podcasts."
   },
   "settings": {
@@ -166,7 +166,10 @@
       "nowPlayingPodcast": "Spelar nu podcast...",
       "podcast": "Podcast",
       "errorGeneratingPodcast": "Fel vid generering av podcast. Försök igen.",
-      "downloadPodcast": "Ladda ner podcast"
+      "downloadPodcast": "Ladda ner podcast",
+      "generatePodcastPrompt": "Vänligen generera en podcast för ovanstående forskning.",
+      "editPlan": "Redigera plan",
+      "startResearch": "Starta forskning"
     },
     "evaluation": {
       "title": "Utvärdering av rapportkvalitet",

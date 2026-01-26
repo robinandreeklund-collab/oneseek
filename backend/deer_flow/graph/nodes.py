@@ -642,6 +642,7 @@ def coordinator_node(
     enable_clarification = state.get("enable_clarification", False)
     initial_topic = state.get("research_topic", "")
     clarified_topic = initial_topic
+    direct_response_message = None  # Store direct response message to preserve it
     # ============================================================
     # BRANCH 1: Clarification DISABLED (Legacy Mode)
     # ============================================================
@@ -691,9 +692,9 @@ def coordinator_node(
                     elif tool_name == "direct_response":
                         logger.info("Direct response to user (greeting/small talk)")
                         goto = "__end__"
-                        # Append direct message to messages list instead of overwriting response
+                        # Store direct message to add it later after messages are rebuilt
                         if tool_args.get("message"):
-                            messages.append(AIMessage(content=tool_args.get("message"), name="coordinator"))
+                            direct_response_message = AIMessage(content=tool_args.get("message"), name="coordinator")
                         break
 
             except Exception as e:
@@ -856,6 +857,10 @@ def coordinator_node(
         # Strip think tags from coordinator response before adding to messages
         coordinator_content = strip_think_tags(response.content)
         messages.append(HumanMessage(content=coordinator_content, name="coordinator"))
+    
+    # Add direct response message if it was set (for greetings/small talk)
+    if direct_response_message:
+        messages.append(direct_response_message)
 
     # Process tool calls for BOTH branches (legacy and clarification)
     if response.tool_calls:

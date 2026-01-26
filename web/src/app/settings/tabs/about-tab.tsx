@@ -7,6 +7,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { Markdown } from "~/components/deer-flow/markdown";
 
 import aboutEn from "./about-en.md";
+import aboutSv from "./about-sv.md";
 import aboutZh from "./about-zh.md";
 import type { Tab } from "./types";
 
@@ -14,7 +15,7 @@ export const AboutTab: Tab = () => {
   const locale = useLocale();
   //const t = useTranslations("settings.about");
 
-  const aboutContent = locale === "zh" ? aboutZh : aboutEn;
+  const aboutContent = locale === "zh" ? aboutZh : locale === "sv" ? aboutSv : aboutEn;
 
   return <Markdown>{aboutContent}</Markdown>;
 };
