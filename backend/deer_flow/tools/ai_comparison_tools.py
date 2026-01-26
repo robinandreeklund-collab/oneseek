@@ -302,13 +302,22 @@ def get_ai_comparison_tools():
     NOTE: OneSeek Local is NOT included as a tool because it serves as the 
     synthesizing agent that analyzes responses from other models, rather than
     being queried as one of the models to compare.
+    
+    The web_search tool is included directly so the frontend can display
+    search results with the same rich UI as deep research mode.
     """
+    # Import web_search tool from deer_flow
+    from backend.deer_flow.tools import get_web_search_tool
+    
+    # Get web search tool with default 3 results
+    web_search = get_web_search_tool(max_search_results=3)
+    
     return [
         query_gpt35,
         query_gemini_flash,
         query_deepseek,
         query_grok4,
-        fact_check_responses,
+        web_search,  # Direct web search for fact-checking
         run_meta_analysis,
         synthesize_optimal_answer,
     ]
