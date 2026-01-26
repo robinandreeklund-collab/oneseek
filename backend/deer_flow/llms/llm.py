@@ -176,8 +176,10 @@ def _create_llm_use_conf(llm_type: LLMType, conf: Dict[str, Any]) -> BaseChatMod
 
     # Check if base_url is dashscope endpoint
     if "base_url" in merged_conf and "dashscope." in merged_conf["base_url"]:
-        # Don't set enable_thinking here - it will be configured dynamically per-request
-        # using configure_llm_with_thinking() function
+        if llm_type == "reasoning":
+            merged_conf["extra_body"] = {"enable_thinking": True}
+        else:
+            merged_conf["extra_body"] = {"enable_thinking": False}
         return ChatDashscope(**merged_conf)
 
     if llm_type == "reasoning":
@@ -198,71 +200,6 @@ def get_llm_by_type(llm_type: LLMType) -> BaseChatModel:
     llm = _create_llm_use_conf(llm_type, conf)
     _llm_cache[llm_type] = llm
     return llm
-
-
-def configure_llm_with_thinking(
-    llm: BaseChatModel,
-    enable_thinking: bool = False
-) -> BaseChatModel:
-    """
-    Configure LLM with enable_thinking parameter for Qwen models with vLLM.
-    
-    This function is designed for vLLM with Qwen models that support thinking mode.
-    It uses the vLLM-specific chat_template_kwargs to control thinking mode.
-    
-    Applies to Qwen models. For non-Qwen models, returns the LLM unchanged.
-    
-    Args:
-        llm: The base LLM instance
-        enable_thinking: Whether to enable thinking mode (generates <think> tags)
-        
-    Returns:
-        Configured LLM instance with thinking parameters bound (Qwen models)
-        or original LLM instance (other models)
-        
-    Note:
-        The function checks if this is a Qwen model before applying the configuration.
-        If the model doesn't support the parameter or binding fails, the original 
-        LLM instance is returned with a warning logged.
-    """
-    # Check if this is a Qwen model by inspecting the model name
-    # Qwen3 and some newer Qwen models support the thinking mode feature
-    try:
-        model_name = getattr(llm, 'model_name', '')
-        if not model_name or 'qwen' not in model_name.lower():
-            # Not a Qwen model, return unchanged
-            logger.debug(f"Model {model_name} is not a Qwen model, skipping thinking mode configuration")
-            return llm
-        
-        logger.debug(f"Applying thinking mode configuration to Qwen model: {model_name}")
-    except Exception:
-        # If we can't determine the model name, return unchanged to be safe
-        logger.debug("Could not determine model name, skipping thinking mode configuration")
-        return llm
-    
-    # Prepare extra_body for vLLM/OpenAI-compatible APIs
-    # vLLM with Qwen models expects: extra_body={"chat_template_kwargs": {"enable_thinking": true/false}}
-    extra_body = {
-        "chat_template_kwargs": {
-            "enable_thinking": enable_thinking
-        }
-    }
-    
-    # Bind the extra_body to the LLM instance
-    # This will be applied when invoke() or stream() is called
-    try:
-        configured_llm = llm.bind(extra_body=extra_body)
-        logger.info(f"Configured Qwen model with enable_thinking={enable_thinking}")
-        return configured_llm
-    except (TypeError, AttributeError) as e:
-        # TypeError: if bind() is not supported or extra_body format is invalid
-        # AttributeError: if the LLM instance doesn't have a bind method
-        logger.warning(f"Failed to bind thinking parameters to LLM ({type(e).__name__}): {e}. Using original LLM.")
-        return llm
-    except Exception as e:
-        # Catch any other unexpected exceptions to ensure graceful degradation
-        logger.warning(f"Unexpected error binding thinking parameters to LLM ({type(e).__name__}): {e}. Using original LLM.")
-        return llm
 
 
 def get_configured_llm_models() -> dict[str, list[str]]:
