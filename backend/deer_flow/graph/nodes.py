@@ -1498,9 +1498,9 @@ async def ai_comparison_node(
     
     # Create a simple plan with one step for AI comparison
     # This allows us to use _setup_and_execute_agent_step() which we KNOW works for streaming
-    from backend.deer_flow.prompts.planner_model import Plan, PlanStep, StepType
+    from backend.deer_flow.prompts.planner_model import Plan, Step, StepType
     
-    comparison_step = PlanStep(
+    comparison_step = Step(
         step_type=StepType.RESEARCH,
         title="AI Model Comparison",
         description=f"""Query and compare responses from multiple AI models for: {research_topic}
