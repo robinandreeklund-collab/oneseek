@@ -1587,9 +1587,10 @@ Provide a comprehensive comparison report with citations.""",
             state["current_plan"].steps[0].execution_res = "AI comparison analysis completed successfully"
         
         # Override the goto to go directly to reporter
+        # The result from _setup_and_execute_agent_step is a Command object with an update dict
         return Command(
             goto="reporter",
-            update=result.get("update", {}) if isinstance(result, dict) else {}
+            update=result.update if hasattr(result, 'update') else {}
         )
     finally:
         # Restore original recursion limit
