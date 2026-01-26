@@ -1479,13 +1479,9 @@ async def ai_comparison_node(
     AI Comparison node that runs sequential queries across multiple AI models.
     Implements Debate OS functionality for DeerFlow with real-time streaming.
     
-    Unlike researcher/coder which execute plan steps, AI comparison is a standalone
-    agent that invokes tools directly (like planner but WITH tools).
-    
-    Key difference from researcher/coder:
-    - They use _execute_agent_step() which requires plan steps
-    - AI comparison creates agent and invokes directly (no plan steps needed)
-    - Tool calls still stream to frontend automatically through LangGraph
+    Creates a simple plan with one step and uses the standard execution path
+    (_setup_and_execute_agent_step) to ensure identical streaming behavior
+    to researcher/coder agents.
     """
     logger.info("AI Comparison node starting - Debate OS mode")
     
@@ -1500,108 +1496,53 @@ async def ai_comparison_node(
     research_topic = state.get("research_topic", "Unknown topic")
     logger.info(f"Research topic: {research_topic}")
     
-    # Prepare input for agent - give clear task instructions
-    # Format similar to researcher to trigger tool usage
-    task_description = f"""# AI Model Comparison Task
+    # Create a simple plan with one step for AI comparison
+    # This allows us to use _setup_and_execute_agent_step() which we KNOW works for streaming
+    from backend.deer_flow.prompts.planner_model import Plan, PlanStep, StepType
+    
+    comparison_step = PlanStep(
+        step_type=StepType.RESEARCH,
+        title="AI Model Comparison",
+        description=f"""Query and compare responses from multiple AI models for: {research_topic}
 
-## Research Question
-{research_topic}
-
-## Your Task
-Perform a comprehensive AI model comparison for the above question. Follow these steps:
-
-1. **Query each AI model individually** (call tools one at a time):
+Follow these steps:
+1. Query each AI model individually (call tools one at a time for streaming):
    - query_gpt35
    - query_gemini_flash
-   - query_deepseek
+   - query_deepseek  
    - query_grok4
    - query_oneseek_local
 
-2. **Fact-check responses** using the fact_check_responses tool
+2. Fact-check responses using fact_check_responses tool
 
-3. **Run meta-analysis** using the run_meta_analysis tool
+3. Run meta-analysis using run_meta_analysis tool
 
-4. **Synthesize results** using the synthesize_optimal_answer tool
+4. Synthesize optimal answer using synthesize_optimal_answer tool
 
-Provide your comprehensive comparison report following the format specified in your instructions.
-
-## Locale
-{locale}"""
-
-    agent_input = {
-        "messages": [
-            HumanMessage(content=task_description)
-        ]
+Provide a comprehensive comparison report with citations.""",
+        execution_res=None
+    )
+    
+    comparison_plan = Plan(
+        title=research_topic,
+        steps=[comparison_step]
+    )
+    
+    # Update state with the comparison plan
+    updated_state = {
+        **state,
+        "current_plan": comparison_plan,
+        "locale": locale,
+        "research_topic": research_topic
     }
     
-    # Create agent with tools (enables streaming of tool calls)
-    # This follows the same pattern as _setup_and_execute_agent_step
-    llm_token_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["ai_comparison"])
-    pre_model_hook = partial(ContextManager(llm_token_limit, 3).compress_messages)
+    logger.info("Created comparison plan with 1 step, using standard execution path")
     
-    agent = create_agent(
-        "ai_comparison",
+    # Use the EXACT SAME execution path as researcher/coder
+    # This is what makes streaming work correctly!
+    return await _setup_and_execute_agent_step(
+        updated_state,
+        config,
         "ai_comparison",
         tools,
-        "ai_comparison",
-        pre_model_hook,
-        interrupt_before_tools=configurable.interrupt_before_tools,
-        locale=locale,
-    )
-    
-    logger.info("AI comparison agent created successfully")
-    
-    # Apply context compression to agent input
-    if llm_token_limit:
-        compressed_state = ContextManager(llm_token_limit, preserve_prefix_message_count=3).compress_messages(
-            {"messages": agent_input["messages"]}
-        )
-        agent_input["messages"] = compressed_state.get("messages", [])
-    
-    # Get recursion limit
-    default_recursion_limit = 25
-    try:
-        env_value_str = os.getenv("AGENT_RECURSION_LIMIT", str(default_recursion_limit))
-        parsed_limit = int(env_value_str)
-        recursion_limit = parsed_limit if parsed_limit > 0 else default_recursion_limit
-    except:
-        recursion_limit = default_recursion_limit
-    
-    logger.info(f"Invoking AI comparison agent with recursion_limit={recursion_limit}")
-    
-    # Invoke agent - tool calls will stream to frontend automatically through LangGraph
-    # The key is that we pass messages through and LangGraph handles the streaming
-    result = await agent.ainvoke(
-        agent_input,
-        {"recursion_limit": recursion_limit, **config}
-    )
-    
-    logger.info("AI comparison agent execution completed")
-    
-    # Extract all messages (includes tool calls and results for streaming)
-    agent_messages = result.get("messages", []) if isinstance(result, dict) else []
-    logger.info(f"AI comparison returned {len(agent_messages)} messages")
-    
-    # Count tool messages for logging
-    tool_message_count = sum(1 for msg in agent_messages if isinstance(msg, ToolMessage))
-    if tool_message_count > 0:
-        logger.info(f"AI comparison made {tool_message_count} tool calls - all streamed to frontend")
-    
-    # Extract final response content
-    response_content = ""
-    for msg in reversed(agent_messages):
-        if isinstance(msg, AIMessage) and msg.content:
-            response_content = strip_think_tags(msg.content)
-            break
-    
-    logger.info(f"AI comparison final response: {response_content[:200] if response_content else 'No response'}...")
-    
-    # Return to research_team (which routes to reporter) - SAME AS RESEARCHER/CODER
-    return Command(
-        update={
-            **preserve_state_meta_fields(state),
-            "messages": agent_messages,  # ALL messages including tool calls for streaming
-            "observations": state.get("observations", []) + [response_content],
-        },
-        goto="research_team"
     )
