@@ -1,0 +1,10 @@
+{
+  "dependencies": [
+    "."
+  ],
+  "graphs": {
+    "deer_flow": "./backend/deer_flow/workflow.py:graph"
+  },
+  "env": ".env.deer",
+  "python_version": "3.12"
+}

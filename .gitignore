@@ -77,3 +77,6 @@ temp/
 
 # OS files
 Thumbs.db
+
+# LangGraph API local state
+.langgraph_api/
