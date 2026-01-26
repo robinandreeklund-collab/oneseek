@@ -299,13 +299,8 @@ class AIComparisonFlow:
             "consensus_points": [],
         }
         
-        # Extract key claims from responses
-        successful_responses = [r for r in model_responses if r["success"]]
-        if not successful_responses:
-            logger.warning("No successful responses to analyze")
-            return analysis
-        
-        # Use web search tool for fact-checking if available
+        # Always perform web search for fact-checking if available
+        # This provides external validation regardless of model responses
         if self.search_tool:
             try:
                 logger.info("Performing web search for fact-checking")
@@ -326,15 +321,20 @@ class AIComparisonFlow:
             except Exception as e:
                 logger.warning(f"RAG retrieval failed during fact-checking: {e}")
         
-        # Identify consensus and contradictions
-        response_texts = [r["response"] for r in successful_responses if r["response"]]
-        
-        # Simple consensus detection (can be enhanced with semantic similarity)
-        if len(response_texts) >= 2:
-            # Look for common themes (simplified version)
-            analysis["consensus_points"] = [
-                "Multiple models provided responses (detailed analysis requires semantic comparison)"
-            ]
+        # Extract key claims from responses if provided
+        successful_responses = [r for r in model_responses if r.get("success")]
+        if not successful_responses:
+            logger.info("No model responses provided or all failed, but fact-checking via web search was still performed")
+        else:
+            # Identify consensus and contradictions from model responses
+            response_texts = [r["response"] for r in successful_responses if r.get("response")]
+            
+            # Simple consensus detection (can be enhanced with semantic similarity)
+            if len(response_texts) >= 2:
+                # Look for common themes (simplified version)
+                analysis["consensus_points"] = [
+                    "Multiple models provided responses (detailed analysis requires semantic comparison)"
+                ]
         
         logger.info("Fact-check analysis completed")
         return analysis
