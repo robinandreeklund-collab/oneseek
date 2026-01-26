@@ -12,6 +12,7 @@ from .nodes import (
     background_investigation_node,
     coder_node,
     coordinator_node,
+    extract_plan_content,
     human_feedback_node,
     planner_node,
     reporter_node,
@@ -20,7 +21,7 @@ from .nodes import (
 )
 from .types import State
 import json
-from backend.deer_flow.utils.json_utils import repair_json_output, extract_plan_content
+from backend.deer_flow.utils.json_utils import repair_json_output
 from backend.deer_flow.prompts.planner_model import Plan
 
 
