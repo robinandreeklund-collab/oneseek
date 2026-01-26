@@ -25,8 +25,9 @@ import {
   AccordionTrigger,
 } from "~/components/ui/accordion";
 import { Skeleton } from "~/components/ui/skeleton";
+import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { findMCPTool } from "~/core/mcp";
-import type { ToolCallRuntime } from "~/core/messages";
+import type { Message, ToolCallRuntime } from "~/core/messages";
 import { useMessage, useStore } from "~/core/store";
 import { parseJSON } from "~/core/utils";
 import { cn } from "~/lib/utils";
@@ -86,7 +87,12 @@ export function ResearchActivitiesBlock({
 const ActivityMessage = React.memo(({ messageId }: { messageId: string }) => {
   const message = useMessage(messageId);
   if (message?.agent && message.content) {
-    if (message.agent !== "reporter" && message.agent !== "planner") {
+    // Show planner messages as plan cards
+    if (message.agent === "planner") {
+      return <PlanCard message={message} />;
+    }
+    // Skip reporter messages (they're shown in the Report tab)
+    if (message.agent !== "reporter") {
       return (
         <div className="px-4 py-2">
           <Markdown animated checkLinkCredibility>
@@ -99,6 +105,85 @@ const ActivityMessage = React.memo(({ messageId }: { messageId: string }) => {
   return null;
 });
 ActivityMessage.displayName = "ActivityMessage";
+
+// Component to display the research plan
+const PlanCard = React.memo(({ message }: { message: Message }) => {
+  const t = useTranslations("chat.research");
+  const plan = useMemo<{
+    title?: string;
+    thought?: string;
+    steps?: { title?: string; description?: string; step_type?: string; need_search?: boolean }[];
+  }>(() => {
+    return parseJSON(message.content ?? "", {});
+  }, [message.content]);
+
+  const hasContent = Boolean(message.content && message.content.trim() !== "");
+
+  if (!hasContent) {
+    return null;
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: "easeOut" }}
+      className="mb-4"
+    >
+      <Card className="w-full">
+        <CardHeader>
+          <CardTitle>
+            <Markdown animated={message.isStreaming}>
+              {`### ${
+                plan.title !== undefined && plan.title !== ""
+                  ? plan.title
+                  : t("deepResearch")
+              }`}
+            </Markdown>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {plan.thought && (
+            <div style={{ wordBreak: 'break-all', whiteSpace: 'normal' }}>
+              <Markdown className="opacity-80" animated={message.isStreaming}>
+                {plan.thought}
+              </Markdown>
+            </div>
+          )}
+          {plan.steps && plan.steps.length > 0 && (
+            <ul className="my-2 flex list-decimal flex-col gap-4 border-l-[2px] pl-8">
+              {plan.steps.map((step, i) => (
+                <li key={`step-${i}`} style={{ wordBreak: 'break-all', whiteSpace: 'normal' }}>
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1">
+                      <h3 className="mb-1 flex items-center gap-2 text-lg font-medium">
+                        <Markdown animated={false}>
+                          {step.title || `Step ${i + 1}`}
+                        </Markdown>
+                      </h3>
+                      {step.description && (
+                        <Markdown className="text-sm opacity-70" animated={false}>
+                          {step.description}
+                        </Markdown>
+                      )}
+                      {step.step_type && (
+                        <div className="mt-1 text-xs opacity-50">
+                          Type: {step.step_type}
+                          {step.need_search !== undefined && ` • Search: ${step.need_search ? 'Yes' : 'No'}`}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+});
+PlanCard.displayName = "PlanCard";
 
 const ActivityListItem = React.memo(({ messageId }: { messageId: string }) => {
   const message = useMessage(messageId);
