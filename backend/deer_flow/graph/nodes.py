@@ -1577,21 +1577,13 @@ Provide a comprehensive comparison report with citations.""",
             tools,
         )
         
-        # AI comparison is a complete standalone operation - go directly to reporter
-        # instead of going through research_team → planner → reporter
-        logger.info("AI comparison complete, routing directly to reporter")
+        # Return to research_team like researcher/coder do
+        # This triggers the sidebar to open in the frontend
+        # research_team will then route to planner → reporter automatically
+        logger.info("AI comparison complete, returning to research_team for sidebar display")
         
-        # Mark the step as complete
-        if state.get("current_plan") and state["current_plan"].steps:
-            state["current_plan"].steps[0].completed = True
-            state["current_plan"].steps[0].execution_res = "AI comparison analysis completed successfully"
-        
-        # Override the goto to go directly to reporter
-        # The result from _setup_and_execute_agent_step is a Command object with an update dict
-        return Command(
-            goto="reporter",
-            update=result.update if hasattr(result, 'update') else {}
-        )
+        # Return the result as-is - it already has goto="research_team" from _setup_and_execute_agent_step
+        return result
     finally:
         # Restore original recursion limit
         if original_recursion_limit is not None:
