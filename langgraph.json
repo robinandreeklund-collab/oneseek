@@ -3,7 +3,7 @@
     "."
   ],
   "graphs": {
-    "deer_flow": "./backend/deer_flow/workflow.py:graph"
+    "deer_flow": "backend.deer_flow.workflow:graph"
   },
   "env": ".env.deer",
   "python_version": "3.12"
