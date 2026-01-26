@@ -62,8 +62,8 @@ langchain-deepseek>=0.1.3
 langchain-google-genai>=2.0.6
 
 # Checkpoint/persistence (optional - only if you want conversation history)
-langgraph-checkpoint-mongodb>=0.1.4
-langgraph-checkpoint-postgres==2.0.21
+langgraph-checkpoint-mongodb>=0.3.0
+langgraph-checkpoint-postgres>=3.0.0
 psycopg[binary]>=3.2.9
 
 # RAG/Vector stores (optional - only if using RAG)
