@@ -148,15 +148,50 @@ async def fact_check_responses(query: str, model_responses_summary: str) -> str:
         # Run fact-check (this would ideally use the full responses, but we work with what we have)
         analysis = await comparison_flow.analyze_with_fact_check(query, [])
         
-        # Format results
+        # Parse and format search results nicely
+        import json
         result = f"## Fact-Check Analysis\n\n"
-        result += f"**Sources Found**: {len(analysis.get('sources', []))}\n\n"
         
-        if analysis.get("sources"):
-            result += "### Sources:\n"
-            for source in analysis.get("sources", [])[:5]:  # Limit to first 5
-                result += f"- {source}\n"
-            result += "\n"
+        sources = analysis.get('sources', [])
+        if sources:
+            # Parse JSON if it's a string
+            parsed_sources = []
+            for source in sources:
+                if isinstance(source, str):
+                    try:
+                        source_data = json.loads(source)
+                        if isinstance(source_data, dict) and 'results' in source_data:
+                            parsed_sources.extend(source_data['results'])
+                        else:
+                            parsed_sources.append(source_data)
+                    except json.JSONDecodeError:
+                        # If it's not JSON, treat it as plain text
+                        parsed_sources.append({'content': source})
+                else:
+                    parsed_sources.append(source)
+            
+            result += f"**Sources Found**: {len(parsed_sources)}\n\n"
+            result += "### Search Results:\n\n"
+            
+            for i, source in enumerate(parsed_sources[:5], 1):  # Limit to first 5
+                if isinstance(source, dict):
+                    title = source.get('title', 'No title')
+                    url = source.get('url', '')
+                    content = source.get('content', '')
+                    
+                    result += f"**{i}. {title}**\n"
+                    if url:
+                        result += f"🔗 {url}\n"
+                    if content:
+                        # Truncate content to reasonable length
+                        content_preview = content[:200] + "..." if len(content) > 200 else content
+                        result += f"📄 {content_preview}\n"
+                    result += "\n"
+                else:
+                    result += f"{i}. {str(source)[:200]}...\n\n"
+        else:
+            result += "**Sources Found**: 0\n\n"
+            result += "No search results were found for fact-checking.\n\n"
         
         if analysis.get("fact_check_summary"):
             result += f"### Summary:\n{analysis['fact_check_summary']}\n"
