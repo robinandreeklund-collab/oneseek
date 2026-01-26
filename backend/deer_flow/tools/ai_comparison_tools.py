@@ -206,38 +206,54 @@ async def fact_check_responses(query: str, model_responses_summary: str) -> str:
 @tool
 async def run_meta_analysis(query: str, responses_context: str) -> str:
     """
-    Run meta-analysis agents (Counterfactual, Robustness, Consistency, Truth-Pressure) on the responses.
+    Run 4 meta-analysis agents with dimensional scoring (1-10) on each AI model response.
+    
+    Meta-Agents:
+    1. Cognitive Properties: Meta-reflection, Reasoning depth, Synthesis capacity, Bias detection
+    2. Integrity & Objectivity: Objectivity, Integrity, Transparency, Epistemic humility
+    3. Stability & Emotional Profile: Emotional distance, Conflict neutrality, Stability, Cognitive redundancy
+    4. Adaptivity & System Role: Context elasticity, System loyalty, Adaptive precision, Structural clarity
     
     Args:
         query: The original question
         responses_context: Context about the model responses
         
     Returns:
-        Meta-analysis results from all four analytical frameworks
+        Meta-analysis results with dimensional scores from all four analytical frameworks
     """
     try:
         comparison_flow = get_ai_comparison_flow(max_search_results=3, resources=[])
         
-        logger.info("Starting meta-agent analysis")
+        logger.info("Starting 4-category meta-agent analysis with dimensional scoring")
         
-        # Run meta-agents
+        # Run meta-agents (they now use the new 4-category system)
         meta_results = await comparison_flow.run_meta_agents(query, [], {})
         
         # Format results
-        result = f"## Meta-Analysis Results\n\n"
+        result = f"## Meta-Analysis Results (4 Categories)\n\n"
         successful = sum(1 for v in meta_results.values() if v.get("success"))
-        result += f"**Completed**: {successful}/4 meta-agents\n\n"
+        result += f"**Completed**: {successful}/4 meta-agent categories\n\n"
+        
+        # Map agent names to display names
+        agent_display_names = {
+            "cognitive_properties": "Kognitiva Egenskaper (Cognitive Properties)",
+            "integrity_objectivity": "Integritet & Objektivitet (Integrity & Objectivity)",
+            "stability_emotional": "Stabilitet & Emotionell Profil (Stability & Emotional Profile)",
+            "adaptivity_system": "Adaptivitet & Systemroll (Adaptivity & System Role)",
+        }
         
         for agent_name, agent_result in meta_results.items():
             status = "✓" if agent_result.get("success") else "✗"
-            display_name = agent_name.replace("_", " ").title()
+            display_name = agent_display_names.get(agent_name, agent_name.replace("_", " ").title())
             result += f"### {status} {display_name}\n\n"
             
             if agent_result.get("success"):
-                analysis = agent_result.get("analysis", "No analysis available")[:300]
-                if len(agent_result.get("analysis", "")) > 300:
-                    analysis += "... [truncated]"
-                result += f"{analysis}\n\n"
+                analysis = agent_result.get("analysis", "No analysis available")
+                # Show more of the analysis since it contains scores
+                analysis_preview = analysis[:500] if len(analysis) > 500 else analysis
+                if len(analysis) > 500:
+                    analysis_preview += "... [truncated for brevity]"
+                result += f"{analysis_preview}\n\n"
             else:
                 result += f"Error: {agent_result.get('error', 'Unknown error')}\n\n"
         
