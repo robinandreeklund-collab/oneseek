@@ -310,6 +310,7 @@ async def chat_stream(request: ChatRequest):
             request.max_clarification_rounds,
             request.locale,
             request.interrupt_before_tools,
+            request.enable_ai_comparison,
         ),
         media_type="text/event-stream",
     )
@@ -803,6 +804,7 @@ async def _astream_workflow_generator(
     max_clarification_rounds: int,
     locale: str = "en-US",
     interrupt_before_tools: Optional[List[str]] = None,
+    enable_ai_comparison: bool = False,
 ):
     safe_thread_id = sanitize_thread_id(thread_id)
     safe_feedback = sanitize_log_input(interrupt_feedback) if interrupt_feedback else ""
@@ -850,6 +852,7 @@ async def _astream_workflow_generator(
         "enable_clarification": enable_clarification,
         "max_clarification_rounds": max_clarification_rounds,
         "locale": locale,
+        "enable_ai_comparison": enable_ai_comparison,
     }
 
     if not auto_accepted_plan and interrupt_feedback:

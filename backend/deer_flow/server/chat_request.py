@@ -83,6 +83,9 @@ class ChatRequest(BaseModel):
         default_factory=list,
         description="List of tool names to interrupt before execution (e.g., ['db_tool', 'api_tool'])",
     )
+    enable_ai_comparison: Optional[bool] = Field(
+        False, description="Whether to enable AI comparison / Debate OS mode"
+    )
 
 
 class TTSRequest(BaseModel):

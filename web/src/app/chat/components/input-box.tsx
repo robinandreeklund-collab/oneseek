@@ -7,6 +7,7 @@ import { ArrowUp, Lightbulb, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useRef, useState } from "react";
 
+import { AiCompare } from "~/components/deer-flow/icons/ai-compare";
 import { Detective } from "~/components/deer-flow/icons/detective";
 import MessageInput, {
   type MessageInputRef,
@@ -21,6 +22,7 @@ import type { Option, Resource } from "~/core/messages";
 import {
   setEnableDeepThinking,
   setEnableBackgroundInvestigation,
+  setEnableAiComparison,
   useSettingsStore,
 } from "~/core/store";
 import { cn } from "~/lib/utils";
@@ -54,6 +56,9 @@ export function InputBox({
   );
   const backgroundInvestigation = useSettingsStore(
     (state) => state.general.enableBackgroundInvestigation,
+  );
+  const aiComparison = useSettingsStore(
+    (state) => state.general.enableAiComparison,
   );
   const { config, loading } = useConfig();
   const reportStyle = useSettingsStore((state) => state.general.reportStyle);
@@ -271,6 +276,33 @@ export function InputBox({
               }
             >
               <Detective /> {t("investigation")}
+            </Button>
+          </Tooltip>
+          
+          <Tooltip
+            className="max-w-60"
+            title={
+              <div>
+                <h3 className="mb-2 font-bold">
+                  {t("aiComparisonTooltip.title", {
+                    status: aiComparison ? t("on") : t("off"),
+                  })}
+                </h3>
+                <p>{t("aiComparisonTooltip.description")}</p>
+              </div>
+            }
+          >
+            <Button
+              className={cn(
+                "rounded-2xl",
+                aiComparison && "!border-brand !text-brand",
+              )}
+              variant="outline"
+              onClick={() =>
+                setEnableAiComparison(!aiComparison)
+              }
+            >
+              <AiCompare /> {t("aiComparison")}
             </Button>
           </Tooltip>
           <ReportStyleDialog />

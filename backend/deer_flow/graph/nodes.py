@@ -27,6 +27,7 @@ from backend.deer_flow.tools import (
     get_web_search_tool,
     python_repl_tool,
 )
+from backend.deer_flow.tools.ai_comparison_tools import get_ai_comparison_tools
 from backend.deer_flow.tools.search import LoggedTavilySearch
 from backend.deer_flow.utils.context_manager import ContextManager, validate_message_content
 from backend.deer_flow.utils.json_utils import repair_json_output, sanitize_tool_response
@@ -455,6 +456,18 @@ def planner_node(
             },
             goto="reporter",
         )
+    # Check if AI comparison mode is enabled
+    if state.get("enable_ai_comparison", False):
+        logger.info("Planner: AI comparison mode enabled, routing to ai_comparison node")
+        return Command(
+            update={
+                "messages": [AIMessage(content=full_response, name="planner")],
+                "current_plan": full_response,
+                **preserve_state_meta_fields(state),
+            },
+            goto="ai_comparison",
+        )
+    
     return Command(
         update={
             "messages": [AIMessage(content=full_response, name="planner")],
@@ -600,7 +613,7 @@ def human_feedback_node(
 
 def coordinator_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["planner", "background_investigator", "coordinator", "__end__"]]:
+) -> Command[Literal["planner", "background_investigator", "ai_comparison", "coordinator", "__end__"]]:
     """Coordinator node that communicate with customers and handle clarification."""
     logger.info("Coordinator talking.")
     configurable = Configuration.from_runnable_config(config)
@@ -644,7 +657,12 @@ def coordinator_node(
 
                     if tool_name == "handoff_to_planner":
                         logger.info("Handing off to planner")
+                        # Always route to planner first (planner will route to ai_comparison if needed)
                         goto = "planner"
+                        
+                        # Log if AI comparison mode is enabled (planner will handle routing)
+                        if state.get("enable_ai_comparison", False):
+                            logger.info("AI comparison mode enabled, planner will route to ai_comparison")
 
                         # Extract research_topic if provided
                         if tool_args.get("research_topic"):
@@ -828,7 +846,12 @@ def coordinator_node(
 
                 if tool_name in ["handoff_to_planner", "handoff_after_clarification"]:
                     logger.info("Handing off to planner")
+                    # Always route to planner first (planner will route to ai_comparison if needed)
                     goto = "planner"
+                    
+                    # Log if AI comparison mode is enabled (planner will handle routing)
+                    if state.get("enable_ai_comparison", False):
+                        logger.info("AI comparison mode enabled, planner will route to ai_comparison")
 
                     if not enable_clarification and tool_args.get("research_topic"):
                         research_topic = tool_args["research_topic"]
@@ -863,7 +886,8 @@ def coordinator_node(
             logger.info("No tool calls in legacy mode - ending workflow gracefully")
 
     # Apply background_investigation routing if enabled (unified logic)
-    if goto == "planner" and state.get("enable_background_investigation"):
+    # But skip if AI comparison mode is enabled (comparison doesn't need background investigation)
+    if goto == "planner" and state.get("enable_background_investigation") and not state.get("enable_ai_comparison"):
         goto = "background_investigator"
 
     # Set default values for state variables (in case they're not defined in legacy mode)
@@ -895,15 +919,126 @@ def reporter_node(state: State, config: RunnableConfig):
     """Reporter node that write a final report."""
     logger.info("Reporter write final report")
     configurable = Configuration.from_runnable_config(config)
+    
+    # Check if this is AI comparison mode
+    comparison_results = state.get("comparison_results")
+    if comparison_results:
+        logger.info("Generating report for AI comparison results")
+        
+        # Format the comparison results as a report
+        report_parts = ["# AI Model Comparison Results\n\n"]
+        
+        if comparison_results.get("status") == "failed":
+            report_parts.append(f"**Error**: {comparison_results.get('error', 'Unknown error')}\n\n")
+        else:
+            # Add query
+            report_parts.append(f"## Query\n{comparison_results.get('query', 'N/A')}\n\n")
+            
+            # Add model responses
+            report_parts.append("## Model Responses\n\n")
+            model_responses = comparison_results.get("model_responses", [])
+            for response in model_responses:
+                display_name = response.get("display_name", "Unknown Model")
+                if response.get("success"):
+                    report_parts.append(f"### {display_name}\n")
+                    report_parts.append(f"{response.get('response', 'No response')}\n\n")
+                else:
+                    report_parts.append(f"### {display_name}\n")
+                    report_parts.append(f"**Error**: {response.get('error', 'Unknown error')}\n\n")
+            
+            # Add synthesis
+            synthesis = comparison_results.get("synthesis", {})
+            if synthesis:
+                report_parts.append("## Synthesized Optimal Answer\n\n")
+                report_parts.append(f"{synthesis.get('synthesized_answer', 'N/A')}\n\n")
+                
+                # Add models used
+                models_used = synthesis.get("models_used", [])
+                if models_used:
+                    report_parts.append(f"**Models Used**: {', '.join(models_used)}\n\n")
+                
+                # Add tools used
+                tools_used = [t for t in synthesis.get("tools_used", []) if t]
+                if tools_used:
+                    report_parts.append(f"**Tools Used**: {', '.join(tools_used)}\n\n")
+            
+            # Add analysis
+            analysis = comparison_results.get("analysis", {})
+            if analysis:
+                sources = analysis.get("sources", [])
+                if sources:
+                    report_parts.append(f"## Fact-Checking Sources\n\n")
+                    report_parts.append(f"Found {len(sources)} sources for fact-checking.\n\n")
+        
+        final_report = "".join(report_parts)
+        return {
+            "final_report": final_report,
+            "citations": state.get("citations", []),
+        }
+    
+    # Normal reporting mode
     current_plan = state.get("current_plan")
-    input_ = {
-        "messages": [
-            HumanMessage(
-                f"# Research Requirements\n\n## Task\n\n{current_plan.title}\n\n## Description\n\n{current_plan.thought}"
-            )
-        ],
-        "locale": state.get("locale", "en-US"),
-    }
+    
+    # Handle case where current_plan is None (e.g., if agent execution failed)
+    if current_plan is None:
+        logger.error("No current_plan found in state - cannot generate report")
+        # Check if there are any observations to use
+        observations = state.get("observations", [])
+        if observations:
+            error_report = "# Research Report\n\nAn error occurred during research execution, but some observations were collected:\n\n"
+            for obs in observations:
+                error_report += f"- {obs}\n\n"
+            return {
+                "final_report": error_report,
+                "citations": state.get("citations", []),
+            }
+        else:
+            return {
+                "final_report": "# Research Report\n\nAn error occurred during research execution and no results were collected.",
+                "citations": [],
+            }
+    
+    # Handle case where current_plan is a string (raw JSON from planner)
+    # This happens when planner routes to AI comparison or human_feedback
+    if isinstance(current_plan, str):
+        logger.info("current_plan is a string, parsing it as Plan object")
+        try:
+            # Try to parse the JSON string to extract plan information
+            plan_dict = json.loads(repair_json_output(current_plan))
+            plan_content = extract_plan_content(plan_dict)
+            plan_dict = json.loads(repair_json_output(plan_content))
+            current_plan = Plan.model_validate(plan_dict)
+        except Exception as e:
+            logger.error(f"Failed to parse current_plan string to Plan object: {e}")
+            # Fall back to a generic task description
+            plan_title = "AI Model Comparison Research"
+            plan_thought = "Compare and analyze responses from multiple AI models"
+            input_ = {
+                "messages": [
+                    HumanMessage(
+                        f"# Research Requirements\n\n## Task\n\n{plan_title}\n\n## Description\n\n{plan_thought}"
+                    )
+                ],
+                "locale": state.get("locale", "en-US"),
+            }
+            invoke_messages = apply_prompt_template("reporter", input_, configurable, input_.get("locale", "en-US"))
+            observations = state.get("observations", [])
+            
+            # Get collected citations for the report
+            citations = state.get("citations", [])
+            
+            # Continue with reporter execution using fallback values
+            # (rest of the reporter logic will be executed below)
+    
+    if not isinstance(current_plan, str):  # Only set input_ if we have a proper Plan object
+        input_ = {
+            "messages": [
+                HumanMessage(
+                    f"# Research Requirements\n\n## Task\n\n{current_plan.title}\n\n## Description\n\n{current_plan.thought}"
+                )
+            ],
+            "locale": state.get("locale", "en-US"),
+        }
     invoke_messages = apply_prompt_template("reporter", input_, configurable, input_.get("locale", "en-US"))
     observations = state.get("observations", [])
     
@@ -1017,6 +1152,27 @@ async def _execute_agent_step(
     logger.debug(f"[_execute_agent_step] Starting execution for agent: {agent_name}")
     
     current_plan = state.get("current_plan")
+    
+    # Handle case where current_plan is a string (from planner in AI comparison mode)
+    if isinstance(current_plan, str):
+        logger.info(f"[_execute_agent_step] current_plan is string, parsing to Plan object")
+        try:
+            from backend.deer_flow.utils.json_utils import repair_json_output
+            from backend.deer_flow.prompts.planner_model import Plan
+            
+            plan_dict = json.loads(repair_json_output(current_plan))
+            plan_content = extract_plan_content(plan_dict)
+            plan_dict = json.loads(repair_json_output(plan_content))
+            current_plan = Plan.model_validate(plan_dict)
+            logger.info(f"[_execute_agent_step] Successfully parsed string to Plan object")
+        except Exception as e:
+            logger.error(f"[_execute_agent_step] Failed to parse current_plan string: {e}")
+            # Return to research_team if parsing fails
+            return Command(
+                update=preserve_state_meta_fields(state),
+                goto="research_team"
+            )
+    
     plan_title = current_plan.title
     observations = state.get("observations", [])
     logger.debug(f"[_execute_agent_step] Plan title: {plan_title}, observations count: {len(observations)}")
@@ -1400,3 +1556,107 @@ async def analyst_node(
         "analyst",
         [],  # No tools - pure reasoning
     )
+
+
+async def ai_comparison_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["research_team"]]:
+    """
+    AI Comparison node that runs sequential queries across multiple AI models.
+    Implements Debate OS functionality for DeerFlow with real-time streaming.
+    
+    Creates a simple plan with one step and uses the standard execution path
+    (_setup_and_execute_agent_step) to ensure identical streaming behavior
+    to researcher/coder agents.
+    """
+    logger.info("AI Comparison node starting - Debate OS mode")
+    
+    configurable = Configuration.from_runnable_config(config)
+    
+    # Get AI comparison tools
+    tools = get_ai_comparison_tools()
+    logger.info(f"AI comparison tools count: {len(tools)}")
+    
+    # Get locale and research topic from state
+    locale = state.get("locale", "en-US")
+    research_topic = state.get("research_topic", "Unknown topic")
+    logger.info(f"Research topic: {research_topic}")
+    
+    # Create a simple plan with one step for AI comparison
+    # This allows us to use _setup_and_execute_agent_step() which we KNOW works for streaming
+    from backend.deer_flow.prompts.planner_model import Plan, Step, StepType
+    
+    comparison_step = Step(
+        need_search=False,  # AI comparison doesn't need web search, it queries AI models
+        step_type=StepType.RESEARCH,
+        title="AI Model Comparison",
+        description=f"""Query and compare responses from multiple AI models for: {research_topic}
+
+Follow these steps:
+1. Query each AI model individually (call tools one at a time for streaming):
+   - query_gpt35
+   - query_gemini_flash
+   - query_deepseek  
+   - query_grok4
+   - query_oneseek_local
+
+2. Fact-check responses using fact_check_responses tool
+
+3. Run meta-analysis using run_meta_analysis tool
+
+4. Synthesize optimal answer using synthesize_optimal_answer tool
+
+Provide a comprehensive comparison report with citations.""",
+        execution_res=None
+    )
+    
+    comparison_plan = Plan(
+        locale=state.get("locale", "en-US"),  # Get locale from state, default to en-US
+        has_enough_context=False,  # We need to execute this comparison step
+        thought="Running AI comparison across multiple models to provide comprehensive analysis.",
+        title=research_topic,
+        steps=[comparison_step]
+    )
+    
+    # Update state directly with the comparison plan
+    # State is a dict-like object, so we can mutate it
+    state["current_plan"] = comparison_plan
+    state["locale"] = locale
+    state["research_topic"] = research_topic
+    
+    logger.info("Created comparison plan with 1 step, using standard execution path")
+    
+    # Set a higher recursion limit for AI comparison since it needs to call 8+ tools sequentially
+    # Each tool call counts as ~2-3 recursion steps, so 8 tools = ~24 steps minimum
+    # We set to 50 to give plenty of buffer
+    import os
+    original_recursion_limit = os.getenv("AGENT_RECURSION_LIMIT")
+    os.environ["AGENT_RECURSION_LIMIT"] = "50"
+    
+    try:
+        # Planner node already created the planner message before routing to ai_comparison
+        # So we don't need to create it again here - it already exists in state["messages"]
+        logger.info("Planner already created planner message, executing AI comparison step")
+        
+        # Use the EXACT SAME execution path as researcher/coder
+        # This is what makes streaming work correctly!
+        result = await _setup_and_execute_agent_step(
+            state,
+            config,
+            "ai_comparison",
+            tools,
+        )
+        
+        # Return to research_team like researcher/coder do
+        # This triggers the sidebar to open in the frontend
+        # research_team will then route to planner → reporter automatically
+        logger.info("AI comparison complete, returning to research_team for sidebar display")
+        
+        # Return the result as-is - it already has goto="research_team" from _setup_and_execute_agent_step
+        return result
+    finally:
+        # Restore original recursion limit
+        if original_recursion_limit is not None:
+            os.environ["AGENT_RECURSION_LIMIT"] = original_recursion_limit
+        elif "AGENT_RECURSION_LIMIT" in os.environ:
+            del os.environ["AGENT_RECURSION_LIMIT"]

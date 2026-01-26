@@ -7,10 +7,12 @@ from langgraph.graph import END, START, StateGraph
 from backend.deer_flow.prompts.planner_model import StepType
 
 from .nodes import (
+    ai_comparison_node,
     analyst_node,
     background_investigation_node,
     coder_node,
     coordinator_node,
+    extract_plan_content,
     human_feedback_node,
     planner_node,
     reporter_node,
@@ -18,10 +20,26 @@ from .nodes import (
     researcher_node,
 )
 from .types import State
+import json
+from backend.deer_flow.utils.json_utils import repair_json_output
+from backend.deer_flow.prompts.planner_model import Plan
 
 
 def continue_to_running_research_team(state: State):
     current_plan = state.get("current_plan")
+    
+    # Handle case where current_plan is a string (from planner when AI comparison is enabled)
+    if isinstance(current_plan, str):
+        try:
+            # Parse JSON string to Plan object
+            plan_dict = json.loads(repair_json_output(current_plan))
+            plan_content = extract_plan_content(plan_dict)
+            plan_dict = json.loads(repair_json_output(plan_content))
+            current_plan = Plan.model_validate(plan_dict)
+        except Exception:
+            # If parsing fails, route to planner
+            return "planner"
+    
     if not current_plan or not current_plan.steps:
         return "planner"
 
@@ -53,6 +71,7 @@ def _build_base_graph():
     builder.add_edge(START, "coordinator")
     builder.add_node("coordinator", coordinator_node)
     builder.add_node("background_investigator", background_investigation_node)
+    builder.add_node("ai_comparison", ai_comparison_node)
     builder.add_node("planner", planner_node)
     builder.add_node("reporter", reporter_node)
     builder.add_node("research_team", research_team_node)
@@ -61,6 +80,7 @@ def _build_base_graph():
     builder.add_node("coder", coder_node)
     builder.add_node("human_feedback", human_feedback_node)
     builder.add_edge("background_investigator", "planner")
+    builder.add_edge("ai_comparison", "reporter")
     builder.add_conditional_edges(
         "research_team",
         continue_to_running_research_team,

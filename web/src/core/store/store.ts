@@ -125,6 +125,7 @@ export async function sendMessage(
       enable_deep_thinking: settings.enableDeepThinking ?? false,
       enable_background_investigation:
         settings.enableBackgroundInvestigation ?? true,
+      enable_ai_comparison: settings.enableAiComparison ?? false,
       enable_web_search: settings.enableWebSearch ?? true,
       max_plan_iterations: settings.maxPlanIterations,
       max_step_num: settings.maxStepNum,
@@ -258,7 +259,8 @@ function appendMessage(message: Message) {
     message.agent === "coder" ||
     message.agent === "reporter" ||
     message.agent === "researcher" ||
-    message.agent === "analyst"
+    message.agent === "analyst" ||
+    message.agent === "ai_comparison"
   ) {
     if (!getOngoingResearchId()) {
       const id = message.id;
