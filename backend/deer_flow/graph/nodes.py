@@ -1560,6 +1560,21 @@ Provide a comprehensive comparison report with citations.""",
     
     logger.info("Created comparison plan with 1 step, using standard execution path")
     
+    # CRITICAL: Send a "planner" message so frontend recognizes research has started
+    # The frontend looks for a planner message to initialize the research UI/sidebar
+    import json
+    from langchain_core.messages import AIMessage
+    
+    plan_json = comparison_plan.model_dump_json(indent=2)
+    planner_message = AIMessage(
+        content=f"I've created a research plan for AI model comparison:\n\n```json\n{plan_json}\n```",
+        name="planner",  # Critical: must be tagged as "planner" for frontend to recognize
+    )
+    
+    # Add planner message to state so it gets streamed to frontend
+    state["messages"].append(planner_message)
+    logger.info("Added planner message to state for frontend research initialization")
+    
     # Set a higher recursion limit for AI comparison since it needs to call 8+ tools sequentially
     # Each tool call counts as ~2-3 recursion steps, so 8 tools = ~24 steps minimum
     # We set to 50 to give plenty of buffer
