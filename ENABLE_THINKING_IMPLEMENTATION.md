@@ -4,6 +4,8 @@
 
 This implementation adds support for Qwen3 model's built-in thinking functionality when deployed via vLLM. The feature allows users to toggle "deep thinking" mode via the "Djuptänkande" button in the frontend, and ensures that thinking output is always in Swedish when the Swedish locale is selected.
 
+**⚠️ Important**: This feature **only works with Qwen3 models**. For other models (like Qwen2.5), the configuration is automatically skipped and models work normally without any impact.
+
 ## Key Changes
 
 ### 1. Frontend Changes
@@ -28,7 +30,9 @@ def configure_llm_with_thinking(
 
 This function dynamically configures the LLM with the `enable_thinking` parameter:
 
-- **For vLLM with Qwen3**: Uses `extra_body` with `chat_template_kwargs: {"enable_thinking": true/false}`
+- **Model Detection**: Checks if the model is Qwen3 before applying configuration
+- **For Qwen3 models only**: Uses `extra_body` with `chat_template_kwargs: {"enable_thinking": true/false}`
+- **For other models**: Returns LLM unchanged (no modification)
 - **Binds parameters** to the LLM instance using `.bind()` method
 - **Graceful fallback**: Returns original LLM if binding fails (catches TypeError and AttributeError)
 
@@ -147,7 +151,7 @@ Swedish prompt templates already exist in `backend/deer_flow/prompts/*.sv_SE.md`
 
 ### Requirements
 
-- vLLM server running with Qwen3 model
+- vLLM server running with **Qwen3 model** (not Qwen2.5 or earlier)
 - Model must support the thinking mode feature
 - Backend must be configured with the correct base_url pointing to vLLM
 
@@ -158,19 +162,25 @@ No new environment variables are required. The feature uses existing configurati
 - `REASONING_MODEL` in conf.yaml
 - Frontend locale cookie (`NEXT_LOCALE`)
 
+### Model Detection
+
+The feature automatically detects if you're using a Qwen3 model by checking the `model_name` attribute. If the model name contains "qwen3" (case-insensitive), the thinking configuration is applied. Otherwise, the LLM is returned unchanged.
+
 ## Backwards Compatibility
 
 The implementation maintains backwards compatibility:
 
-1. **Non-Qwen3 models**: The `.bind()` method gracefully handles unsupported parameters
-2. **Existing functionality**: All existing LLM configurations continue to work
-3. **Default behavior**: When `enable_deep_thinking=False`, models behave as before
+1. **Non-Qwen3 models**: Configuration is automatically skipped - models work normally
+2. **Qwen2.5 and earlier**: No impact - models function as before
+3. **Existing functionality**: All existing LLM configurations continue to work
+4. **Default behavior**: When `enable_deep_thinking=False`, models behave as before
 
 ## Known Limitations
 
-1. **Model support**: Only Qwen3 models with thinking mode support benefit from this feature
-2. **vLLM requirement**: The feature requires vLLM API with `chat_template_kwargs` support
-3. **Language instruction**: While we add a Swedish instruction, the model's compliance depends on its training
+1. **Model support**: **Only Qwen3 models** with thinking mode support benefit from this feature
+2. **Qwen2.5**: Does not support thinking mode - feature is automatically disabled
+3. **vLLM requirement**: The feature requires vLLM API with `chat_template_kwargs` support
+4. **Language instruction**: While we add a Swedish instruction, the model's compliance depends on its training
 
 ## Future Enhancements
 

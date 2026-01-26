@@ -4,6 +4,8 @@
 
 This PR successfully implements the Qwen3 model's built-in thinking functionality with Swedish language support. All code quality checks have passed, and the implementation is ready for manual testing.
 
+**⚠️ Important**: This feature **only works with Qwen3 models**. For other models (like Qwen2.5), the configuration is automatically skipped and models work normally without any impact.
+
 ## 🎯 What Was Implemented
 
 ### Problem Statement (from issue)
@@ -14,10 +16,11 @@ This PR successfully implements the Qwen3 model's built-in thinking functionalit
 
 ### Solution Delivered
 
-1. **Dynamic Thinking Control**
+1. **Dynamic Thinking Control (Qwen3 Only)**
    - Button press toggles `enable_thinking` parameter to vLLM
    - Uses vLLM's `chat_template_kwargs` API: `{"enable_thinking": true/false}`
-   - Graceful fallback if LLM doesn't support the parameter
+   - **Model detection**: Only applies to Qwen3 models
+   - **Safe for other models**: Returns LLM unchanged for Qwen2.5 and others
 
 2. **Swedish Language Enforcement**
    - When Swedish locale is detected AND thinking is enabled
