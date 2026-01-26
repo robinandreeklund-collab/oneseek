@@ -1152,6 +1152,27 @@ async def _execute_agent_step(
     logger.debug(f"[_execute_agent_step] Starting execution for agent: {agent_name}")
     
     current_plan = state.get("current_plan")
+    
+    # Handle case where current_plan is a string (from planner in AI comparison mode)
+    if isinstance(current_plan, str):
+        logger.info(f"[_execute_agent_step] current_plan is string, parsing to Plan object")
+        try:
+            from backend.deer_flow.utils.json_utils import repair_json_output
+            from backend.deer_flow.prompts.planner_model import Plan
+            
+            plan_dict = json.loads(repair_json_output(current_plan))
+            plan_content = extract_plan_content(plan_dict)
+            plan_dict = json.loads(repair_json_output(plan_content))
+            current_plan = Plan.model_validate(plan_dict)
+            logger.info(f"[_execute_agent_step] Successfully parsed string to Plan object")
+        except Exception as e:
+            logger.error(f"[_execute_agent_step] Failed to parse current_plan string: {e}")
+            # Return to research_team if parsing fails
+            return Command(
+                update=preserve_state_meta_fields(state),
+                goto="research_team"
+            )
+    
     plan_title = current_plan.title
     observations = state.get("observations", [])
     logger.debug(f"[_execute_agent_step] Plan title: {plan_title}, observations count: {len(observations)}")
