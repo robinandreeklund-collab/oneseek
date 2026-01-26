@@ -15,7 +15,7 @@ def tts_node(state: PodcastState):
     logger.info("Generating audio chunks for podcast...")
     tts_client = _create_tts_client()
     for line in state["script"].lines:
-        # Map male to 'onyx' and female to 'nova' or 'shimmer'
+        # Map male to 'onyx' and female to 'nova'
         tts_client.voice = (
             "onyx" if line.speaker == "male" else "nova"
         )

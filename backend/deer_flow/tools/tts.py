@@ -212,8 +212,8 @@ class OpenAITTS:
         }
 
         try:
-            sanitized_text = text.replace("\r\n", "").replace("\n", "")
-            logger.debug(f"Sending OpenAI TTS request for text: {sanitized_text[:50]}...")
+            text_preview = text.replace("\r\n", "").replace("\n", "")
+            logger.debug(f"Sending OpenAI TTS request for text: {text_preview[:50]}...")
             
             response = requests.post(
                 self.api_url,
@@ -226,7 +226,7 @@ class OpenAITTS:
                 try:
                     error_json = response.json()
                     error_msg = error_json.get("error", {}).get("message", error_msg)
-                except:
+                except (ValueError, KeyError):
                     pass
                 logger.error(f"OpenAI TTS API error: {error_msg}")
                 return {"success": False, "error": error_msg, "audio_data": None}
