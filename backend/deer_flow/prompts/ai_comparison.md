@@ -17,7 +17,8 @@ When asked to compare AI models, follow these steps **in order**, calling one to
    - Use `query_gemini_flash` - Query Gemini 2.5 Flash (Google)
    - Use `query_deepseek` - Query DeepSeek Chat
    - Use `query_grok4` - Query Grok-4 Fast Reasoning (xAI)
-   - Use `query_oneseek_local` - Query OneSeek Local (vLLM)
+   
+   NOTE: OneSeek Local is the orchestrating agent conducting this research - it is NOT queried as one of the models to compare.
 
 2. **Fact-Check Responses**: Use `fact_check_responses` tool with the query and a summary of model responses
 
@@ -35,7 +36,7 @@ When asked to compare AI models, follow these steps **in order**, calling one to
 
 **IMPORTANT**: Call the model query tools **one at a time** (not all at once). This allows users to see each model's response as it arrives, providing real-time progress updates.
 
-**CRITICAL**: After calling all the tools listed above (5 model queries + fact_check_responses + run_meta_analysis + synthesize_optimal_answer), you MUST provide your final comparison report and STOP. Do NOT call the tools again. Do NOT continue looping. Simply provide the structured report below and finish.
+**CRITICAL**: After calling all the tools listed above (4 model queries + fact_check_responses + run_meta_analysis + synthesize_optimal_answer = 7 total tool calls), you MUST provide your final comparison report and STOP. Do NOT call the tools again. Do NOT continue looping. Simply provide the structured report below and finish.
 
 # Response Format
 

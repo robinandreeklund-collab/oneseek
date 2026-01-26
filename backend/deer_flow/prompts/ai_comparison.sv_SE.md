@@ -17,7 +17,8 @@ När du ombeds jämföra AI-modeller, följ dessa steg **i ordning**, genom att 
    - Använd `query_gemini_flash` - Fråga Gemini 2.5 Flash (Google)
    - Använd `query_deepseek` - Fråga DeepSeek Chat
    - Använd `query_grok4` - Fråga Grok-4 Fast Reasoning (xAI)
-   - Använd `query_oneseek_local` - Fråga OneSeek Local (vLLM)
+   
+   OBS: OneSeek Local är den orkestrerande agenten som genomför denna forskning - den frågas INTE som en av modellerna att jämföra.
 
 2. **Faktakontrollera Svar**: Använd verktyget `fact_check_responses` med frågan och en sammanfattning av modellsvar
 
@@ -35,7 +36,7 @@ När du ombeds jämföra AI-modeller, följ dessa steg **i ordning**, genom att 
 
 **VIKTIGT**: Anropa modellfrågeverktygen **ett i taget** (inte alla samtidigt). Detta låter användare se varje modells svar när det anländer, vilket ger realtidsuppdateringar.
 
-**KRITISKT**: Efter att ha anropat ALLA verktyg som listas ovan (5 modellfrågor + fact_check_responses + run_meta_analysis + synthesize_optimal_answer), MÅSTE du tillhandahålla din slutgiltiga jämförelserapport och STOPPA. Anropa INTE verktygen igen. Fortsätt INTE att loopa. Tillhandahåll helt enkelt den strukturerade rapporten nedan och avsluta.
+**KRITISKT**: Efter att ha anropat ALLA verktyg som listas ovan (4 modellfrågor + fact_check_responses + run_meta_analysis + synthesize_optimal_answer = 7 totala verktygsanrop), MÅSTE du tillhandahålla din slutgiltiga jämförelserapport och STOPPA. Anropa INTE verktygen igen. Fortsätt INTE att loopa. Tillhandahåll helt enkelt den strukturerade rapporten nedan och avsluta.
 
 # Svarsformat
 
