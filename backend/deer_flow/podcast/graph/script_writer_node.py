@@ -22,8 +22,9 @@ def script_writer_node(state: PodcastState):
     logger.info("Generating script for podcast...")
     base_model = get_llm_by_type(AGENT_LLM_MAP["podcast_script_writer"])
 
+    locale = state.get("locale", "en-US")
     messages = [
-        SystemMessage(content=get_prompt_template("podcast/podcast_script_writer")),
+        SystemMessage(content=get_prompt_template("podcast/podcast_script_writer", locale=locale)),
         HumanMessage(content=state["input"]),
     ]
 

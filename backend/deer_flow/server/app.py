@@ -1063,7 +1063,7 @@ async def generate_podcast(request: GeneratePodcastRequest):
         report_content = request.content
         print(report_content)
         workflow = build_podcast_graph()
-        final_state = workflow.invoke({"input": report_content})
+        final_state = workflow.invoke({"input": report_content, "locale": request.locale})
         audio_bytes = final_state["output"]
         return Response(content=audio_bytes, media_type="audio/mp3")
     except Exception as e:
