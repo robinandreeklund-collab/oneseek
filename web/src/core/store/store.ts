@@ -15,6 +15,32 @@ import { getChatStreamSettings } from "./settings-store";
 
 const THREAD_ID = nanoid();
 
+// Helper function to get locale from cookie
+function getLocaleFromCookie(): string {
+  if (typeof document === "undefined") return "en";
+  
+  const cookies = document.cookie.split(";");
+  for (const cookie of cookies) {
+    const [name, value] = cookie.trim().split("=");
+    if (name === "NEXT_LOCALE" && value) {
+      return decodeURIComponent(value);
+    }
+  }
+  return "en";
+}
+
+// Helper function to get translated podcast prompt
+function getPodcastPromptTranslation(): string {
+  const locale = getLocaleFromCookie();
+  const translations: Record<string, string> = {
+    "en": "Please generate a podcast for the above research.",
+    "sv": "Vänligen generera en podcast för ovanstående forskning.",
+    "zh": "请为以上研究生成播客。"
+  };
+  return translations[locale] || translations["en"];
+}
+
+
 export const useStore = create<{
   responding: boolean;
   threadId: string | undefined;
@@ -367,7 +393,7 @@ export async function listenToPodcast(researchId: string) {
         id: nanoid(),
         threadId: THREAD_ID,
         role: "user",
-        content: "Please generate a podcast for the above research.",
+        content: getPodcastPromptTranslation(),
         contentChunks: [],
       });
       const podCastMessageId = nanoid();

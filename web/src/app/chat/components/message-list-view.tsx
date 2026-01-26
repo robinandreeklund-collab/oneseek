@@ -622,6 +622,7 @@ function PodcastCard({
   className?: string;
   message: Message;
 }) {
+  const t = useTranslations("chat.research");
   const data = useMemo(() => {
     return JSON.parse(message.content ?? "");
   }, [message.content]);
@@ -643,20 +644,20 @@ function PodcastCard({
             {!hasError ? (
               <RainbowText animated={isGenerating}>
                 {isGenerating
-                  ? "Generating podcast..."
+                  ? t("generatingPodcast")
                   : isPlaying
-                    ? "Now playing podcast..."
-                    : "Podcast"}
+                    ? t("nowPlayingPodcast")
+                    : t("podcast")}
               </RainbowText>
             ) : (
               <div className="text-red-500">
-                Error when generating podcast. Please try again.
+                {t("errorGeneratingPodcast")}
               </div>
             )}
           </div>
           {!hasError && !isGenerating && (
             <div className="flex">
-              <Tooltip title="Download podcast">
+              <Tooltip title={t("downloadPodcast")}>
                 <Button variant="ghost" size="icon" asChild>
                   <a
                     href={audioUrl}
