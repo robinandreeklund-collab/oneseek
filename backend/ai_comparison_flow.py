@@ -375,9 +375,9 @@ class AIComparisonFlow:
         
         local_model = self.models["oneseek-local"]
         
-        # Prepare responses summary for analysis
+        # Prepare responses summary for analysis with display names
         responses_text = "\n\n".join([
-            f"Model: {resp.get('model', 'Unknown')}\nResponse: {resp.get('response', '')[:500]}..."
+            f"**{resp.get('display_name', resp.get('model', 'Unknown'))}**:\n{resp.get('response', '')[:500]}..."
             for resp in model_responses if resp.get('success')
         ])
         
@@ -390,8 +390,11 @@ Fråga: {query}
 Svar från modellerna:
 {responses_text}
 
-Betygsätt varje modell på dessa 4 dimensioner (1-10):
+Betygsätt varje modell på dessa 4 dimensioner (1-10).
 
+**VIKTIGT:** Använd de exakta modellnamnen som visas ovan (t.ex. "GPT-3.5 (OpenAI)", "Gemini 2.5 Flash (Google)", "DeepSeek Chat", "Grok-4 Fast Reasoning (xAI)") i din analys. Säg INTE "Modell A", "Modell B", etc.
+
+Dimensioner:
 1. **Meta-reflektionsnivå** - Förmåga att analysera hur resonemang uppstår
    (1 = ingen meta-reflektion, 10 = avancerad meta-analys)
 
@@ -404,7 +407,7 @@ Betygsätt varje modell på dessa 4 dimensioner (1-10):
 4. **Bias-detektion** - Förmåga att upptäcka dolda antaganden och vinklingar
    (1 = blind, 10 = hög precision)
 
-Ge konkreta poäng och motiveringar för varje dimension och modell.""",
+Ge konkreta poäng (exakt siffra 1-10) och korta motiveringar för varje dimension och modell.""",
 
             "integrity_objectivity": f"""Analysera AI-modellernas integritet och objektivitet för denna fråga:
 
@@ -413,8 +416,11 @@ Fråga: {query}
 Svar från modellerna:
 {responses_text}
 
-Betygsätt varje modell på dessa 4 dimensioner (1-10):
+Betygsätt varje modell på dessa 4 dimensioner (1-10).
 
+**VIKTIGT:** Använd de exakta modellnamnen som visas ovan (t.ex. "GPT-3.5 (OpenAI)", "Gemini 2.5 Flash (Google)", "DeepSeek Chat", "Grok-4 Fast Reasoning (xAI)") i din analys. Säg INTE "Modell A", "Modell B", etc.
+
+Dimensioner:
 1. **Objektivitetsgrad** - Grad av neutralitet och frånvaro av partiskhet
    (1 = stark bias, 10 = konsekvent objektiv)
 
@@ -427,7 +433,7 @@ Betygsätt varje modell på dessa 4 dimensioner (1-10):
 4. **Epistemisk ödmjukhet** - Förmåga att erkänna osäkerhet och alternativa tolkningar
    (1 = dogmatisk, 10 = ödmjuk)
 
-Ge konkreta poäng och motiveringar för varje dimension och modell.""",
+Ge konkreta poäng (exakt siffra 1-10) och korta motiveringar för varje dimension och modell.""",
 
             "stability_emotional": f"""Analysera AI-modellernas stabilitet och emotionella profil för denna fråga:
 
@@ -436,8 +442,11 @@ Fråga: {query}
 Svar från modellerna:
 {responses_text}
 
-Betygsätt varje modell på dessa 4 dimensioner (1-10):
+Betygsätt varje modell på dessa 4 dimensioner (1-10).
 
+**VIKTIGT:** Använd de exakta modellnamnen som visas ovan (t.ex. "GPT-3.5 (OpenAI)", "Gemini 2.5 Flash (Google)", "DeepSeek Chat", "Grok-4 Fast Reasoning (xAI)") i din analys. Säg INTE "Modell A", "Modell B", etc.
+
+Dimensioner:
 1. **Emotionell distans** - Förmåga att förstå känslor utan att påverkas
    (1 = reaktiv, 10 = stabil)
 
@@ -450,7 +459,7 @@ Betygsätt varje modell på dessa 4 dimensioner (1-10):
 4. **Kognitiv redundans** - Förmåga att undvika överarbete och onödig komplexitet
    (1 = överarbetar, 10 = extremt effektiv)
 
-Ge konkreta poäng och motiveringar för varje dimension och modell.""",
+Ge konkreta poäng (exakt siffra 1-10) och korta motiveringar för varje dimension och modell.""",
 
             "adaptivity_system": f"""Analysera AI-modellernas adaptivitet och systemroll för denna fråga:
 
@@ -459,8 +468,11 @@ Fråga: {query}
 Svar från modellerna:
 {responses_text}
 
-Betygsätt varje modell på dessa 4 dimensioner (1-10):
+Betygsätt varje modell på dessa 4 dimensioner (1-10).
 
+**VIKTIGT:** Använd de exakta modellnamnen som visas ovan (t.ex. "GPT-3.5 (OpenAI)", "Gemini 2.5 Flash (Google)", "DeepSeek Chat", "Grok-4 Fast Reasoning (xAI)") i din analys. Säg INTE "Modell A", "Modell B", etc.
+
+Dimensioner:
 1. **Kontextelasticitet** - Förmåga att anpassa sig till olika format och situationer
    (1 = rigid, 10 = flexibel)
 
@@ -473,7 +485,7 @@ Betygsätt varje modell på dessa 4 dimensioner (1-10):
 4. **Strukturell klarhet** - Hur tydligt modellen organiserar och presenterar information
    (1 = rörig, 10 = kristallklar)
 
-Ge konkreta poäng och motiveringar för varje dimension och modell.""",
+Ge konkreta poäng (exakt siffra 1-10) och korta motiveringar för varje dimension och modell.""",
         }
         
         # Run meta-agents in parallel
