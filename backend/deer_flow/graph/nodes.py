@@ -998,12 +998,18 @@ def coordinator_node(
 
                 if tool_name in ["handoff_to_planner", "handoff_after_clarification"]:
                     logger.info("Handing off to planner")
-                    # Always route to planner first (planner will route to ai_comparison if needed)
-                    goto = "planner"
                     
-                    # Log if AI comparison mode is enabled (planner will handle routing)
-                    if state.get("enable_ai_comparison", False):
+                    # Check debate mode first - route directly to debate_planner
+                    if state.get("enable_debate_mode", False):
+                        logger.info("Debate mode enabled, routing to debate_planner")
+                        goto = "debate_planner"
+                    # Check AI comparison mode - route to planner (which routes to ai_comparison)
+                    elif state.get("enable_ai_comparison", False):
                         logger.info("AI comparison mode enabled, planner will route to ai_comparison")
+                        goto = "planner"
+                    # Normal research mode
+                    else:
+                        goto = "planner"
 
                     if not enable_clarification and tool_args.get("research_topic"):
                         research_topic = tool_args["research_topic"]
