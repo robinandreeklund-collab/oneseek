@@ -248,6 +248,362 @@ builder.add_node("debate_planner", debate_planner_node)
 Routes:
 - `coordinator` → `debate_planner` (when debate mode enabled)
 - `debate_planner` → `human_feedback`
+
+## Tool Usage in Debate Mode
+
+### How Tools Enable the Debate
+
+The multi-model debate is orchestrated entirely through **tool calls** in the researcher node. Each AI model query, each analysis, and the voting system are all implemented as tools that the LLM agent can call.
+
+### Tool Execution Flow
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│            Debate Mode Tool Execution Flow                   │
+└──────────────────────────────────────────────────────────────┘
+
+1. Debate Plan Created (debate_planner node)
+   │
+   │ Creates plan with 4 steps:
+   │  - Step 1: "Round 1: All models provide initial arguments"
+   │  - Step 2: "Round 2: Models develop arguments based on Round 1"
+   │  - Step 3: "Round 3: Final positions and OneSeek synthesis"
+   │  - Step 4: "Voting: External models vote on best answer"
+   │
+   ▼
+
+2. Plan Approved (human_feedback node)
+   │
+   │ User sees and approves the debate plan
+   │
+   ▼
+
+3. Research Team Routes to Researcher
+   │
+   │ research_team checks enable_debate_mode flag
+   │ Routes to researcher with Step 1
+   │
+   ▼
+
+4. Researcher Receives Debate Tools
+   │
+   │ Because enable_debate_mode=True, researcher receives:
+   │  ✓ start_debate_round
+   │  ✓ query_model_in_round
+   │  ✓ run_internal_analysis
+   │  ✓ collect_debate_votes
+   │  ✓ get_debate_summary
+   │
+   │ NOT normal research tools (web_search, crawl, etc.)
+   │
+   ▼
+
+5. LLM Agent Sees Step 1 + Tools
+   │
+   │ LLM reads: "Round 1: All models provide initial arguments"
+   │ LLM sees available debate tools with their schemas
+   │ LLM understands it needs to:
+   │  a) Start round 1
+   │  b) Query each model
+   │  c) Run analysis after each model
+   │
+   ▼
+
+6. Tool Call Sequence for Round 1
+   │
+   │ LLM makes these tool calls:
+   │
+   │ 1. start_debate_round(round=1, query="User's question", locale="sv-SE")
+   │    └─► Returns: "Round 1 started. Order: [gemini, oneseek, gpt, deepseek, grok]"
+   │
+   │ 2. query_model_in_round(model_id="gemini-2.5-flash", query="...", locale="sv-SE")
+   │    └─► Returns: "Gemini response: [detailed argument about the topic]"
+   │
+   │ 3. run_internal_analysis(query="User's question")
+   │    └─► Returns: "Internal analysis: Fact-checked via web search. Key points verified."
+   │
+   │ 4. query_model_in_round(model_id="oneseek-local", query="...", locale="sv-SE")
+   │    └─► Returns: "OneSeek response: [argument incorporating previous context]"
+   │
+   │ 5. run_internal_analysis(query="User's question")
+   │    └─► Returns: "Internal analysis complete."
+   │
+   │ ... (continues for all 5 models in randomized order)
+   │
+   │ Total: ~11 tool calls for Round 1 (1 start + 5×(query + analysis))
+   │
+   ▼
+
+7. Step 1 Complete
+   │
+   │ LLM generates completion message
+   │ researcher_node returns to research_team
+   │ research_team sees Step 1 is complete, routes back with Step 2
+   │
+   ▼
+
+8. Repeat for Round 2 (Step 2)
+   │
+   │ LLM starts fresh with Step 2 description
+   │ Makes similar tool calls but for round 2
+   │ Models receive Round 1 context via full_previous_round
+   │ Order is re-randomized
+   │
+   ▼
+
+9. Repeat for Round 3 (Step 3)
+   │
+   │ Round 3 executes similarly
+   │ OneSeek creates synthesis when it's OneSeek's turn
+   │ Uses all accumulated internal analyses
+   │
+   ▼
+
+10. Voting Phase (Step 4)
+    │
+    │ LLM makes these tool calls:
+    │
+    │ 1. collect_debate_votes(query="User's question")
+    │    └─► Returns: "Votes collected. GPT voted for OneSeek, 
+    │                   Gemini voted for DeepSeek, ..."
+    │
+    │ 2. get_debate_summary()
+    │    └─► Returns: "Debate complete. Winner: OneSeek with 3 votes.
+    │                   Full debate history with all rounds included."
+    │
+    ▼
+
+11. All Steps Complete
+    │
+    │ research_team sees all 4 steps done
+    │ Routes to reporter
+    │
+    ▼
+
+12. Reporter Generates Final Report
+    │
+    │ Reporter receives debate_results from state
+    │ Synthesizes comprehensive debate report
+    │ Shows all 3 rounds + voting results
+    │
+    ▼
+   END
+```
+
+### Available Debate Tools
+
+When `enable_debate_mode=True`, the researcher node receives these 5 specialized tools:
+
+#### 1. start_debate_round
+
+**Purpose**: Initialize a new debate round with randomized order
+
+**Parameters**:
+- `round` (int): Round number (1, 2, or 3)
+- `query` (str): User's question
+- `locale` (str): Language locale (e.g., "sv-SE")
+
+**Returns**: Confirmation message with randomized model order
+
+**Example**:
+```python
+start_debate_round(1, "Är kärnkraft nödvändig?", "sv-SE")
+# Returns: "Round 1 started. Speaking order: [gemini, oneseek, gpt, deepseek, grok]"
+```
+
+#### 2. query_model_in_round
+
+**Purpose**: Query a specific AI model with appropriate context
+
+**Parameters**:
+- `model_id` (str): Model identifier (e.g., "gpt-3.5-turbo", "gemini-2.5-flash")
+- `query` (str): User's question
+- `locale` (str): Language locale
+
+**Returns**: The model's response to the query with full context from current round
+
+**Example**:
+```python
+query_model_in_round("gemini-2.5-flash", "Är kärnkraft nödvändig?", "sv-SE")
+# Returns: "Gemini response: Ja, kärnkraft är avgörande för... [detailed argument]"
+```
+
+**Context Provided to Model**:
+- Round 1: Query only (first model) or query + chain_so_far (subsequent models)
+- Round 2/3: Query + full_previous_round + chain_so_far
+
+#### 3. run_internal_analysis
+
+**Purpose**: Execute OneSeek's internal fact-checking and analysis
+
+**Parameters**:
+- `query` (str): User's question
+
+**Returns**: Summary of internal analysis (web search, fact-checking, etc.)
+
+**Example**:
+```python
+run_internal_analysis("Är kärnkraft nödvändig?")
+# Returns: "Analysis: Verified nuclear energy statistics via web search.
+#           Found supporting evidence for carbon reduction claims."
+```
+
+**What It Does**:
+- Performs web search for fact verification
+- Gathers additional context
+- Identifies logical inconsistencies in previous responses
+- Results stored internally, used by OneSeek when it responds
+
+#### 4. collect_debate_votes
+
+**Purpose**: Gather votes from external models on best Round 3 answer
+
+**Parameters**:
+- `query` (str): User's question
+
+**Returns**: Voting results with vote counts per model
+
+**Example**:
+```python
+collect_debate_votes("Är kärnkraft nödvändig?")
+# Returns: "Voting complete. Votes:
+#           - OneSeek: 3 votes (gpt, gemini, grok)
+#           - DeepSeek: 1 vote (deepseek cannot vote for self, abstained)"
+```
+
+**Voting Rules**:
+- Only external models vote (GPT, Gemini, DeepSeek, Grok)
+- Self-voting prevented
+- Models vote based on Round 3 responses only
+
+#### 5. get_debate_summary
+
+**Purpose**: Compile complete debate results with all rounds
+
+**Parameters**: None
+
+**Returns**: Comprehensive summary with all rounds, voting results, and winner
+
+**Example**:
+```python
+get_debate_summary()
+# Returns: {
+#   "winner": "oneseek-local",
+#   "vote_count": 3,
+#   "round_1": [...],
+#   "round_2": [...],
+#   "round_3": [...],
+#   "voting_details": {...}
+# }
+```
+
+### Why Tools?
+
+Using tools for the debate provides several advantages:
+
+1. **Modularity**: Each debate action (start round, query model, analyze, vote) is isolated
+2. **Testability**: Each tool can be tested independently
+3. **Flexibility**: LLM decides when and how to call tools based on plan
+4. **State Management**: Tools access shared DebateFlow state for context control
+5. **Streaming**: Tool results can be streamed to frontend in real-time
+6. **Reusability**: Same researcher node used for both research and debate modes
+
+### Tool Selection Logic
+
+The researcher node detects debate mode and swaps tool sets:
+
+```python
+# Simplified from researcher_node implementation
+
+def researcher_node(state: State, config: RunnableConfig):
+    if state.get("enable_debate_mode"):
+        # Debate mode: use debate tools
+        tools = [
+            start_debate_round,
+            query_model_in_round,
+            run_internal_analysis,
+            collect_debate_votes,
+            get_debate_summary
+        ]
+        system_prompt = load_debate_prompt(state.locale)
+    else:
+        # Normal mode: use research tools
+        tools = [
+            web_search,
+            crawl,
+            retriever,
+            calculator,
+            # ... other research tools
+        ]
+        system_prompt = load_research_prompt(state.locale)
+    
+    # Create agent with selected tools
+    agent = create_agent_with_tools(tools, system_prompt)
+    
+    # Execute current plan step
+    result = await agent.execute(state.current_plan.steps[state.current_step])
+    
+    return Command(goto="research_team", update=result)
+```
+
+### LLM Decision Making
+
+The LLM agent autonomously decides tool usage based on:
+
+1. **Step Description**: "Round 1: All models provide initial arguments"
+   - LLM understands it needs to start round 1, then query all models
+
+2. **Tool Schemas**: Each tool has detailed description
+   - LLM knows what each tool does and what parameters it needs
+
+3. **System Prompt**: Debate-specific instructions
+   - Explains the 3-round structure
+   - Describes sequential chain-of-thought protocol
+   - Instructs to run analysis after each model query
+
+4. **Previous Tool Results**: Feedback loop
+   - LLM sees results from previous tool calls
+   - Decides next action based on those results
+
+### Real-World Example
+
+For the query "Är kärnkraft nödvändig för att nå klimatmålen?":
+
+**Step 1 Execution ("Round 1: All models provide initial arguments")**:
+
+```
+LLM reads step → Decides to start round 1
+
+Tool Call 1:
+>>> start_debate_round(1, "Är kärnkraft nödvändig för att nå klimatmålen?", "sv-SE")
+<<< "Round 1 started. Order: [deepseek, grok, gemini, oneseek, gpt]"
+
+LLM sees order → Queries first model (deepseek)
+
+Tool Call 2:
+>>> query_model_in_round("deepseek-chat", "Är kärnkraft nödvändig...", "sv-SE")
+<<< "DeepSeek: Kärnkraft är en viktig del av energimixen... [200 tokens]"
+
+LLM sees response → Runs internal analysis
+
+Tool Call 3:
+>>> run_internal_analysis("Är kärnkraft nödvändig...")
+<<< "Analysis: Verified claim about carbon emissions. Found IEA data supporting..."
+
+LLM continues → Queries next model (grok)
+
+Tool Call 4:
+>>> query_model_in_round("grok-4-fast-reasoning", "Är kärnkraft...", "sv-SE")
+<<< "Grok: Kärnkraft har både för- och nackdelar... [250 tokens]"
+
+... (continues for all 5 models)
+
+Total: 11 tool calls (1 start + 5 models × 2 actions each)
+
+LLM finishes → Returns completion message
+```
+
+This pattern repeats for Steps 2 (Round 2), 3 (Round 3), and 4 (Voting).
 - `human_feedback` → `research_team`
 - `research_team` → `reporter`
 - `reporter` → END
