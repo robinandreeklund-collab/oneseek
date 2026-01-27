@@ -6,7 +6,7 @@ Debate Mode orchestrates a **3-round multi-model debate** where all available AI
 
 ## Architecture
 
-Debate Mode implements a specialized debate orchestration flow with dedicated nodes and tools for multi-round sequential debates.
+Debate Mode follows the **same workflow as normal research**, ensuring consistency and reusing proven infrastructure:
 
 ### Current Flow
 
@@ -16,10 +16,15 @@ start
   ▼
 coordinator (analyzes query and routes based on mode)
   │
-  ├─ enable_debate_mode=true ──→ debate_planner ──→ debate ──→ reporter ──→ END
+  ├─ enable_debate_mode=true ──→ debate_planner ──→ human_feedback ──→ research_team ──→ researcher (with debate tools) ──→ reporter ──→ END
   ├─ enable_ai_comparison=true ─→ planner ─────────→ ai_comparison ──→ reporter ──→ END
-  └─ normal mode ───────────────→ planner ──────────→ human_feedback ──→ research_team ──→ reporter ──→ END
+  └─ normal mode ───────────────→ planner ──────────→ human_feedback ──→ research_team ──→ researcher ──→ reporter ──→ END
 ```
+
+**Key Principle**: Debate mode reuses the standard research workflow. The only differences are:
+1. **debate_planner** creates a debate-specific plan instead of research plan
+2. **researcher** receives debate tools instead of search/crawl tools
+3. Each AI model query is treated as a tool call within the research workflow
 
 ### Key Components
 
@@ -29,23 +34,36 @@ coordinator (analyzes query and routes based on mode)
    - Routes to debate_planner when debate mode is enabled
 
 2. **Debate Planner Node**
-   - Simplified router that extracts research topic
-   - Routes directly to debate node for multi-round debate orchestration
+   - Creates a structured debate plan with 4 steps:
+     - Step 1: Round 1 (initial arguments from all 5 models)
+     - Step 2: Round 2 (development based on Round 1)
+     - Step 3: Round 3 (final positions and OneSeek synthesis)
+     - Step 4: Voting and summary
+   - Routes to `human_feedback` for plan approval (standard workflow)
 
-3. **Debate Node**
-   - Orchestrates complete 3-round debate with all AI models
-   - Uses 5 specialized debate tools for sequential execution
-   - Manages randomized order, context control, and voting
-   - Routes directly to reporter after debate completion
+3. **Human Feedback Node**
+   - Reviews and approves the debate plan
+   - Routes to `research_team` to execute plan
 
-4. **Debate Flow Engine** (`backend/debate_flow.py`)
+4. **Research Team → Researcher Node**
+   - Executes debate plan steps sequentially
+   - When in debate mode, receives specialized debate tools:
+     - `start_debate_round` - Initialize round with randomized order
+     - `query_model_in_round` - Query a specific AI model
+     - `run_internal_analysis` - OneSeek's internal fact-checking
+     - `collect_debate_votes` - Gather votes from external models
+     - `get_debate_summary` - Compile final results
+   - Each model query is a tool call, executed in sequence
+   - Loops through plan steps until all rounds and voting complete
+
+5. **Debate Flow Engine** (`backend/debate_flow.py`)
    - Manages debate state across 3 rounds
    - Initializes all available AI models (GPT-3.5, Gemini, DeepSeek, Grok-4, OneSeek)
    - Controls `chain_so_far` (current round) vs `full_previous_round` (previous complete round)
    - Runs OneSeek internal analyses between responses
    - Collects votes from external models after round 3
 
-5. **Reporter**
+6. **Reporter**
    - Receives complete debate results with all rounds
    - Synthesizes debate findings into comprehensive report
    - Presents voting results and winner
@@ -62,6 +80,7 @@ All AI models participate in a **3-round debate** with these key features:
 4. **Strict Context Control**: Clear separation between rounds prevents context explosion
 5. **OneSeek Internal Analysis**: Between responses, OneSeek runs fact-checks via web search
 6. **Democratic Voting**: After round 3, external models vote on the best answer (self-voting prevented)
+7. **Standard Workflow**: Follows the same proven workflow as normal research (plan → approval → execution → report)
 
 ### Round-by-Round Protocol
 

@@ -12,7 +12,6 @@ from .nodes import (
     background_investigation_node,
     coder_node,
     coordinator_node,
-    debate_node,
     debate_planner_node,
     extract_plan_content,
     human_feedback_node,
@@ -74,7 +73,6 @@ def _build_base_graph():
     builder.add_node("coordinator", coordinator_node)
     builder.add_node("background_investigator", background_investigation_node)
     builder.add_node("ai_comparison", ai_comparison_node)
-    builder.add_node("debate", debate_node)
     builder.add_node("debate_planner", debate_planner_node)
     builder.add_node("planner", planner_node)
     builder.add_node("reporter", reporter_node)
@@ -84,9 +82,12 @@ def _build_base_graph():
     builder.add_node("coder", coder_node)
     builder.add_node("human_feedback", human_feedback_node)
     builder.add_edge("background_investigator", "planner")
-    # AI comparison and debate return Command(goto="reporter") to go directly to reporter.
+    # AI comparison returns Command(goto="reporter") to go directly to reporter.
     # This avoids looping through research_team which would trigger researcher repeatedly.
-    # Both execute all tools internally before routing to reporter.
+    # It executes all tools internally before routing to reporter.
+    #
+    # Debate mode follows the standard research workflow:
+    # coordinator → debate_planner → human_feedback → research_team → researcher (with debate tools) → reporter
     builder.add_conditional_edges(
         "research_team",
         continue_to_running_research_team,

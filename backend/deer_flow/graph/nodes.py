@@ -501,12 +501,13 @@ def planner_node(
 
 def debate_planner_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["debate", "reporter"]]:
+) -> Command[Literal["human_feedback"]]:
     """
-    Debate planner node - routes to multi-round debate with all AI models.
-    The debate includes randomized order, sequential responses, and voting.
+    Debate planner node - creates a debate plan with multiple rounds where AI models
+    participate as equal debaters. Follows the same workflow as normal research planning:
+    debate_planner → human_feedback → research_team → researcher (with debate tools) → reporter
     """
-    logger.info("Debate planner routing to multi-round debate node with locale: %s", state.get("locale", "en-US"))
+    logger.info("Debate planner creating debate plan with locale: %s", state.get("locale", "en-US"))
     
     # Extract research topic from state
     research_topic = state.get("research_topic", "Unknown topic")
@@ -518,15 +519,103 @@ def debate_planner_node(
             if last_user_msg:
                 research_topic = get_message_content(last_user_msg)
     
-    logger.info(f"Debate mode: Routing to debate node for topic: {research_topic}")
+    locale = state.get("locale", "en-US")
+    is_swedish = locale.startswith("sv")
     
-    # Route directly to debate node which will orchestrate the 3-round debate
+    logger.info(f"Debate mode: Creating debate plan for topic: {research_topic}")
+    
+    # Create a debate plan with steps for the 3-round debate
+    # Each step represents a tool call that researcher will execute
+    from backend.deer_flow.prompts.planner_model import Plan, Step
+    
+    # Define the debate steps
+    debate_steps = []
+    
+    # Round 1 - Initial arguments
+    debate_steps.append(Step(
+        id=1,
+        description=f"Starta Runda 1: Alla AI-modeller ger sina initiala argument" if is_swedish else f"Start Round 1: All AI models provide initial arguments",
+        type="researcher",
+        tool_calls=[
+            "start_debate_round(round_number=1, user_query='...')",
+            "query_model_in_round(model_key='gpt-3.5-turbo', user_query='...')",
+            "run_internal_analysis(user_query='...')",
+            "query_model_in_round(model_key='gemini-2.5-flash', user_query='...')",
+            "run_internal_analysis(user_query='...')",
+            "query_model_in_round(model_key='deepseek-chat', user_query='...')",
+            "run_internal_analysis(user_query='...')",
+            "query_model_in_round(model_key='grok-4-fast-reasoning', user_query='...')",
+            "run_internal_analysis(user_query='...')",
+            "query_model_in_round(model_key='oneseek-local', user_query='...')",
+            "run_internal_analysis(user_query='...')"
+        ],
+        execution_res=""
+    ))
+    
+    # Round 2 - Development and counter-arguments
+    debate_steps.append(Step(
+        id=2,
+        description=f"Runda 2: Modeller utvecklar sina argument baserat på Runda 1" if is_swedish else f"Round 2: Models develop arguments based on Round 1",
+        type="researcher",
+        tool_calls=[
+            "start_debate_round(round_number=2, user_query='...')",
+            "query_model_in_round(model_key='...', user_query='...')",  # Order will be randomized
+            "run_internal_analysis(user_query='...')",
+            # ... (pattern repeats for all 5 models)
+        ],
+        execution_res=""
+    ))
+    
+    # Round 3 - Final positions and synthesis
+    debate_steps.append(Step(
+        id=3,
+        description=f"Runda 3: Slutliga argument och OneSeeks syntes" if is_swedish else f"Round 3: Final arguments and OneSeek's synthesis",
+        type="researcher",
+        tool_calls=[
+            "start_debate_round(round_number=3, user_query='...')",
+            "query_model_in_round(model_key='...', user_query='...')",  # Order will be randomized, OneSeek creates synthesis
+            "run_internal_analysis(user_query='...')",
+            # ... (pattern repeats for all 5 models)
+        ],
+        execution_res=""
+    ))
+    
+    # Voting step
+    debate_steps.append(Step(
+        id=4,
+        description=f"Röstning: Externa modeller röstar på bästa svaret" if is_swedish else f"Voting: External models vote on best answer",
+        type="researcher",
+        tool_calls=[
+            "collect_debate_votes(user_query='...')",
+            "get_debate_summary()"
+        ],
+        execution_res=""
+    ))
+    
+    # Create the debate plan
+    debate_plan = Plan(
+        topic=research_topic,
+        steps=debate_steps
+    )
+    
+    # Create planner message
+    planner_message = AIMessage(
+        content=f"Debattplan skapad med {len(debate_steps)} steg: 3 debattronder + röstning" if is_swedish else f"Debate plan created with {len(debate_steps)} steps: 3 debate rounds + voting",
+        name="planner",
+    )
+    
+    logger.info(f"Created debate plan with {len(debate_steps)} steps")
+    
+    # Route to human_feedback for plan approval (follows same workflow as normal research)
     return Command(
         update={
+            "messages": [planner_message],
+            "current_plan": debate_plan,
+            "locale": locale,
             "research_topic": research_topic,
             **preserve_state_meta_fields(state),
         },
-        goto="debate",
+        goto="human_feedback",
     )
 
 
@@ -1543,37 +1632,49 @@ async def _setup_and_execute_agent_step(
 async def researcher_node(
     state: State, config: RunnableConfig
 ) -> Command[Literal["research_team"]]:
-    """Researcher node that do research"""
+    """Researcher node that do research or execute debate"""
     logger.info("Researcher node is researching.")
     logger.debug(f"[researcher_node] Starting researcher agent")
     
     configurable = Configuration.from_runnable_config(config)
     logger.debug(f"[researcher_node] Max search results: {configurable.max_search_results}")
     
+    # Check if we're in debate mode
+    enable_debate_mode = state.get("enable_debate_mode", False)
+    
     # Build tools list based on configuration
     tools = []
     
-    # Add web search and crawl tools only if web search is enabled
-    if configurable.enable_web_search:
-        tools.extend([get_web_search_tool(configurable.max_search_results), crawl_tool])
+    if enable_debate_mode:
+        # In debate mode, use debate tools instead of research tools
+        logger.info("[researcher_node] Debate mode enabled - adding debate tools")
+        debate_tools = get_debate_tools()
+        tools.extend(debate_tools)
+        logger.info(f"[researcher_node] Debate tools count: {len(tools)}")
+        logger.debug(f"[researcher_node] Debate tools: {[tool.name if hasattr(tool, 'name') else str(tool) for tool in tools]}")
     else:
-        logger.info("[researcher_node] Web search is disabled, using only local RAG")
-    
-    # Add retriever tool if resources are available (always add, higher priority)
-    retriever_tool = get_retriever_tool(state.get("resources", []))
-    if retriever_tool:
-        logger.debug(f"[researcher_node] Adding retriever tool to tools list")
-        tools.insert(0, retriever_tool)
-    
-    # Warn if no tools are available
-    if not tools:
-        logger.warning("[researcher_node] No tools available (web search disabled, no resources). "
-                       "Researcher will operate in pure reasoning mode.")
-    
-    logger.info(f"[researcher_node] Researcher tools count: {len(tools)}")
-    logger.debug(f"[researcher_node] Researcher tools: {[tool.name if hasattr(tool, 'name') else str(tool) for tool in tools]}")
-    logger.info(f"[researcher_node] enforce_researcher_search={configurable.enforce_researcher_search}, "
-                f"enable_web_search={configurable.enable_web_search}")
+        # Normal research mode
+        # Add web search and crawl tools only if web search is enabled
+        if configurable.enable_web_search:
+            tools.extend([get_web_search_tool(configurable.max_search_results), crawl_tool])
+        else:
+            logger.info("[researcher_node] Web search is disabled, using only local RAG")
+        
+        # Add retriever tool if resources are available (always add, higher priority)
+        retriever_tool = get_retriever_tool(state.get("resources", []))
+        if retriever_tool:
+            logger.debug(f"[researcher_node] Adding retriever tool to tools list")
+            tools.insert(0, retriever_tool)
+        
+        # Warn if no tools are available
+        if not tools:
+            logger.warning("[researcher_node] No tools available (web search disabled, no resources). "
+                           "Researcher will operate in pure reasoning mode.")
+        
+        logger.info(f"[researcher_node] Researcher tools count: {len(tools)}")
+        logger.debug(f"[researcher_node] Researcher tools: {[tool.name if hasattr(tool, 'name') else str(tool) for tool in tools]}")
+        logger.info(f"[researcher_node] enforce_researcher_search={configurable.enforce_researcher_search}, "
+                    f"enable_web_search={configurable.enable_web_search}")
     
     return await _setup_and_execute_agent_step(
         state,
