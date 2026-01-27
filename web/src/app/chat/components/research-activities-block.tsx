@@ -567,6 +567,51 @@ function PythonToolCallResult({ result }: { result: string }) {
 function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
   const tool = useMemo(() => findMCPTool(toolCall.name), [toolCall.name]);
   const { resolvedTheme } = useTheme();
+  
+  // Custom display name for debate tools
+  const displayName = useMemo(() => {
+    if (!toolCall.name) return "MCP tool";
+    
+    // Debate: querying a specific model
+    if (toolCall.name === "query_model_in_round") {
+      const args = toolCall.args as { model_key?: string };
+      // Try to extract a clean model name
+      let model = args.model_key ?? "model";
+      // Clean up common ID formats if present (e.g., "(ID: gpt-3.5)")
+      if (model.includes("(ID:")) {
+        model = model.split("(ID:")[0]?.trim() || model;
+      }
+      return `Waiting for ${model}...`;
+    } else if (toolCall.name === "start_debate_round") {
+        const args = toolCall.args as { round_number?: number };
+        return `Starting Round ${args.round_number ?? ""}...`;
+    } else if (toolCall.name === "collect_debate_votes") {
+        return "Collecting votes from all models...";
+    }
+    
+    // Default: just function name
+    return `${toolCall.name}()`;
+  }, [toolCall.name, toolCall.args]);
+
+  // Is this a debate tool that has finished running?
+  // If so, we might want to change the text from "Waiting..." to "Responded"
+  const statusText = useMemo(() => {
+    if (toolCall.result !== undefined) {
+       if (toolCall.name === "query_model_in_round") {
+           const args = toolCall.args as { model_key?: string };
+           let model = args.model_key ?? "model";
+           if (model.includes("(ID:")) {
+             model = model.split("(ID:")[0]?.trim() || model;
+           }
+           return `${model} responded`;
+       }
+       if (toolCall.name === "start_debate_round") return "Round started";
+       if (toolCall.name === "collect_debate_votes") return "Votes collected";
+       return `Executed ${toolCall.name}()`;
+    }
+    return `Running ${displayName}`;
+  }, [displayName, toolCall.name, toolCall.result, toolCall.args]);
+
   return (
     <section className="mt-4 pl-4">
       <div className="w-fit overflow-y-auto rounded-md py-0">
@@ -580,7 +625,7 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
                     className="pr-0.5 text-base font-medium italic"
                     animated={toolCall.result === undefined}
                   >
-                    Running {toolCall.name ? toolCall.name + "()" : "MCP tool"}
+                    {statusText}
                   </RainbowText>
                 </div>
               </Tooltip>
@@ -588,9 +633,18 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
             <AccordionContent>
               {toolCall.result && (
                 <div className="bg-accent max-h-[400px] max-w-[560px] overflow-y-auto rounded-md text-sm">
+                  {/* Show arguments if available (for transparency) */}
+                  <div className="mb-2 p-2 border-b border-border/50 text-xs opacity-70">
+                    <strong>Input:</strong>
+                    <pre className="whitespace-pre-wrap mt-1">
+                      {JSON.stringify(toolCall.args, null, 2)}
+                    </pre>
+                  </div>
+                  
                   <SyntaxHighlighter
-                    language="json"
+                    language="markdown" // Changed to markdown for better reading of text responses
                     style={resolvedTheme === "dark" ? dark : docco}
+                    wrapLongLines={true}
                     customStyle={{
                       background: "transparent",
                       border: "none",
