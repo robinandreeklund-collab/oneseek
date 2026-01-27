@@ -67,6 +67,15 @@ async def query_model_in_round(model_key: str, user_query: str, locale: str = "s
         The model's response in the debate
     """
     try:
+        # Check if model_key contains ID in parentheses from start_debate_round output
+        # e.g., "GPT-3.5 (OpenAI) (ID: gpt-3.5-turbo)" -> extract "gpt-3.5-turbo"
+        import re
+        id_match = re.search(r'\(ID: ([^)]+)\)', model_key)
+        if id_match:
+            actual_key = id_match.group(1)
+            logger.info(f"Extracted model ID '{actual_key}' from '{model_key}'")
+            model_key = actual_key
+            
         debate_flow = get_debate_flow()
         
         result = await debate_flow.query_model_in_debate(model_key, user_query, locale)
