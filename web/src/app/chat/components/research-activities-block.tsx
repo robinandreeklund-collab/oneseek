@@ -27,6 +27,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Skeleton } from "~/components/ui/skeleton";
 import { findMCPTool } from "~/core/mcp";
+import { isPlannerAgent } from "~/core/messages";
 import type { Message, ToolCallRuntime } from "~/core/messages";
 import { useMessage, useStore } from "~/core/store";
 import { parseJSON } from "~/core/utils";
@@ -96,7 +97,7 @@ const ActivityMessage = React.memo(({ messageId }: { messageId: string }) => {
   
   if (message?.agent) {
     // Show planner messages as plan cards (even if content is empty/streaming)
-    if (message.agent === "planner") {
+    if (isPlannerAgent(message.agent)) {
       return <PlanCard message={message} />;
     }
     // Skip reporter messages (they're shown in the Report tab)

@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Bytedance Ltd. and/or its affiliates
 // SPDX-License-Identifier: MIT
 
-import type { Citation, Option } from "../messages";
+import type { AgentName, Citation, Option } from "../messages";
 
 // Tool Calls
 
@@ -27,7 +27,7 @@ interface GenericEvent<T extends string, D extends object> {
   data: {
     id: string;
     thread_id: string;
-    agent: "coordinator" | "planner" | "researcher" | "coder" | "reporter";
+    agent: AgentName;
     role: "user" | "assistant" | "tool";
     finish_reason?: "stop" | "tool_calls" | "interrupt";
   } & D;
