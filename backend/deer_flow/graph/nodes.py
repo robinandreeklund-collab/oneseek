@@ -584,11 +584,14 @@ def debate_planner_node(
     
     logger.info(f"Created debate plan with {len(debate_steps)} steps")
     
+    # Convert plan to JSON string (same format as planner_node)
+    debate_plan_json = debate_plan.model_dump_json(indent=2)
+    
     # Route to human_feedback for plan approval (follows same workflow as normal research)
     return Command(
         update={
             "messages": [planner_message],
-            "current_plan": debate_plan,
+            "current_plan": debate_plan_json,  # Pass as JSON string like planner does
             "locale": locale,
             "research_topic": research_topic,
             **preserve_state_meta_fields(state),
