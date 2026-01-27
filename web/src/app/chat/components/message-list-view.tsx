@@ -602,7 +602,8 @@ function PlanCard({
               )}
             </CardContent>
             <CardFooter className="flex justify-end">
-              {!message.isStreaming && interruptMessage?.options?.length && (
+              {interruptMessage?.options?.length &&
+                (!message.isStreaming || waitForFeedback) && (
                 <motion.div
                   className="flex gap-2"
                   initial={{ opacity: 0, y: 12 }}
