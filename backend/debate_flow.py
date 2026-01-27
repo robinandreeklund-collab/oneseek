@@ -219,7 +219,11 @@ class DebateFlow:
         logger.info(f"Previous round had {len(self.full_previous_round)} responses")
 
     def add_fact(self, fact: str, source: str = "web_search"):
-        """Add a verified fact to the debate context."""
+        """
+        Add a verified fact to the debate context.
+        This is used when the Agent explicitly calls `debater_web_search`.
+        These facts ARE shared with all models to ground the debate.
+        """
         self.facts.append({"content": fact, "source": source, "round": self.current_round})
         logger.info(f"Added fact to debate context: {fact[:50]}...")
 
@@ -256,6 +260,8 @@ class DebateFlow:
         context_parts.append(f"Användares fråga: {user_query}\n")
         
         # Add facts if available
+        # Note: These are facts explicitly gathered by the Agent via debater_web_search
+        # Internal OneSeek analysis facts are NOT added here to avoid leakage/bias
         if self.facts:
             context_parts.append("\n**Verifierade Fakta (från webbsökning):**\n")
             for fact in self.facts[-5:]: # Show last 5 facts to keep context small
@@ -407,6 +413,10 @@ class DebateFlow:
                 "checks": []
             }
             
+            # Use search_tool but DO NOT share results with other models in next round automatically
+            # Only OneSeek uses this internal analysis.
+            # We do NOT add to self.facts here.
+            
             # Simple fact-check via web search if available
             if self.search_tool and len(resp["response"]) > 100:
                 try:
@@ -499,7 +509,8 @@ class DebateFlow:
                 
                 messages = [HumanMessage(content=vote_prompt)]
                 # Disable callbacks to prevent streaming to UI for internal calls
-                # Truncate prompt if needed (though we rely on model max_tokens for output)
+                # Also truncate prompt significantly if needed, or rely on model to handle it
+                # Note: For VLLM, extremely long prompts can cause OOM. We already truncated context above.
                 response = await model.ainvoke(messages, config={"callbacks": []})
                 vote_text = response.content if hasattr(response, "content") else str(response)
                 
