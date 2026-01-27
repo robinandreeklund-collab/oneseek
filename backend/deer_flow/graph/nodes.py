@@ -550,9 +550,10 @@ def debate_planner_node(
         )
     
     # Return the plan to human_feedback (same as planner_node)
+    # IMPORTANT: Use name="planner" so frontend recognizes it and displays the plan card
     return Command(
         update={
-            "messages": [AIMessage(content=full_response, name="debate_planner")],
+            "messages": [AIMessage(content=full_response, name="planner")],
             "current_plan": full_response,  # Pass as JSON string like planner does
             **preserve_state_meta_fields(state),
         },
