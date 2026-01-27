@@ -526,75 +526,53 @@ def debate_planner_node(
     
     # Create a debate plan with steps for the 3-round debate
     # Each step represents a tool call that researcher will execute
-    from backend.deer_flow.prompts.planner_model import Plan, Step
+    from backend.deer_flow.prompts.planner_model import Plan, Step, StepType
     
     # Define the debate steps
     debate_steps = []
     
     # Round 1 - Initial arguments
     debate_steps.append(Step(
-        id=1,
-        description=f"Starta Runda 1: Alla AI-modeller ger sina initiala argument" if is_swedish else f"Start Round 1: All AI models provide initial arguments",
-        type="researcher",
-        tool_calls=[
-            "start_debate_round(round_number=1, user_query='...')",
-            "query_model_in_round(model_key='gpt-3.5-turbo', user_query='...')",
-            "run_internal_analysis(user_query='...')",
-            "query_model_in_round(model_key='gemini-2.5-flash', user_query='...')",
-            "run_internal_analysis(user_query='...')",
-            "query_model_in_round(model_key='deepseek-chat', user_query='...')",
-            "run_internal_analysis(user_query='...')",
-            "query_model_in_round(model_key='grok-4-fast-reasoning', user_query='...')",
-            "run_internal_analysis(user_query='...')",
-            "query_model_in_round(model_key='oneseek-local', user_query='...')",
-            "run_internal_analysis(user_query='...')"
-        ],
+        need_search=False,  # Using debate tools, not web search
+        title=f"Runda 1: Initiala argument" if is_swedish else f"Round 1: Initial Arguments",
+        description=f"Starta Runda 1 där alla AI-modeller (GPT-3.5, Gemini 2.5, DeepSeek, Grok-4, OneSeek) ger sina initiala argument. Använd start_debate_round() för att initiera rundan, sedan query_model_in_round() för varje modell, med run_internal_analysis() mellan svaren för OneSeeks faktakoll." if is_swedish else f"Start Round 1 where all AI models (GPT-3.5, Gemini 2.5, DeepSeek, Grok-4, OneSeek) provide initial arguments. Use start_debate_round() to initiate the round, then query_model_in_round() for each model, with run_internal_analysis() between responses for OneSeek's fact-checking.",
+        step_type=StepType.RESEARCH,
         execution_res=""
     ))
     
     # Round 2 - Development and counter-arguments
     debate_steps.append(Step(
-        id=2,
-        description=f"Runda 2: Modeller utvecklar sina argument baserat på Runda 1" if is_swedish else f"Round 2: Models develop arguments based on Round 1",
-        type="researcher",
-        tool_calls=[
-            "start_debate_round(round_number=2, user_query='...')",
-            "query_model_in_round(model_key='...', user_query='...')",  # Order will be randomized
-            "run_internal_analysis(user_query='...')",
-            # ... (pattern repeats for all 5 models)
-        ],
+        need_search=False,
+        title=f"Runda 2: Utveckling och motargument" if is_swedish else f"Round 2: Development and Counter-arguments",
+        description=f"Kör Runda 2 där modeller utvecklar sina argument baserat på Runda 1. Använd start_debate_round(round_number=2) för att starta, sedan samma mönster som Runda 1. Ordningen randomiseras automatiskt." if is_swedish else f"Execute Round 2 where models develop their arguments based on Round 1. Use start_debate_round(round_number=2) to start, then same pattern as Round 1. Order is automatically randomized.",
+        step_type=StepType.RESEARCH,
         execution_res=""
     ))
     
     # Round 3 - Final positions and synthesis
     debate_steps.append(Step(
-        id=3,
-        description=f"Runda 3: Slutliga argument och OneSeeks syntes" if is_swedish else f"Round 3: Final arguments and OneSeek's synthesis",
-        type="researcher",
-        tool_calls=[
-            "start_debate_round(round_number=3, user_query='...')",
-            "query_model_in_round(model_key='...', user_query='...')",  # Order will be randomized, OneSeek creates synthesis
-            "run_internal_analysis(user_query='...')",
-            # ... (pattern repeats for all 5 models)
-        ],
+        need_search=False,
+        title=f"Runda 3: Slutliga argument och syntes" if is_swedish else f"Round 3: Final Arguments and Synthesis",
+        description=f"Kör Runda 3 med slutliga argument. Använd start_debate_round(round_number=3), sedan samma mönster. När OneSeek svarar i denna runda kommer den skapa en omfattande syntes baserat på alla tidigare argument och interna analyser." if is_swedish else f"Execute Round 3 with final arguments. Use start_debate_round(round_number=3), then same pattern. When OneSeek responds in this round, it will create a comprehensive synthesis based on all previous arguments and internal analyses.",
+        step_type=StepType.ANALYSIS,
         execution_res=""
     ))
     
     # Voting step
     debate_steps.append(Step(
-        id=4,
-        description=f"Röstning: Externa modeller röstar på bästa svaret" if is_swedish else f"Voting: External models vote on best answer",
-        type="researcher",
-        tool_calls=[
-            "collect_debate_votes(user_query='...')",
-            "get_debate_summary()"
-        ],
+        need_search=False,
+        title=f"Röstning och sammanfattning" if is_swedish else f"Voting and Summary",
+        description=f"Samla röster från externa modeller med collect_debate_votes() och skapa slutlig sammanfattning med get_debate_summary(). Externa modeller röstar på det bästa Runda 3-svaret." if is_swedish else f"Collect votes from external models using collect_debate_votes() and create final summary with get_debate_summary(). External models vote on the best Round 3 answer.",
+        step_type=StepType.ANALYSIS,
         execution_res=""
     ))
     
     # Create the debate plan
     debate_plan = Plan(
-        topic=research_topic,
+        locale=locale,
+        has_enough_context=False,  # Debate will gather information through rounds
+        thought=f"Debatt om: {research_topic}. Tre runder med alla AI-modeller, sedan röstning." if is_swedish else f"Debate on: {research_topic}. Three rounds with all AI models, then voting.",
+        title=f"Multi-modell debatt: {research_topic}" if is_swedish else f"Multi-model debate: {research_topic}",
         steps=debate_steps
     )
     
