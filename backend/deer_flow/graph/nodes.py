@@ -506,94 +506,49 @@ def debate_planner_node(
     Debate planner node - creates a debate plan with multiple rounds where AI models
     participate as equal debaters. Follows the same workflow as normal research planning:
     debate_planner → human_feedback → research_team → researcher (with debate tools) → reporter
+    
+    This is essentially a simplified version of planner_node that generates a fixed debate plan structure.
     """
-    logger.info("Debate planner creating debate plan with locale: %s", state.get("locale", "en-US"))
+    logger.info("Debate planner generating debate plan with locale: %s", state.get("locale", "en-US"))
+    configurable = Configuration.from_runnable_config(config)
     
-    # Extract research topic from state
-    research_topic = state.get("research_topic", "Unknown topic")
-    if not research_topic or research_topic == "Unknown topic":
-        # Try to extract from messages
-        messages = state.get("messages", [])
-        if messages:
-            last_user_msg = next((m for m in reversed(messages) if is_user_message(m)), None)
-            if last_user_msg:
-                research_topic = get_message_content(last_user_msg)
+    # Use the debate_planner prompt template
+    messages = apply_prompt_template("debate_planner", state, configurable, state.get("locale", "en-US"))
     
-    locale = state.get("locale", "en-US")
-    is_swedish = locale.startswith("sv")
+    # Get LLM for debate planner
+    if AGENT_LLM_MAP.get("debate_planner") == "basic":
+        llm = get_llm_by_type("basic")
+        llm = configure_llm_with_thinking(llm, enable_thinking=False)
+    else:
+        llm = get_llm_by_type(AGENT_LLM_MAP.get("debate_planner", "basic"))
+        llm = configure_llm_with_thinking(llm, enable_thinking=False)
     
-    logger.info(f"Debate mode: Creating debate plan for topic: {research_topic}")
+    # Invoke LLM to get debate plan (similar to planner_node)
+    full_response = ""
+    if AGENT_LLM_MAP.get("debate_planner") == "basic":
+        response = llm.invoke(messages)
+        full_response = get_message_content(response) or ""
+    else:
+        response = llm.stream(messages)
+        for chunk in response:
+            full_response += chunk.content
     
-    # Create a debate plan with steps for the 3-round debate
-    # Each step represents a tool call that researcher will execute
-    from backend.deer_flow.prompts.planner_model import Plan, Step, StepType
+    logger.info(f"Debate planner response: {full_response}")
     
-    # Define the debate steps
-    debate_steps = []
+    # The response should be a JSON plan matching the Plan model
+    # Validate it's JSON-like
+    if not is_json_like(full_response):
+        logger.warning("Debate planner response does not appear to be valid JSON")
+        return Command(
+            update=preserve_state_meta_fields(state),
+            goto="__end__"
+        )
     
-    # Round 1 - Initial arguments
-    debate_steps.append(Step(
-        need_search=False,  # Using debate tools, not web search
-        title=f"Runda 1: Initiala argument" if is_swedish else f"Round 1: Initial Arguments",
-        description=f"Starta Runda 1 där alla AI-modeller (GPT-3.5, Gemini 2.5, DeepSeek, Grok-4, OneSeek) ger sina initiala argument. Använd start_debate_round() för att initiera rundan, sedan query_model_in_round() för varje modell, med run_internal_analysis() mellan svaren för OneSeeks faktakoll." if is_swedish else f"Start Round 1 where all AI models (GPT-3.5, Gemini 2.5, DeepSeek, Grok-4, OneSeek) provide initial arguments. Use start_debate_round() to initiate the round, then query_model_in_round() for each model, with run_internal_analysis() between responses for OneSeek's fact-checking.",
-        step_type=StepType.RESEARCH,
-        execution_res=""
-    ))
-    
-    # Round 2 - Development and counter-arguments
-    debate_steps.append(Step(
-        need_search=False,
-        title=f"Runda 2: Utveckling och motargument" if is_swedish else f"Round 2: Development and Counter-arguments",
-        description=f"Kör Runda 2 där modeller utvecklar sina argument baserat på Runda 1. Använd start_debate_round(round_number=2) för att starta, sedan samma mönster som Runda 1. Ordningen randomiseras automatiskt." if is_swedish else f"Execute Round 2 where models develop their arguments based on Round 1. Use start_debate_round(round_number=2) to start, then same pattern as Round 1. Order is automatically randomized.",
-        step_type=StepType.RESEARCH,
-        execution_res=""
-    ))
-    
-    # Round 3 - Final positions and synthesis
-    debate_steps.append(Step(
-        need_search=False,
-        title=f"Runda 3: Slutliga argument och syntes" if is_swedish else f"Round 3: Final Arguments and Synthesis",
-        description=f"Kör Runda 3 med slutliga argument. Använd start_debate_round(round_number=3), sedan samma mönster. När OneSeek svarar i denna runda kommer den skapa en omfattande syntes baserat på alla tidigare argument och interna analyser." if is_swedish else f"Execute Round 3 with final arguments. Use start_debate_round(round_number=3), then same pattern. When OneSeek responds in this round, it will create a comprehensive synthesis based on all previous arguments and internal analyses.",
-        step_type=StepType.ANALYSIS,
-        execution_res=""
-    ))
-    
-    # Voting step
-    debate_steps.append(Step(
-        need_search=False,
-        title=f"Röstning och sammanfattning" if is_swedish else f"Voting and Summary",
-        description=f"Samla röster från externa modeller med collect_debate_votes() och skapa slutlig sammanfattning med get_debate_summary(). Externa modeller röstar på det bästa Runda 3-svaret." if is_swedish else f"Collect votes from external models using collect_debate_votes() and create final summary with get_debate_summary(). External models vote on the best Round 3 answer.",
-        step_type=StepType.ANALYSIS,
-        execution_res=""
-    ))
-    
-    # Create the debate plan
-    debate_plan = Plan(
-        locale=locale,
-        has_enough_context=False,  # Debate will gather information through rounds
-        thought=f"Debatt om: {research_topic}. Tre runder med alla AI-modeller, sedan röstning." if is_swedish else f"Debate on: {research_topic}. Three rounds with all AI models, then voting.",
-        title=f"Multi-modell debatt: {research_topic}" if is_swedish else f"Multi-model debate: {research_topic}",
-        steps=debate_steps
-    )
-    
-    # Create planner message
-    planner_message = AIMessage(
-        content=f"Debattplan skapad med {len(debate_steps)} steg: 3 debattronder + röstning" if is_swedish else f"Debate plan created with {len(debate_steps)} steps: 3 debate rounds + voting",
-        name="planner",
-    )
-    
-    logger.info(f"Created debate plan with {len(debate_steps)} steps")
-    
-    # Convert plan to JSON string (same format as planner_node)
-    debate_plan_json = debate_plan.model_dump_json(indent=2)
-    
-    # Route to human_feedback for plan approval (follows same workflow as normal research)
+    # Return the plan to human_feedback (same as planner_node)
     return Command(
         update={
-            "messages": [planner_message],
-            "current_plan": debate_plan_json,  # Pass as JSON string like planner does
-            "locale": locale,
-            "research_topic": research_topic,
+            "messages": [AIMessage(content=full_response, name="debate_planner")],
+            "current_plan": full_response,  # Pass as JSON string like planner does
             **preserve_state_meta_fields(state),
         },
         goto="human_feedback",
