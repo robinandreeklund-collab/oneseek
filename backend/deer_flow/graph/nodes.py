@@ -535,8 +535,13 @@ def debate_planner_node(
     
     logger.info(f"Debate planner response: {full_response}")
     
-    # The response should be a JSON plan matching the Plan model
-    # Validate it's JSON-like
+    # Strip <think> tags if present (matching planner_node behavior)
+    original_response = full_response
+    full_response = strip_think_tags(full_response, expect_json=True)
+    if '<think>' in original_response and '<think>' not in full_response:
+        logger.debug(f"Stripped think tags from debate planner response")
+    
+    # Validate explicitly that response content is valid JSON before proceeding
     if not is_json_like(full_response):
         logger.warning("Debate planner response does not appear to be valid JSON")
         return Command(
