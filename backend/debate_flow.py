@@ -262,8 +262,10 @@ class DebateFlow:
         # Add facts if available
         # Note: These are facts explicitly gathered by the Agent via debater_web_search
         # Internal OneSeek analysis facts are NOT added here to avoid leakage/bias
-        if self.facts:
-            context_parts.append("\n**Verifierade Fakta (från webbsökning):**\n")
+        # STRICT ISOLATION: Only share facts with OneSeek (to support synthesis)
+        # Other models should rely on their training data and the debate flow (what other models say)
+        if self.facts and model_key == "oneseek-local":
+            context_parts.append("\n**Verifierade Fakta (från webbsökning - ENDAST FÖR ONESEEK):**\n")
             for fact in self.facts[-5:]: # Show last 5 facts to keep context small
                 context_parts.append(f"- {fact['content']} (Källa: {fact['source']})\n")
         
