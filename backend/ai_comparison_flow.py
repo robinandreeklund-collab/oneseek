@@ -85,94 +85,90 @@ class AIComparisonFlow:
         """Initialize available AI models based on API keys."""
         models = {}
         
-        # 1. Initialize OneSeek Local first (Primary/Fallback)
-        local_llm = None
+        # GPT-3.5 Turbo (OpenAI)
+        openai_key = os.getenv("OPENAI_API_KEY")
+        if openai_key:
+            try:
+                models["gpt-3.5-turbo"] = ChatOpenAI(
+                    model="gpt-3.5-turbo",
+                    api_key=openai_key,
+                    temperature=0.7,
+                    max_tokens=2048,
+                )
+                logger.info("GPT-3.5 Turbo model initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize GPT-3.5 Turbo: {e}")
+        
+        # Gemini 2.5 Flash (Google)
+        google_key = os.getenv("GOOGLE_API_KEY")
+        if google_key:
+            try:
+                models["gemini-2.5-flash"] = ChatGoogleGenerativeAI(
+                    model="gemini-2.5-flash",
+                    google_api_key=google_key,
+                    temperature=0.7,
+                    max_tokens=2048,
+                )
+                logger.info("Gemini 2.5 Flash model initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Gemini 2.5 Flash: {e}")
+        
+        # DeepSeek Chat
+        deepseek_key = os.getenv("DEEPSEEK_API_KEY")
+        if deepseek_key:
+            try:
+                models["deepseek-chat"] = ChatDeepSeek(
+                    model="deepseek-chat",
+                    api_key=deepseek_key,
+                    temperature=0.7,
+                    max_tokens=2048,
+                )
+                logger.info("DeepSeek Chat model initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize DeepSeek Chat: {e}")
+        
+        # Grok-4 Fast Reasoning (xAI)
+        xai_key = os.getenv("XAI_API_KEY")
+        xai_base_url = os.getenv("XAI_BASE_URL", "https://api.x.ai/v1")
+        if xai_key:
+            try:
+                models["grok-4-fast-reasoning"] = ChatOpenAI(
+                    model="grok-4-fast-reasoning",
+                    api_key=xai_key,
+                    base_url=xai_base_url,
+                    temperature=0.7,
+                    max_tokens=2048,
+                )
+                logger.info("Grok-4 Fast Reasoning model initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Grok-4 Fast Reasoning: {e}")
+        
+        # OneSeek Local (vLLM) - use configuration from conf.yaml
         try:
+            # Get the local LLM from deer_flow configuration (uses conf.yaml)
+            # This ensures we use the same model configuration as the rest of the system
             local_llm = get_llm_by_type("basic")
             models["oneseek-local"] = local_llm
+            
+            # Log the model name if available
             model_name = getattr(local_llm, 'model_name', 'unknown')
-            logger.info(f"OneSeek model initialized for comparison: {model_name}")
+            logger.info(f"OneSeek Local model initialized from conf.yaml: {model_name}")
         except Exception as e:
-            logger.warning(f"Failed to initialize OneSeek: {e}")
+            logger.warning(f"Failed to initialize OneSeek Local from conf.yaml: {e}")
+            # Fallback to environment variable if conf.yaml fails
             try:
                 vllm_url = os.getenv("VLLM_URL", "http://localhost:8000/v1")
                 vllm_model = os.getenv("VLLM_MODEL", "Qwen/Qwen2.5-14B-Instruct-AWQ")
-                local_llm = ChatOpenAI(
+                models["oneseek-local"] = ChatOpenAI(
                     base_url=vllm_url,
                     api_key="EMPTY",
                     model=vllm_model,
                     temperature=0.7,
                     max_tokens=2048,
                 )
-                models["oneseek-local"] = local_llm
-                logger.info(f"OneSeek model initialized from environment: {vllm_model}")
+                logger.info(f"OneSeek Local model initialized from environment: {vllm_model}")
             except Exception as e2:
-                logger.warning(f"Failed to initialize OneSeek from environment: {e2}")
-
-        # Helper to add model or fallback
-        def add_model(key, provider_func, env_key=None, env_val=None):
-            # If env_key is provided, check if it exists
-            if env_key:
-                val = os.getenv(env_key)
-                if not val:
-                    # Key missing, use fallback
-                    if local_llm:
-                        models[key] = local_llm
-                        logger.info(f"Using OneSeek (fallback) for {key} (missing {env_key})")
-                    return
-
-            # Try to initialize
-            try:
-                models[key] = provider_func(os.getenv(env_key) if env_key else None)
-                logger.info(f"{key} initialized for comparison")
-            except Exception as e:
-                logger.warning(f"Failed to initialize {key}: {e}")
-                if local_llm:
-                    models[key] = local_llm
-                    logger.info(f"Using OneSeek (fallback) for {key} after error")
-
-        # GPT-3.5 Turbo (OpenAI)
-        add_model(
-            "gpt-3.5-turbo", 
-            lambda key: ChatOpenAI(model="gpt-3.5-turbo", api_key=key, temperature=0.7, max_tokens=2048),
-            "OPENAI_API_KEY"
-        )
-        
-        # Gemini 2.5 Flash (Google)
-        add_model(
-            "gemini-2.5-flash",
-            lambda key: ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=key, temperature=0.7, max_tokens=2048),
-            "GOOGLE_API_KEY"
-        )
-        
-        # DeepSeek Chat
-        add_model(
-            "deepseek-chat",
-            lambda key: ChatDeepSeek(model="deepseek-chat", api_key=key, temperature=0.7, max_tokens=2048),
-            "DEEPSEEK_API_KEY"
-        )
-        
-        # Grok-4 Fast Reasoning (xAI)
-        xai_key = os.getenv("XAI_API_KEY")
-        if xai_key:
-            try:
-                models["grok-4-fast-reasoning"] = ChatOpenAI(
-                    model="grok-4-fast-reasoning",
-                    api_key=xai_key,
-                    base_url=os.getenv("XAI_BASE_URL", "https://api.x.ai/v1"),
-                    temperature=0.7,
-                    max_tokens=2048,
-                )
-                logger.info("Grok-4 Fast Reasoning model initialized for comparison")
-            except Exception as e:
-                logger.warning(f"Failed to initialize Grok-4 Fast Reasoning: {e}")
-                if local_llm:
-                    models["grok-4-fast-reasoning"] = local_llm
-                    logger.info("Using OneSeek (fallback) for Grok-4")
-        else:
-             if local_llm:
-                models["grok-4-fast-reasoning"] = local_llm
-                logger.info("Using OneSeek (fallback) for Grok-4 (missing XAI_API_KEY)")
+                logger.warning(f"Failed to initialize OneSeek Local from environment: {e2}")
         
         return models
 
@@ -192,14 +188,7 @@ class AIComparisonFlow:
         """
         try:
             logger.info(f"Querying {model_key}...")
-            
-            # Inject persona if OneSeek Local is acting as another model
-            prompt = query
-            if getattr(model, "is_oneseek_fallback", False) or (model_key != "oneseek-local" and model == self.models.get("oneseek-local")):
-                display_name = AI_MODELS.get(model_key, {}).get("display_name", model_key)
-                prompt = f"Du agerar som **{display_name}** i denna jämförelse. Presentera dig INTE som en annan modell.\n\nFråga: {query}"
-                
-            messages = [HumanMessage(content=prompt)]
+            messages = [HumanMessage(content=query)]
             response = await model.ainvoke(messages)
             
             # Get display name if it's a standard model, otherwise use the key
