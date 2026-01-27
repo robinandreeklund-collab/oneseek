@@ -261,6 +261,9 @@ class DebateFlow:
             for fact in self.facts[-5:]: # Show last 5 facts to keep context small
                 context_parts.append(f"- {fact['content']} (Källa: {fact['source']})\n")
         
+        # Add instruction to include name
+        context_parts.append(f"VIKTIGT: Inled ditt svar med ditt namn: **{model_key}** (eller ditt displaynamn).")
+        
         # Round 1: First model gets minimal context
         if self.current_round == 1:
             if not self.chain_so_far:
@@ -456,10 +459,15 @@ class DebateFlow:
         vote_details = []
         
         # Build voting context
+        # Truncate responses to avoid huge prompts that might crash VLLM
         voting_context = f"Fråga: {user_query}\n\nRunda 3 svar:\n"
         for idx, resp in enumerate(round_3_responses):
             if not resp.get("error"):
-                voting_context += f"\n[{idx}] {resp['display_name']}: {resp['response']}\n"
+                # Limit each response to 1000 chars for voting context
+                response_text = resp['response']
+                if len(response_text) > 1000:
+                    response_text = response_text[:1000] + "... [trunkerat]"
+                voting_context += f"\n[{idx}] {resp['display_name']}: {response_text}\n"
         
         voting_context += "\n\nRösta på det bästa svaret genom att ange numret [0-" + str(len(round_3_responses)-1) + "]. "
         voting_context += "Du får INTE rösta på ditt eget svar. Ge endast nummret."
@@ -490,7 +498,9 @@ class DebateFlow:
                 logger.info(f"Asking {display_name} to vote")
                 
                 messages = [HumanMessage(content=vote_prompt)]
-                response = await model.ainvoke(messages)
+                # Disable callbacks to prevent streaming to UI for internal calls
+                # Truncate prompt if needed (though we rely on model max_tokens for output)
+                response = await model.ainvoke(messages, config={"callbacks": []})
                 vote_text = response.content if hasattr(response, "content") else str(response)
                 
                 # Extract vote number (enhanced regex to handle various formats like "Jag röstar på [3]", "Vote: 2", etc.)
