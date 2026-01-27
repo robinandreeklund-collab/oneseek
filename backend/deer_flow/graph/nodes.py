@@ -28,6 +28,7 @@ from backend.deer_flow.tools import (
     python_repl_tool,
 )
 from backend.deer_flow.tools.ai_comparison_tools import get_ai_comparison_tools
+from backend.deer_flow.tools.debate_tools import get_debate_tools
 from backend.deer_flow.tools.search import LoggedTavilySearch
 from backend.deer_flow.utils.context_manager import ContextManager, validate_message_content
 from backend.deer_flow.utils.json_utils import repair_json_output, sanitize_tool_response
@@ -500,151 +501,32 @@ def planner_node(
 
 def debate_planner_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["human_feedback", "reporter"]]:
+) -> Command[Literal["debate", "reporter"]]:
     """
-    Debate planner node - creates a research plan optimized for multi-perspective debate.
-    Uses the debate prompt template to generate a plan that will be executed by research_team.
+    Debate planner node - routes to multi-round debate with all AI models.
+    The debate includes randomized order, sequential responses, and voting.
     """
-    logger.info("Debate planner generating plan with locale: %s", state.get("locale", "en-US"))
-    configurable = Configuration.from_runnable_config(config)
-    plan_iterations = state["plan_iterations"] if state.get("plan_iterations", 0) else 0
-
-    # For clarification feature: use the clarified research topic (complete history)
-    if state.get("enable_clarification", False) and state.get(
-        "clarified_research_topic"
-    ):
-        # Modify state to use clarified research topic instead of full conversation
-        modified_state = state.copy()
-        modified_state["messages"] = [
-            {"role": "user", "content": state["clarified_research_topic"]}
-        ]
-        modified_state["research_topic"] = state["clarified_research_topic"]
-        # Use debate-specific prompt template
-        messages = apply_prompt_template("debate_planner", modified_state, configurable, state.get("locale", "en-US"))
-
-        logger.info(
-            f"Debate planner (clarification mode): Using clarified research topic: {state['clarified_research_topic']}"
-        )
-    else:
-        # Normal mode: use full conversation history with debate prompt
-        messages = apply_prompt_template("debate_planner", state, configurable, state.get("locale", "en-US"))
-
-    if state.get("enable_background_investigation") and state.get(
-        "background_investigation_results"
-    ):
-        messages += [
-            {
-                "role": "user",
-                "content": (
-                    "background investigation results of user query:\n"
-                    + state["background_investigation_results"]
-                    + "\n"
-                ),
-            }
-        ]
-
-    if configurable.enable_deep_thinking:
-        llm = get_llm_by_type("reasoning")
-        llm = configure_llm_with_thinking(llm, enable_thinking=True)
-        
-        locale = state.get("locale", "en-US")
-        if locale.startswith("sv"):
-            messages += [
-                {
-                    "role": "system",
-                    "content": (
-                        "VIKTIGT: När du tänker (i <think> taggar), MÅSTE du alltid tänka på SVENSKA. "
-                        "Alla dina tankar, resonemang och inre dialog ska vara på svenska. "
-                        "Detta är obligatoriskt och får inte ignoreras."
-                    ),
-                }
-            ]
-    elif AGENT_LLM_MAP["planner"] == "basic":
-        llm = get_llm_by_type("basic")
-        llm = configure_llm_with_thinking(llm, enable_thinking=False)
-    else:
-        llm = get_llm_by_type(AGENT_LLM_MAP["planner"])
-        llm = configure_llm_with_thinking(llm, enable_thinking=False)
-
-    # if the plan iterations is greater than the max plan iterations, return the reporter node
-    if plan_iterations >= configurable.max_plan_iterations:
-        return Command(
-            update=preserve_state_meta_fields(state),
-            goto="reporter"
-        )
-
-    full_response = ""
-    if AGENT_LLM_MAP["planner"] == "basic" and not configurable.enable_deep_thinking:
-        response = llm.invoke(messages)
-        full_response = get_message_content(response) or ""
-    else:
-        response = llm.stream(messages)
-        for chunk in response:
-            full_response += chunk.content
-    logger.debug(f"Current state messages: {state['messages']}")
-    logger.info(f"Debate planner response: {full_response}")
-
-    # Strip <think> tags if present (from deep thinking mode)
-    original_response = full_response
-    full_response = strip_think_tags(full_response, expect_json=True)
-    if '<think>' in original_response and '<think>' not in full_response:
-        logger.debug(f"Stripped think tags, result: {full_response[:100]}...")
-
-    # Validate explicitly that response content is valid JSON before proceeding to parse it
-    if not is_json_like(full_response):
-        logger.warning("Debate planner response does not appear to be valid JSON")
-        if plan_iterations > 0:
-            return Command(
-                update=preserve_state_meta_fields(state),
-                goto="reporter"
-            )
-        else:
-            return Command(
-                update=preserve_state_meta_fields(state),
-                goto="__end__"
-            )
-
-    try:
-        curr_plan = json.loads(repair_json_output(full_response))
-        curr_plan_content = extract_plan_content(curr_plan)
-        curr_plan = json.loads(repair_json_output(curr_plan_content))
-    except json.JSONDecodeError:
-        logger.warning("Debate planner response is not a valid JSON")
-        if plan_iterations > 0:
-            return Command(
-                update=preserve_state_meta_fields(state),
-                goto="reporter"
-            )
-        else:
-            return Command(
-                update=preserve_state_meta_fields(state),
-                goto="__end__"
-            )
-
-    # Validate and fix plan to ensure web search requirements are met
-    if isinstance(curr_plan, dict):
-        curr_plan = validate_and_fix_plan(curr_plan, configurable.enforce_web_search, configurable.enable_web_search)
-
-    if isinstance(curr_plan, dict) and curr_plan.get("has_enough_context"):
-        logger.info("Debate planner response has enough context.")
-        new_plan = Plan.model_validate(curr_plan)
-        return Command(
-            update={
-                "messages": [AIMessage(content=full_response, name="debate_planner")],
-                "current_plan": new_plan,
-                **preserve_state_meta_fields(state),
-            },
-            goto="reporter",
-        )
+    logger.info("Debate planner routing to multi-round debate node with locale: %s", state.get("locale", "en-US"))
     
-    # Debate planner always routes to human_feedback (which then goes to research_team)
+    # Extract research topic from state
+    research_topic = state.get("research_topic", "Unknown topic")
+    if not research_topic or research_topic == "Unknown topic":
+        # Try to extract from messages
+        messages = state.get("messages", [])
+        if messages:
+            last_user_msg = next((m for m in reversed(messages) if is_user_message(m)), None)
+            if last_user_msg:
+                research_topic = get_message_content(last_user_msg)
+    
+    logger.info(f"Debate mode: Routing to debate node for topic: {research_topic}")
+    
+    # Route directly to debate node which will orchestrate the 3-round debate
     return Command(
         update={
-            "messages": [AIMessage(content=full_response, name="debate_planner")],
-            "current_plan": full_response,
+            "research_topic": research_topic,
             **preserve_state_meta_fields(state),
         },
-        goto="human_feedback",
+        goto="debate",
     )
 
 

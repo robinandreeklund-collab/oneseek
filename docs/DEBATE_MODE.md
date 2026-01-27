@@ -2,11 +2,11 @@
 
 ## Overview
 
-Debate Mode enables multi-perspective research and analysis in OneSeek. Instead of providing a single answer, the system researches multiple viewpoints, gathers pro/con arguments, and synthesizes a balanced analysis that presents different perspectives on the topic.
+Debate Mode orchestrates a **3-round multi-model debate** where all available AI models (GPT-3.5, Gemini 2.5 Flash, DeepSeek, Grok-4, and OneSeek) participate as **equal debaters**. Each model responds sequentially in randomized order, building on previous arguments through strict chain-of-thought flow. After round 3, external models vote democratically on the best answer.
 
 ## Architecture
 
-Debate Mode integrates seamlessly with the existing research infrastructure by introducing a specialized `debate_planner` node that reuses the standard research workflow.
+Debate Mode implements a specialized debate orchestration flow with dedicated nodes and tools for multi-round sequential debates.
 
 ### Current Flow
 
@@ -16,8 +16,8 @@ start
   ▼
 coordinator (analyzes query and routes based on mode)
   │
-  ├─ enable_debate_mode=true ──→ debate_planner ──→ human_feedback ──→ research_team ──→ reporter ──→ END
-  ├─ enable_ai_comparison=true ─→ planner ──────────→ ai_comparison ─────────────────→ reporter ──→ END
+  ├─ enable_debate_mode=true ──→ debate_planner ──→ debate ──→ reporter ──→ END
+  ├─ enable_ai_comparison=true ─→ planner ─────────→ ai_comparison ──→ reporter ──→ END
   └─ normal mode ───────────────→ planner ──────────→ human_feedback ──→ research_team ──→ reporter ──→ END
 ```
 
@@ -26,57 +26,99 @@ coordinator (analyzes query and routes based on mode)
 1. **Coordinator Node**
    - Analyzes incoming queries
    - Checks `enable_debate_mode` state flag
-   - Routes to appropriate planner based on mode
+   - Routes to debate_planner when debate mode is enabled
 
 2. **Debate Planner Node**
-   - Specialized planner for multi-perspective research
-   - Uses debate-specific prompts (English & Swedish)
-   - Generates research plan focused on balanced argument gathering
-   - Routes to standard `human_feedback` → `research_team` → `reporter` workflow
+   - Simplified router that extracts research topic
+   - Routes directly to debate node for multi-round debate orchestration
 
-3. **Research Team**
-   - Executes debate-focused research steps
-   - Gathers arguments from multiple perspectives
-   - Collects evidence supporting different viewpoints
-   - No special debate-specific code needed (reuses existing infrastructure)
+3. **Debate Node**
+   - Orchestrates complete 3-round debate with all AI models
+   - Uses 5 specialized debate tools for sequential execution
+   - Manages randomized order, context control, and voting
+   - Routes directly to reporter after debate completion
 
-4. **Reporter**
-   - Synthesizes gathered perspectives into comprehensive report
-   - Presents balanced analysis with multiple viewpoints
-   - Standard reporter node, no special debate logic
+4. **Debate Flow Engine** (`backend/debate_flow.py`)
+   - Manages debate state across 3 rounds
+   - Initializes all available AI models (GPT-3.5, Gemini, DeepSeek, Grok-4, OneSeek)
+   - Controls `chain_so_far` (current round) vs `full_previous_round` (previous complete round)
+   - Runs OneSeek internal analyses between responses
+   - Collects votes from external models after round 3
+
+5. **Reporter**
+   - Receives complete debate results with all rounds
+   - Synthesizes debate findings into comprehensive report
+   - Presents voting results and winner
 
 ## Features
 
-### Multi-Perspective Research Planning
+### Multi-Round Sequential Debate
 
-The `debate_planner` creates research plans that:
+All AI models participate in a **3-round debate** with these key features:
 
-- **Seek opposing viewpoints**: Explicitly queries for arguments on all sides
-- **Balance pro and con**: Equal research effort for different perspectives
-- **Evidence-based**: Focuses on empirical data, not just opinions
-- **Expert voices**: Finds authoritative sources representing different positions
-- **Context and nuance**: Researches historical, cultural, or technical context
+1. **Equal Participation**: All models (GPT-3.5, Gemini, DeepSeek, Grok-4, OneSeek) are equal debaters
+2. **Randomized Order**: Each round randomizes the speaking order - no model has priority
+3. **Sequential Chain-of-Thought**: Models respond one at a time, building on previous arguments
+4. **Strict Context Control**: Clear separation between rounds prevents context explosion
+5. **OneSeek Internal Analysis**: Between responses, OneSeek runs fact-checks via web search
+6. **Democratic Voting**: After round 3, external models vote on the best answer (self-voting prevented)
 
-### Research Standards
+### Round-by-Round Protocol
 
-Debate research plans must meet these standards:
+**Round 1: Initial Arguments**
+- First model receives: User question + language rules + token limit
+- Subsequent models receive: User question + all responses in current round (chain_so_far)
+- Each model provides initial position on the topic
 
-1. **Balanced Coverage**
-   - Multiple substantive perspectives represented
-   - Both mainstream and alternative viewpoints explored
-   - Opposing arguments researched with equal rigor
-   - No bias toward any particular position
+**Round 2: Development**
+- All models receive: User question + complete Round 1 + current round responses
+- Models develop arguments, respond to others' points, introduce new evidence
+- Order is re-randomized from Round 1
 
-2. **Argumentative Depth**
-   - Each argument supported by evidence, data, expert opinion
-   - Counter-arguments to each position identified
-   - Logical fallacies and rhetorical strategies noted
+**Round 3: Synthesis & Conclusions**
+- All models receive: User question + complete Round 2 + current round responses
+- **OneSeek special role**: When it's OneSeek's turn, it creates final synthesized answer using:
+  - All debate context from rounds 1 & 2
+  - Internal analyses and fact-checks performed during debate
+  - Web search results for verification
+- External models provide final arguments
+- Order is re-randomized again
 
-3. **Diverse Sources**
-   - Academic research, expert commentary, empirical studies
-   - Historical context and precedents
-   - Real-world examples and case studies
-   - Dissenting voices and minority opinions
+**Voting Phase**
+- External models (not OneSeek) vote on best Round 3 answer
+- Each model sees all Round 3 responses
+- Self-voting is prevented
+- Winner determined by most votes
+
+### Context Management
+
+To prevent context explosion across rounds:
+
+```python
+# Round 1
+chain_so_far = []  # Accumulates Round 1 responses
+full_previous_round = []  # Empty
+
+# Round 2
+full_previous_round = chain_so_far  # Complete Round 1
+chain_so_far = []  # Reset for Round 2
+
+# Round 3
+full_previous_round = chain_so_far  # Complete Round 2
+chain_so_far = []  # Reset for Round 3
+```
+
+### OneSeek Internal Analysis
+
+Between each model response, OneSeek performs internal analysis (NOT shared with other models):
+
+- Fact-checking via web search
+- Knowledge gathering from sources
+- Logical consistency review
+- Identification of errors or misleading claims
+- Preparation of counter-arguments
+
+This analysis is used when it's OneSeek's turn to respond, especially for the Round 3 synthesis.
 
 ## Usage
 
