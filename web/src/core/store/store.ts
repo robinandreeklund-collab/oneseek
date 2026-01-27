@@ -502,7 +502,7 @@ export function useRenderableMessageIds() {
 
         if (isPlanner) {
           const contentKey = (message.content ?? "").trim();
-          if (contentKey && !message.isStreaming) {
+          if (contentKey) {
             if (seenPlannerContent.has(contentKey)) {
               continue;
             }
