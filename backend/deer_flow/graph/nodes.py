@@ -1876,18 +1876,18 @@ Follow the debate protocol:
 **Round 1:**
 1. start_debate_round(1, "{research_topic}", "{locale}")
 2. Query each model ONE AT A TIME in randomized order using query_model_in_round
-3. Run run_internal_analysis after each model response
+3. Use debater_web_search if needed to verify facts
 
 **Round 2:**
 1. start_debate_round(2, "{research_topic}", "{locale}")
 2. Query each model ONE AT A TIME in randomized order using query_model_in_round
-3. Run run_internal_analysis after each model response
+3. Use debater_web_search if needed
 
 **Round 3:**
 1. start_debate_round(3, "{research_topic}", "{locale}")
 2. Query each model ONE AT A TIME in randomized order using query_model_in_round
 3. OneSeek creates synthesis when it's OneSeek's turn
-4. Run run_internal_analysis after each model response
+4. Use debater_web_search if needed
 
 **Voting:**
 1. collect_debate_votes("{research_topic}")
