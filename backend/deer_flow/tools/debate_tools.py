@@ -35,15 +35,13 @@ async def start_debate_round(round_number: int, user_query: str, locale: str = "
         
         language = "svenska" if locale.startswith("sv") else "engelska"
         
-        return f"""🎯 **Runda {round_number} startar**
+        return f"""### 🎯 Runda {round_number} startar
 
-Modeller kommer att svara i följande ordning:
-{', '.join([f"{i+1}. {debate_flow.models[m].__class__.__name__ if m in debate_flow.models else m} (ID: {m})" for i, m in enumerate(order)])}
+**Deltagare och ordning:**
+{chr(10).join([f"{i+1}. **{debate_flow.models[m].__class__.__name__ if m in debate_flow.models else m}** (ID: `{m}`)" for i, m in enumerate(order)])}
 
-VIKTIGT: Använd ID:t inom parentes (t.ex. "{order[0]}") som `model_key` när du anropar `query_model_in_round`.
-
-Språk: {language}
-Föregående runda: {len(debate_flow.full_previous_round)} svar
+_Språkinställning: {language}_
+_Föregående runda: {len(debate_flow.full_previous_round)} svar_
 """
     except Exception as e:
         logger.error(f"Error starting debate round: {e}", exc_info=True)
@@ -83,9 +81,20 @@ async def query_model_in_round(model_key: str, user_query: str, locale: str = "s
         if result.get("error"):
             return f"❌ **{result['display_name']}:** {result['response']}"
         
-        return f"""✅ **{result['display_name']}** (Position {result['position'] + 1} i Runda {result['round']}):
+        # Helper for clean context display
+        context_preview = result.get('context_used', 'Ingen kontext')
+        
+        return f"""### 🗣️ {result['display_name']} (Pos {result['position'] + 1})
 
 {result['response']}
+
+<details>
+<summary>Visa skickad kontext</summary>
+
+```text
+{context_preview}
+```
+</details>
 
 ---
 """
@@ -154,22 +163,28 @@ async def collect_debate_votes(user_query: str) -> str:
         voting_results = await debate_flow.collect_votes(user_query, debate_flow.chain_so_far)
         
         # Format results
-        result_text = f"""🗳️ **Röstningsresultat**
+        result_text = f"""### 🗳️ Röstningsresultat
 
-Totalt antal röstande: {voting_results['total_voters']}
+**Totalt antal röstande:** {voting_results['total_voters']}
 
-**Röster per modell:**
+#### 🏆 Vinnare
+**{voting_results['winner'] if voting_results['winner'] else 'Ingen vinnare'}** ({voting_results['winner_votes']} röster)
+
+#### 📊 Detaljerade Röster
 """
         
-        for model, count in sorted(voting_results['votes'].items(), key=lambda x: x[1], reverse=True):
-            result_text += f"- {model}: {count} röst{'er' if count != 1 else ''}\n"
-        
-        if voting_results['winner']:
-            result_text += f"\n🏆 **Vinnare:** {voting_results['winner']} med {voting_results['winner_votes']} röst{'er' if voting_results['winner_votes'] != 1 else ''}!"
-        
-        result_text += "\n\n**Röstningsdetaljer:**\n"
         for detail in voting_results['vote_details']:
-            result_text += f"- {detail['voter']} → {detail['vote']}\n"
+            result_text += f"- **{detail['voter']}** röstade på: `{detail['vote']}`\n"
+            
+        result_text += f"""
+<details>
+<summary>Visa röstningsprompt</summary>
+
+```text
+{voting_results.get('voting_prompt', 'Ingen prompt')}
+```
+</details>
+"""
         
         return result_text
         

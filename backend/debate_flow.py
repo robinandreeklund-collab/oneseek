@@ -294,14 +294,6 @@ class DebateFlow:
     ) -> Dict[str, Any]:
         """
         Query a model with debate context.
-        
-        Args:
-            model_key: Model identifier
-            user_query: Original user question
-            locale: Language locale
-            
-        Returns:
-            Dictionary with model response
         """
         if model_key not in self.models:
             logger.warning(f"Model {model_key} not available")
@@ -309,7 +301,8 @@ class DebateFlow:
                 "model": model_key,
                 "display_name": DEBATE_MODELS.get(model_key, {}).get("display_name", model_key),
                 "response": f"Model {model_key} är inte tillgänglig.",
-                "error": True
+                "error": True,
+                "context_used": "Model unavailable"
             }
         
         try:
@@ -337,7 +330,8 @@ class DebateFlow:
                 "response": response_text,
                 "round": self.current_round,
                 "position": len(self.chain_so_far),
-                "error": False
+                "error": False,
+                "context_used": context
             }
             
             # Add to chain_so_far
@@ -354,7 +348,8 @@ class DebateFlow:
                 "display_name": DEBATE_MODELS.get(model_key, {}).get("display_name", model_key),
                 "response": f"Fel vid svar: {str(e)}",
                 "round": self.current_round,
-                "error": True
+                "error": True,
+                "context_used": "Error during query"
             }
 
     async def run_oneseek_internal_analysis(
@@ -457,10 +452,10 @@ class DebateFlow:
         voting_context += "\n\nRösta på det bästa svaret genom att ange numret [0-" + str(len(round_3_responses)-1) + "]. "
         voting_context += "Du får INTE rösta på ditt eget svar. Ge endast nummret."
         
-        # Ask each external model to vote (not OneSeek)
-        external_models = [k for k in self.models.keys() if k != "oneseek-local"]
+        # Ask each model to vote (including OneSeek, per user request)
+        available_models = list(self.models.keys())
         
-        for model_key in external_models:
+        for model_key in available_models:
             if model_key not in self.models:
                 continue
                 
@@ -486,38 +481,38 @@ class DebateFlow:
                 response = await model.ainvoke(messages)
                 vote_text = response.content if hasattr(response, "content") else str(response)
                 
-                # Extract vote number (simple regex)
+                # Extract vote number (enhanced regex to handle various formats like "Jag röstar på [3]", "Vote: 2", etc.)
                 import re
-                vote_match = re.search(r'\[?(\d+)\]?', vote_text)
+                vote_match = re.search(r'(?:\[|\b)(\d+)(?:\]|\b)', vote_text)
+                
+                vote_parsed = "Unknown"
                 if vote_match:
                     vote_idx = int(vote_match.group(1))
                     
                     # Prevent self-voting
                     if vote_idx == model_idx:
                         logger.warning(f"{display_name} tried to vote for itself, invalidating")
-                        vote_details.append({
-                            "voter": display_name,
-                            "vote": "INVALID (self-vote)",
-                            "raw_response": vote_text[:100]
-                        })
-                        continue
+                        vote_parsed = "INVALID (self-vote)"
                     
                     # Valid vote
-                    if 0 <= vote_idx < len(round_3_responses):
+                    elif 0 <= vote_idx < len(round_3_responses):
                         voted_for = round_3_responses[vote_idx]["display_name"]
                         votes[voted_for] = votes.get(voted_for, 0) + 1
-                        
-                        vote_details.append({
-                            "voter": display_name,
-                            "vote": voted_for,
-                            "raw_response": vote_text[:100]
-                        })
+                        vote_parsed = voted_for
                         
                         logger.info(f"{display_name} voted for {voted_for}")
                     else:
                         logger.warning(f"{display_name} voted for invalid index {vote_idx}")
+                        vote_parsed = f"INVALID (Index {vote_idx})"
                 else:
                     logger.warning(f"{display_name} vote could not be parsed: {vote_text[:50]}")
+                    vote_parsed = "Parse Error"
+                
+                vote_details.append({
+                    "voter": display_name,
+                    "vote": vote_parsed,
+                    "raw_response": vote_text[:100]
+                })
                     
             except Exception as e:
                 logger.error(f"Error collecting vote from {model_key}: {e}")
@@ -534,7 +529,8 @@ class DebateFlow:
             "vote_details": vote_details,
             "winner": winner,
             "winner_votes": max_votes,
-            "total_voters": len(vote_details)
+            "total_voters": len(vote_details),
+            "voting_prompt": voting_context
         }
 
 
