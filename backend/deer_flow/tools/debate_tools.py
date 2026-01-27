@@ -239,10 +239,51 @@ def get_debate_tools() -> List[Any]:
     Returns:
         List of debate tools
     """
+    # Import web search tool directly
+    from backend.deer_flow.tools import get_web_search_tool
+    
+    # Create debater_web_search tool wrapper
+    @tool
+    async def debater_web_search(query: str) -> str:
+        """
+        Perform a web search to verify facts or gather information for the debate.
+        The results are added to the debate context and visible to OneSeek.
+        
+        Args:
+            query: Search query
+            
+        Returns:
+            Search results summary
+        """
+        try:
+            debate_flow = get_debate_flow()
+            search_tool = get_web_search_tool(max_search_results=3)
+            
+            logger.info(f"Debater performing web search: {query}")
+            results = await search_tool.ainvoke(query)
+            
+            # Format results
+            result_text = f"Sökresultat för '{query}':\n"
+            if isinstance(results, list):
+                for i, res in enumerate(results):
+                    content = res.get('content', '')[:200] + "..."
+                    result_text += f"{i+1}. {res.get('title')} - {content}\n"
+            else:
+                result_text += str(results)
+            
+            # Add to debate flow shared facts
+            debate_flow.add_fact(result_text, source=f"Web Search: {query}")
+            
+            return result_text
+        except Exception as e:
+            logger.error(f"Error in debater web search: {e}")
+            return f"Sökfel: {str(e)}"
+
     return [
         start_debate_round,
         query_model_in_round,
         run_internal_analysis,
         collect_debate_votes,
         get_debate_summary,
+        debater_web_search, # Added granular tool
     ]
