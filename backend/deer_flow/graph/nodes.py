@@ -541,6 +541,19 @@ def debate_planner_node(
     if '<think>' in original_response and '<think>' not in full_response:
         logger.debug(f"Stripped think tags from debate planner response")
     
+    # Strip markdown code fences if present (LLM sometimes wraps JSON in ```json ... ```)
+    full_response = full_response.strip()
+    if full_response.startswith("```"):
+        # Remove opening fence (e.g., ```json or just ```)
+        lines = full_response.split('\n')
+        if len(lines) > 0:
+            lines = lines[1:]  # Remove first line with ```
+        # Remove closing fence
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        full_response = '\n'.join(lines).strip()
+        logger.debug(f"Stripped markdown code fences from debate planner response")
+    
     # Validate explicitly that response content is valid JSON before proceeding
     if not is_json_like(full_response):
         logger.warning("Debate planner response does not appear to be valid JSON")
