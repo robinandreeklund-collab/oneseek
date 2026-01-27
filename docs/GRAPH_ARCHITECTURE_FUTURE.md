@@ -123,7 +123,7 @@ This document describes the planned future architecture for OneSeek's LangGraph 
 ```
 
 ### 2. debate_planner (Implemented)
-**Purpose**: Multi-perspective analysis with balanced viewpoints
+**Purpose**: Multi-model debate with sequential argumentation and democratic voting
 
 **Trigger Patterns**:
 - "Debate X"
@@ -133,25 +133,60 @@ This document describes the planned future architecture for OneSeek's LangGraph 
 - Controversial or opinion-based questions
 
 **Planning Strategy**:
-- Seek opposing viewpoints explicitly
-- Balance pro/con research steps
-- Evidence-based argument gathering
-- Multiple perspective representation
+- Creates 4-step plan for 3-round debate + voting
+- Each round queries all AI models sequentially
+- Models treated as tools within researcher execution
+- Round order randomized for fairness
+- OneSeek performs internal analysis between responses
 
 **Example Plan**:
 ```json
 {
+  "topic": "Is nuclear power necessary to meet climate goals?",
   "steps": [
-    {"type": "research", "title": "Arguments supporting X"},
-    {"type": "research", "title": "Arguments opposing X"},
-    {"type": "research", "title": "Neutral analysis"},
-    {"type": "analysis", "title": "Balanced synthesis"}
+    {
+      "id": 1,
+      "type": "researcher",
+      "description": "Round 1: Initial arguments from all models",
+      "details": "Query each model: GPT-3.5, Gemini, DeepSeek, Grok, OneSeek"
+    },
+    {
+      "id": 2,
+      "type": "researcher",
+      "description": "Round 2: Development and counter-arguments",
+      "details": "Re-randomized order, models see Round 1 context"
+    },
+    {
+      "id": 3,
+      "type": "researcher",
+      "description": "Round 3: Final positions and synthesis",
+      "details": "OneSeek creates comprehensive synthesis when it's OneSeek's turn"
+    },
+    {
+      "id": 4,
+      "type": "researcher",
+      "description": "Voting and summary",
+      "details": "External models vote on best Round 3 answer"
+    }
   ]
 }
 ```
 
+**Tool Execution Within Researcher**:
+- `start_debate_round(round_num)` - Initialize round with randomized order
+- `query_model_in_round(model, query)` - Query specific model (5 per round)
+- `run_internal_analysis(query)` - OneSeek fact-checking (5 per round)
+- `collect_debate_votes(query)` - Gather votes from external models
+- `get_debate_summary()` - Compile final results
+
+**Workflow**:
+```
+debate_planner (creates plan) → human_feedback (approval) → 
+research_team → researcher (executes debate tools) → reporter (synthesizes)
+```
+
 ### 3. compare_planner (Planned)
-**Purpose**: Side-by-side comparison of options
+**Purpose**: Side-by-side comparison with all AI models providing perspectives
 
 **Trigger Patterns**:
 - "Compare X and Y"
@@ -160,31 +195,69 @@ This document describes the planned future architecture for OneSeek's LangGraph 
 - "Which is better: X or Y?"
 
 **Planning Strategy**:
-- Research each option independently
-- Identify comparison criteria
-- Gather metrics for each option
-- Create comparison matrix
+- Creates multi-step plan for comparative analysis
+- Each AI model (GPT-3.5, Gemini, DeepSeek, Grok, OneSeek) analyzes both options
+- Models treated as tools within researcher execution
+- Research phase gathers objective data on each option
+- Comparison phase has each model create side-by-side analysis
+- OneSeek synthesizes all perspectives into unified comparison
 
 **Example Plan**:
 ```json
 {
+  "topic": "Compare Python vs JavaScript for web development",
   "steps": [
-    {"type": "research", "title": "Research option X features"},
-    {"type": "research", "title": "Research option Y features"},
-    {"type": "research", "title": "Identify comparison criteria"},
-    {"type": "analysis", "title": "Create comparison table"}
+    {
+      "id": 1,
+      "type": "researcher",
+      "description": "Research Python capabilities",
+      "details": "Web frameworks, performance, ecosystem, use cases"
+    },
+    {
+      "id": 2,
+      "type": "researcher",
+      "description": "Research JavaScript capabilities",
+      "details": "Frameworks, performance, ecosystem, use cases"
+    },
+    {
+      "id": 3,
+      "type": "researcher",
+      "description": "Multi-model comparison analysis",
+      "details": "Each AI model creates comparison based on gathered data"
+    },
+    {
+      "id": 4,
+      "type": "researcher",
+      "description": "Unified synthesis",
+      "details": "OneSeek synthesizes all model perspectives into comparison table"
+    }
   ]
 }
 ```
 
+**Tool Execution Within Researcher**:
+- Standard research tools for Steps 1-2 (web_search, crawl, retriever)
+- Comparison-specific tools for Steps 3-4:
+  - `query_model_comparison(model, option_a, option_b)` - Get model's comparison
+  - `gather_comparison_criteria()` - Extract common comparison points
+  - `create_comparison_matrix()` - Build structured comparison table
+  - `synthesize_comparison()` - OneSeek creates unified analysis
+
 **Output Format**:
-- Side-by-side comparison table
-- Pros/cons for each option
-- Recommendation based on criteria
-- Context-specific guidance
+- Side-by-side comparison table with all perspectives
+- Each AI model's analysis included
+- Pros/cons from multiple viewpoints
+- Consensus recommendation where models agree
+- Divergent opinions highlighted where models disagree
+
+**Workflow**:
+```
+compare_planner (creates plan) → human_feedback (approval) → 
+research_team → researcher (gathers data + executes comparison tools) → reporter (formats comparison)
+```
 
 ### 4. general_planner (Planned)
-**Purpose**: Quick, direct responses without extensive research
+**Purpose**: Quick, direct responses leveraging all AI models for simple queries
 
 **Trigger Patterns**:
 - Simple factual questions
@@ -194,23 +267,58 @@ This document describes the planned future architecture for OneSeek's LangGraph 
 - Calculator-type queries
 
 **Planning Strategy**:
-- Minimal or no research steps
-- Use existing knowledge
-- Direct response generation
-- Skip research_team entirely if possible
+- Creates minimal 1-2 step plan for quick execution
+- May query multiple AI models for diverse quick takes
+- Skip extensive research for simple queries
+- Fast-path through researcher with minimal tools
 
 **Example Plan**:
 ```json
 {
+  "topic": "What is the capital of France?",
   "steps": [
-    {"type": "direct_response", "title": "Generate answer"}
+    {
+      "id": 1,
+      "type": "researcher",
+      "description": "Quick multi-model response",
+      "details": "Query 2-3 AI models for quick answer, synthesize"
+    }
   ]
 }
 ```
 
-**Routing**:
-- May route directly to reporter
-- Bypasses research_team for simple queries
+**Alternative Plan for Very Simple Queries**:
+```json
+{
+  "topic": "Hello, how are you?",
+  "steps": [
+    {
+      "id": 1,
+      "type": "direct_response",
+      "description": "Generate greeting response",
+      "details": "OneSeek generates direct response, no model querying needed"
+    }
+  ]
+}
+```
+
+**Tool Execution Within Researcher**:
+- Minimal tool usage for speed
+- `query_model_quick(model, query)` - Fast query without context building
+- `direct_answer()` - OneSeek generates answer from existing knowledge
+- Optional: Single web_search for fact verification
+
+**Workflow**:
+```
+general_planner (creates minimal plan) → human_feedback (approval) → 
+research_team → researcher (minimal tools) → reporter (quick formatting)
+```
+
+**Optimization**:
+- Bypasses extensive research steps
+- Uses fewer AI model calls (1-3 instead of 5)
+- Shorter token limits for responses
+- May skip reporter for very simple queries
 - Fastest path for basic questions
 
 ## Coordinator Intelligence
@@ -264,16 +372,48 @@ Route to appropriate planner based on classification.
 All planners share the same downstream workflow:
 
 ```
-Any Planner → human_feedback → research_team → reporter → human_feedback → END
+Any Planner (creates plan) → human_feedback (approval) → research_team → researcher (executes with appropriate tools) → reporter (synthesizes) → human_feedback (loop or end) → END
 ```
+
+### Key Principle: Planners Create Plans, Researcher Executes Tools
+
+- **Planners**: Create structured Plan objects with steps describing what to do
+- **Researcher**: Executes the plan using appropriate tools based on step types
+- **Tool Swapping**: Researcher detects mode (debate, compare, etc.) and loads corresponding tools
+- **Models as Tools**: AI models become tools that researcher invokes during execution
 
 ### Benefits:
 
-1. **Code Reuse**: Single research_team implementation
-2. **Consistency**: Same UX for all query types
-3. **Maintainability**: Fix bugs once, benefits all modes
+1. **Code Reuse**: Single research_team → researcher → reporter pipeline for all modes
+2. **Consistency**: Same UX, streaming behavior, and error handling for all query types
+3. **Maintainability**: Fix bugs once in researcher, benefits all planners
 4. **Testability**: Test workflow once, applies to all planners
-5. **Scalability**: Easy to add new planner types
+5. **Scalability**: Easy to add new planner types - just create plan structure and tools
+6. **Modularity**: Clear separation between planning (what to do) and execution (how to do it)
+
+### Tool Swapping in Researcher
+
+The researcher node detects the plan type/mode and swaps toolsets:
+
+**Normal Research Mode**:
+- web_search, crawl, retriever, calculator, etc.
+
+**Debate Mode** (when `enable_debate_mode=True`):
+- start_debate_round, query_model_in_round, run_internal_analysis, collect_debate_votes, get_debate_summary
+
+**Compare Mode** (future, when `enable_compare_mode=True`):
+- web_search, crawl (for research steps)
+- query_model_comparison, create_comparison_matrix, synthesize_comparison (for comparison steps)
+
+**General Mode** (future, when `enable_general_mode=True` or simple query):
+- query_model_quick, direct_answer
+- Minimal tool usage for speed
+
+This architecture ensures that adding a new mode requires:
+1. Creating a new planner node
+2. Creating tools specific to that mode
+3. Adding tool swapping logic in researcher
+4. No changes to core workflow (human_feedback, research_team, reporter)
 
 ## State Fields for Multi-Planner System
 
@@ -294,33 +434,48 @@ debate_perspectives: List[str] = []  # For debate_planner
 ## Migration Path
 
 ### Phase 1: ✅ Debate Planner (Current)
-- Implement debate_planner
-- Test with enable_debate_mode flag
-- Validate multi-perspective research
+- Implement debate_planner node ✅
+- Create debate tools (start_debate_round, query_model_in_round, etc.) ✅
+- Add tool swapping logic in researcher for debate mode ✅
+- Test with enable_debate_mode flag ✅
+- Validate 3-round multi-model debate with voting ✅
+- Document unified workflow pattern ✅
 
 ### Phase 2: Compare Planner (Next)
-- Create compare_planner node
-- Implement comparison-specific prompts
+- Create compare_planner node (copy pattern from debate_planner)
+- Implement comparison-specific tools:
+  - `query_model_comparison(model, option_a, option_b)`
+  - `gather_comparison_criteria()`
+  - `create_comparison_matrix()`
+  - `synthesize_comparison()`
+- Add tool swapping logic in researcher for compare mode
 - Add comparison result formatting in reporter
 - Test with enable_compare_mode flag
+- Validate multi-model comparison analysis
 
 ### Phase 3: General Planner
-- Create general_planner node
-- Implement fast-path routing
-- Add direct_response capability
-- Test response quality vs. speed
+- Create general_planner node (copy pattern from debate_planner)
+- Implement fast-path tools:
+  - `query_model_quick(model, query)`
+  - `direct_answer()`
+- Add tool swapping logic in researcher for general mode
+- Optimize for speed (fewer models, shorter tokens)
+- Test with enable_general_mode flag
+- Validate response quality vs. speed tradeoff
 
 ### Phase 4: Intelligent Coordinator
 - Enhance coordinator with classification logic
-- Remove manual mode flags
-- Automatic planner selection
-- Test classification accuracy
+- Remove manual mode flags (enable_debate_mode, etc.)
+- Automatic planner selection based on query analysis
+- Test classification accuracy across query types
+- Gradual rollout with fallback to manual flags
 
 ### Phase 5: Unified State
 - Replace boolean flags with planner_type enum
-- Simplify state management
+- Simplify state management (single field vs. multiple booleans)
+- Update tool swapping to use planner_type instead of flags
 - Clean up legacy code
-- Final integration testing
+- Final integration testing across all modes
 
 ## Future Enhancements
 
@@ -342,12 +497,39 @@ debate_perspectives: List[str] = []  # For debate_planner
 
 ### Adding a New Planner
 
-1. Create planner node function (copy from existing planner)
-2. Create specialized prompts (English & Swedish)
-3. Add to graph builder: `builder.add_node("new_planner", new_planner_node)`
-4. Update coordinator routing logic
-5. Test with enable_new_mode flag initially
-6. Eventually integrate into coordinator's automatic routing
+1. **Create planner node function** (copy from debate_planner_node)
+   - Extract topic from query
+   - Create Plan object with appropriate steps
+   - Route to human_feedback
+
+2. **Create specialized prompts** (English & Swedish)
+   - Planning prompt for the planner node
+   - Execution prompt for researcher (optional, if different from standard)
+
+3. **Create mode-specific tools** (if needed)
+   - Tools that researcher will use during execution
+   - Follow pattern from debate_tools.py
+   - Each tool should be focused and composable
+
+4. **Add tool swapping logic in researcher**
+   - Detect mode via state flag (enable_X_mode) or plan analysis
+   - Load appropriate tools for that mode
+   - Example: `if state.enable_compare_mode: tools = get_compare_tools()`
+
+5. **Add to graph builder**
+   - `builder.add_node("new_planner", new_planner_node)`
+   - Configure edge: `new_planner → human_feedback`
+   - Update coordinator routing to include new planner
+
+6. **Test with mode flag initially**
+   - Add `enable_new_mode` boolean to state
+   - Test end-to-end workflow with flag enabled
+   - Validate plan creation and tool execution
+
+7. **Eventually integrate into coordinator's automatic routing**
+   - Add query pattern detection in coordinator
+   - Remove manual flag requirement
+   - Automatic planner selection
 
 ### Testing Strategy
 
