@@ -569,15 +569,33 @@ def debate_planner_node(
         curr_plan_content = extract_plan_content(curr_plan)
         # load the current_plan
         curr_plan = json.loads(repair_json_output(curr_plan_content))
-        # Convert back to JSON string for consistency
-        full_response = json.dumps(curr_plan, ensure_ascii=False, indent=2)
-        logger.debug(f"Successfully parsed and repaired debate plan JSON")
     except json.JSONDecodeError as e:
         logger.warning(f"Debate planner response is not valid JSON: {e}")
         return Command(
             update=preserve_state_meta_fields(state),
             goto="__end__"
         )
+    
+    # Validate and fix plan to ensure web search requirements are met (matching planner_node)
+    if isinstance(curr_plan, dict):
+        curr_plan = validate_and_fix_plan(curr_plan, configurable.enforce_web_search, configurable.enable_web_search)
+    
+    # Check if plan has enough context (matching planner_node)
+    if isinstance(curr_plan, dict) and curr_plan.get("has_enough_context"):
+        logger.info("Debate planner response has enough context.")
+        new_plan = Plan.model_validate(curr_plan)
+        return Command(
+            update={
+                "messages": [AIMessage(content=json.dumps(curr_plan, ensure_ascii=False, indent=2), name="planner")],
+                "current_plan": new_plan,
+                **preserve_state_meta_fields(state),
+            },
+            goto="reporter",
+        )
+    
+    # Convert plan to JSON string for human_feedback (matching planner_node)
+    full_response = json.dumps(curr_plan, ensure_ascii=False, indent=2)
+    logger.debug(f"Successfully parsed and prepared debate plan for human_feedback")
     
     # Return the plan to human_feedback (same as planner_node)
     # IMPORTANT: Use name="planner" so frontend recognizes it and displays the plan card
