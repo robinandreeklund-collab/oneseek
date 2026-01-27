@@ -1070,6 +1070,21 @@ def reporter_node(state: State, config: RunnableConfig):
     logger.info("Reporter write final report")
     configurable = Configuration.from_runnable_config(config)
     
+    # Check if this is Debate mode (NEW)
+    debate_results = state.get("debate_results")
+    if debate_results:
+        logger.info("Handling debate results in reporter node")
+        final_report = debate_results.get("final_report", "Debate completed but no report generated.")
+        
+        # If the report seems short or missing, we might want to wrap it
+        if len(final_report) < 100:
+            final_report = f"# Debate Results\n\n{final_report}"
+            
+        return {
+            "final_report": final_report,
+            "citations": state.get("citations", []),
+        }
+    
     # Check if this is AI comparison mode
     comparison_results = state.get("comparison_results")
     if comparison_results:
@@ -1908,9 +1923,12 @@ Provide a comprehensive debate report with all rounds, voting results, and concl
     )
     
     # Update state with debate plan
+    # Ensure debate_results is cleared from previous runs
     state["current_plan"] = debate_plan
     state["locale"] = locale
     state["research_topic"] = research_topic
+    if "debate_results" in state:
+        del state["debate_results"]
     
     logger.info("Created debate plan with 1 step, using standard execution path")
     
@@ -1939,11 +1957,33 @@ Provide a comprehensive debate report with all rounds, voting results, and concl
         # Go directly to reporter to avoid research_team loops
         logger.info("Debate complete, routing directly to reporter")
         
+        # Extract the final debate report from the messages
+        # The debate agent's last message should be the final report/summary
+        debate_report = None
+        if result.update.get("messages"):
+            last_message = result.update["messages"][-1]
+            if isinstance(last_message, AIMessage) and last_message.content:
+                debate_report = last_message.content
+                logger.info("Extracted debate report from final message")
+        
+        # If no report found in messages, try to get it from observations (tool outputs)
+        if not debate_report:
+            observations = result.update.get("observations", [])
+            if observations:
+                # The last observation might be the get_debate_summary output
+                debate_report = observations[-1]
+                logger.info("Using last observation as debate report")
+        
         # Return updated state with completed step and goto reporter
+        # We pass debate_results to trigger special handling in reporter_node
         return Command(
             update={
                 **result.update,
                 "current_plan": debate_plan,
+                "debate_results": {
+                    "final_report": debate_report,
+                    "status": "completed"
+                }
             },
             goto="reporter",
         )
