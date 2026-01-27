@@ -523,9 +523,10 @@ def debate_planner_node(
         llm = get_llm_by_type(AGENT_LLM_MAP.get("debate_planner", "basic"))
         llm = configure_llm_with_thinking(llm, enable_thinking=False)
     
-    # Invoke LLM to get debate plan (similar to planner_node)
+    # Invoke/stream LLM to get debate plan (EXACT match to planner_node logic)
+    # CRITICAL: Use the same invoke/stream logic as planner_node for frontend streaming
     full_response = ""
-    if AGENT_LLM_MAP.get("debate_planner") == "basic":
+    if AGENT_LLM_MAP.get("debate_planner") == "basic" and not configurable.enable_deep_thinking:
         response = llm.invoke(messages)
         full_response = get_message_content(response) or ""
     else:
