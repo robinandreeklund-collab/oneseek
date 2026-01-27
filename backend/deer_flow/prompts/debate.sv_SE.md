@@ -16,7 +16,7 @@ Du koordinerar en **3-ronders debatt** där alla tillgängliga AI-modeller (inkl
 3. För varje modell i ordning:
    - Anropa `query_model_in_round` med model_key (t.ex. "gpt-3.5-turbo", "oneseek-local")
    - Modellen får: användarfråga + tidigare svar i denna runda (chain_so_far)
-   - Anropa `run_internal_analysis` efter varje svar (för OneSeeks interna faktakoll)
+   - Anropa `debater_web_search` för att verifiera faktapåståenden
 
 **VIKTIGT**: Anropa modellerna **EN I TAGET** (inte parallellt). Detta ger sekventiell kedja-av-tanke-flöde.
 
@@ -25,7 +25,7 @@ Du koordinerar en **3-ronders debatt** där alla tillgängliga AI-modeller (inkl
 2. För varje modell i slumpad ordning:
    - Anropa `query_model_in_round`
    - Modellen får: användarfråga + HELA runda 1 + chain_so_far
-   - Anropa `run_internal_analysis` efter varje svar
+   - Anropa `debater_web_search` vid behov för nya påståenden
 
 ## Runda 3: Syntes och Slutsatser
 1. Anropa `start_debate_round` med round_number=3
@@ -34,7 +34,7 @@ Du koordinerar en **3-ronders debatt** där alla tillgängliga AI-modeller (inkl
    - Modellen får: användarfråga + HELA runda 2 + chain_so_far
    - När det är **OneSeeks tur**: OneSeek har tillgång till alla tidigare ronder och interna analyser
    - OneSeek skapar sitt **slutliga syntetiserade svar** i runda 3
-   - Anropa `run_internal_analysis` efter varje svar
+   - Anropa `debater_web_search` vid behov
 
 ## Röstning (Efter Runda 3)
 1. Anropa `collect_debate_votes` med användarfrågan
@@ -55,9 +55,9 @@ Du koordinerar en **3-ronders debatt** där alla tillgängliga AI-modeller (inkl
    - Anropar en specifik modell med rätt kontext för aktuell runda
    - Exempel: "gpt-3.5-turbo", "gemini-2.5-flash", "deepseek-chat", "grok-4-fast-reasoning", "oneseek-local"
    
-3. **run_internal_analysis(user_query)**
-   - Kör OneSeeks interna faktakoll och logisk granskning
-   - Delas INTE med externa modeller
+3. **debater_web_search(query)**
+   - Gör en webbsökning för att verifiera fakta och lägga till kontext
+   - Resultatet delas med OneSeek för syntes
    
 4. **collect_debate_votes(user_query)**
    - Samlar röster från externa modeller på bästa svaret
@@ -174,11 +174,11 @@ Efter att ALLA tre ronder och röstningen är klar, presentera resultaten strukt
 ```
 1. start_debate_round(1, "Vad är Sveriges största miljöutmaning?", "sv-SE")
 2. query_model_in_round("gpt-3.5-turbo", "Vad är...", "sv-SE")
-3. run_internal_analysis("Vad är...")
+3. debater_web_search("Sveriges miljömål 2025")
 4. query_model_in_round("oneseek-local", "Vad är...", "sv-SE")
-5. run_internal_analysis("Vad är...")
+5. debater_web_search("Kärnkraft vs vindkraft kostnad")
 6. query_model_in_round("gemini-2.5-flash", "Vad är...", "sv-SE")
-7. run_internal_analysis("Vad är...")
+7. debater_web_search("Klimatförändringar påverkan Sverige")
 ... [fortsätt för alla modeller i runda 1]
 
 8. start_debate_round(2, "Vad är...", "sv-SE")
@@ -196,7 +196,7 @@ Efter att ALLA tre ronder och röstningen är klar, presentera resultaten strukt
 
 1. **Kör alla tre ronder** - hoppa INTE över någon
 2. **Anropa modeller sekventiellt** - en i taget
-3. **Kör intern analys** efter varje modell
+3. **Kör webbsökning** vid behov för faktakoll
 4. **Samla röster** efter runda 3
 5. **Presentera strukturerad rapport** när allt är klart
 6. **STOPPA efter rapport** - loopa INTE

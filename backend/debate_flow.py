@@ -82,6 +82,7 @@ class DebateFlow:
         self.full_previous_round = []  # Complete previous round
         self.debate_history = []  # All rounds history
         self.oneseek_analyses = []  # OneSeek internal analyses
+        self.facts = []  # Shared facts accumulated from tools
         
         # Initialize tools
         try:
@@ -217,6 +218,11 @@ class DebateFlow:
         logger.info(f"Starting Round {round_number}")
         logger.info(f"Previous round had {len(self.full_previous_round)} responses")
 
+    def add_fact(self, fact: str, source: str = "web_search"):
+        """Add a verified fact to the debate context."""
+        self.facts.append({"content": fact, "source": source, "round": self.current_round})
+        logger.info(f"Added fact to debate context: {fact[:50]}...")
+
     def build_context_for_model(
         self, 
         model_key: str, 
@@ -248,6 +254,12 @@ class DebateFlow:
         
         # Add user query
         context_parts.append(f"Användares fråga: {user_query}\n")
+        
+        # Add facts if available
+        if self.facts:
+            context_parts.append("\n**Verifierade Fakta (från webbsökning):**\n")
+            for fact in self.facts[-5:]: # Show last 5 facts to keep context small
+                context_parts.append(f"- {fact['content']} (Källa: {fact['source']})\n")
         
         # Round 1: First model gets minimal context
         if self.current_round == 1:
