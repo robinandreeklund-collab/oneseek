@@ -255,14 +255,43 @@ The final report includes:
   - Contextual factors
   - Balanced conclusion
 
-## Future Enhancements
+## Current Implementation vs. Future Vision
+
+### What's Implemented Now ✅
+
+The current debate mode implementation focuses on **multi-perspective research planning**:
+
+- **Debate Planner**: Specialized planner that creates research plans emphasizing multiple viewpoints
+- **Balanced Research**: Research team gathers arguments from different perspectives (pro/con)
+- **Synthesized Analysis**: Reporter creates a comprehensive report presenting all viewpoints
+- **Standard Workflow**: Reuses existing research_team → reporter infrastructure
+
+This provides balanced, multi-perspective analysis through intelligent research planning and synthesis.
+
+### Original Vision (Not Yet Implemented)
+
+The original PR concept described a more ambitious system:
+
+1. **Real-time multi-model debates**: External AI models (GPT, Gemini, DeepSeek, Grok) debating with each other in sequential rounds
+2. **Sequential chain-of-thought**: Each model responding to previous models' arguments
+3. **Voting mechanisms**: External models voting on best arguments after debate rounds
+4. **OneSeek participation**: OneSeek as an equal debate participant alongside external models
+
+**Why the simpler approach?**
+- The multi-model debate system proved complex to orchestrate reliably
+- LLM agents had difficulty following multi-round debate protocols
+- The simpler planner-based approach provides similar value (balanced perspectives) with better reliability
+- Reuses proven research infrastructure rather than creating new debate-specific code
+
+### Future Enhancements
 
 The debate planner architecture enables future extensions:
 
-1. **Real-time model debates**: External AI models debating directly
-2. **Voting mechanisms**: Models voting on best arguments
-3. **Interactive debates**: User-guided debate flow
-4. **Debate tournaments**: Multiple debate rounds with refinement
+1. **Enhanced perspective analysis**: Deeper analysis of conflicting viewpoints
+2. **Stakeholder mapping**: Identify and research perspectives from different stakeholder groups
+3. **Argument strength scoring**: Rate the strength of evidence for each perspective
+4. **Interactive debates**: User-guided debate flow and dynamic re-planning
+5. **Comparative analysis**: Side-by-side comparison of argument quality
 
 ## Troubleshooting
 
