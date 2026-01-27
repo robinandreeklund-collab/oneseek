@@ -38,7 +38,9 @@ async def start_debate_round(round_number: int, user_query: str, locale: str = "
         return f"""🎯 **Runda {round_number} startar**
 
 Modeller kommer att svara i följande ordning:
-{', '.join([f"{i+1}. {debate_flow.models[m].__class__.__name__ if m in debate_flow.models else m}" for i, m in enumerate(order)])}
+{', '.join([f"{i+1}. {debate_flow.models[m].__class__.__name__ if m in debate_flow.models else m} (ID: {m})" for i, m in enumerate(order)])}
+
+VIKTIGT: Använd ID:t inom parentes (t.ex. "{order[0]}") som `model_key` när du anropar `query_model_in_round`.
 
 Språk: {language}
 Föregående runda: {len(debate_flow.full_previous_round)} svar
