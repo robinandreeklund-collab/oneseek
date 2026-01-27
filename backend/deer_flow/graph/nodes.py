@@ -562,6 +562,23 @@ def debate_planner_node(
             goto="__end__"
         )
     
+    # Parse and repair JSON (matching planner_node behavior)
+    try:
+        curr_plan = json.loads(repair_json_output(full_response))
+        # Need to extract the plan from the full_response
+        curr_plan_content = extract_plan_content(curr_plan)
+        # load the current_plan
+        curr_plan = json.loads(repair_json_output(curr_plan_content))
+        # Convert back to JSON string for consistency
+        full_response = json.dumps(curr_plan, ensure_ascii=False, indent=2)
+        logger.debug(f"Successfully parsed and repaired debate plan JSON")
+    except json.JSONDecodeError as e:
+        logger.warning(f"Debate planner response is not valid JSON: {e}")
+        return Command(
+            update=preserve_state_meta_fields(state),
+            goto="__end__"
+        )
+    
     # Return the plan to human_feedback (same as planner_node)
     # IMPORTANT: Use name="planner" so frontend recognizes it and displays the plan card
     return Command(
