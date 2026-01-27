@@ -10,6 +10,8 @@
 
 import type { ReactNode } from 'react';
 
+import { isPlannerAgent } from '~/core/messages';
+
 // Mock next-intl
 jest.mock('next-intl', () => ({
   useTranslations: () => (key: string) => key,
@@ -88,7 +90,14 @@ describe('MessageListView - Issue #588: React Key Warnings Fix', () => {
     it('should filter out non-renderable messages from key list', () => {
       // Simulate the filter logic for renderable messages
       type MessageType = 'user' | 'assistant';
-      type Agent = 'coordinator' | 'planner' | 'researcher' | 'coder' | 'reporter' | 'podcast';
+      type Agent =
+        | 'coordinator'
+        | 'planner'
+        | 'debate_planner'
+        | 'researcher'
+        | 'coder'
+        | 'reporter'
+        | 'podcast';
 
       interface MockMessage {
         id: string;
@@ -101,7 +110,7 @@ describe('MessageListView - Issue #588: React Key Warnings Fix', () => {
         { id: 'msg-coordinator', role: 'assistant', agent: 'coordinator' },
         { id: 'msg-researcher', role: 'assistant', agent: 'researcher' },
         { id: 'msg-coder', role: 'assistant', agent: 'coder' },
-        { id: 'msg-planner', role: 'assistant', agent: 'planner' },
+        { id: 'msg-planner', role: 'assistant', agent: 'debate_planner' },
         { id: 'msg-reporter', role: 'assistant', agent: 'reporter' },
       ];
 
@@ -113,7 +122,7 @@ describe('MessageListView - Issue #588: React Key Warnings Fix', () => {
           return (
             msg.role === 'user' ||
             msg.agent === 'coordinator' ||
-            msg.agent === 'planner' ||
+            isPlannerAgent(msg.agent) ||
             msg.agent === 'podcast' ||
             researchIds.has(msg.id) // Only startOfResearch messages
           );
@@ -241,7 +250,13 @@ describe('MessageListView - Issue #588: React Key Warnings Fix', () => {
   describe('Renderable Message Filtering', () => {
     it('should maintain correct message order after filtering', () => {
       type MessageType = 'user' | 'assistant';
-      type Agent = 'coordinator' | 'planner' | 'researcher' | 'coder' | 'podcast';
+      type Agent =
+        | 'coordinator'
+        | 'planner'
+        | 'debate_planner'
+        | 'researcher'
+        | 'coder'
+        | 'podcast';
 
       interface MockMessage {
         id: string;
@@ -263,7 +278,7 @@ describe('MessageListView - Issue #588: React Key Warnings Fix', () => {
         ['msg-coder-1', { id: 'msg-coder-1', role: 'assistant', agent: 'coder' }],
         ['msg-coordinator', { id: 'msg-coordinator', role: 'assistant', agent: 'coordinator' }],
         ['msg-researcher-1', { id: 'msg-researcher-1', role: 'assistant', agent: 'researcher' }],
-        ['msg-planner', { id: 'msg-planner', role: 'assistant', agent: 'planner' }],
+        ['msg-planner', { id: 'msg-planner', role: 'assistant', agent: 'debate_planner' }],
         ['msg-podcast', { id: 'msg-podcast', role: 'assistant', agent: 'podcast' }],
       ]);
 
@@ -276,7 +291,7 @@ describe('MessageListView - Issue #588: React Key Warnings Fix', () => {
           return (
             msg.role === 'user' ||
             msg.agent === 'coordinator' ||
-            msg.agent === 'planner' ||
+            isPlannerAgent(msg.agent) ||
             msg.agent === 'podcast' ||
             researchIds.has(id)
           );
@@ -299,7 +314,12 @@ describe('MessageListView - Issue #588: React Key Warnings Fix', () => {
 
     it('should update renderable list when research starts', () => {
       type MessageType = 'user' | 'assistant';
-      type Agent = 'researcher' | 'coordinator' | 'planner' | 'podcast';
+      type Agent =
+        | 'researcher'
+        | 'coordinator'
+        | 'planner'
+        | 'debate_planner'
+        | 'podcast';
 
       interface MockMessage {
         id: string;
@@ -328,7 +348,7 @@ describe('MessageListView - Issue #588: React Key Warnings Fix', () => {
           return (
             msg.role === 'user' ||
             msg.agent === 'coordinator' ||
-            msg.agent === 'planner' ||
+            isPlannerAgent(msg.agent) ||
             msg.agent === 'podcast' ||
             researchIds.has(id)
           );
@@ -376,7 +396,12 @@ describe('MessageListView - Issue #588: React Key Warnings Fix', () => {
     it('should pass React key validation with filtered renderable messages', () => {
       // Simulate React key validation on renderable message IDs
       type MessageType = 'user' | 'assistant';
-      type Agent = 'coordinator' | 'planner' | 'podcast' | 'coder';
+      type Agent =
+        | 'coordinator'
+        | 'planner'
+        | 'debate_planner'
+        | 'podcast'
+        | 'coder';
 
       interface MockMessage {
         id: string;
@@ -388,7 +413,7 @@ describe('MessageListView - Issue #588: React Key Warnings Fix', () => {
         { id: 'msg-user-1', role: 'user' },
         { id: 'msg-coder-1', role: 'assistant', agent: 'coder' }, // Not renderable
         { id: 'msg-coordinator', role: 'assistant', agent: 'coordinator' },
-        { id: 'msg-planner', role: 'assistant', agent: 'planner' },
+        { id: 'msg-planner', role: 'assistant', agent: 'debate_planner' },
         { id: 'msg-podcast', role: 'assistant', agent: 'podcast' },
         { id: 'msg-coder-1', role: 'assistant', agent: 'coder' }, // Duplicate attempt
       ];
@@ -400,7 +425,7 @@ describe('MessageListView - Issue #588: React Key Warnings Fix', () => {
         return (
           msg.role === 'user' ||
           msg.agent === 'coordinator' ||
-          msg.agent === 'planner' ||
+          isPlannerAgent(msg.agent) ||
           msg.agent === 'podcast' ||
           researchIds.has(msg.id)
         );

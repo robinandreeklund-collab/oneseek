@@ -3,18 +3,25 @@
 
 export type MessageRole = "user" | "assistant" | "tool";
 
+export type PlannerAgentName = "planner" | `${string}_planner`;
+export type AgentName =
+  | "coordinator"
+  | "researcher"
+  | "coder"
+  | "reporter"
+  | "podcast"
+  | "analyst"
+  | "ai_comparison"
+  | PlannerAgentName;
+
+export function isPlannerAgent(agent?: string): agent is PlannerAgentName {
+  return agent === "planner" || (typeof agent === "string" && agent.endsWith("_planner"));
+}
+
 export interface Message {
   id: string;
   threadId: string;
-  agent?:
-    | "coordinator"
-    | "planner"
-    | "researcher"
-    | "coder"
-    | "reporter"
-    | "podcast"
-    | "analyst"
-    | "ai_comparison";
+  agent?: AgentName;
   role: MessageRole;
   isStreaming?: boolean;
   content: string;

@@ -10,7 +10,7 @@
  * - Handling tool call results
  */
 
-import type { Message } from '~/core/messages';
+import { isPlannerAgent, type Message } from '~/core/messages';
 
 /**
  * Helper function to test duplicate prevention logic
@@ -42,7 +42,7 @@ function filterRenderableMessageIds(
 
     // Only include messages that match MessageListItem rendering conditions
     // These are the same conditions checked in MessageListItem component
-    const isPlanner = message.agent === 'planner';
+    const isPlanner = isPlannerAgent(message.agent);
     const isPodcast = message.agent === 'podcast';
     const isStartOfResearch = researchIds.includes(messageId);
 
@@ -141,13 +141,13 @@ describe('Issue #588: Message ID Management and Filtering', () => {
       expect(renderable).toContain('msg-1');
     });
 
-    it('should include planner messages', () => {
+    it('should include planner messages (including variants)', () => {
       const messageIds = ['msg-1'];
       const messages = new Map<string, Message>([
         ['msg-1', {
           id: 'msg-1',
           role: 'assistant',
-          agent: 'planner',
+          agent: 'debate_planner',
           content: 'Planning',
           contentChunks: ['Planning'],
         } as Message],
@@ -462,7 +462,7 @@ describe('Issue #588: Message ID Management and Filtering', () => {
           ['msg-1', {
             id: 'msg-1',
             role: 'assistant',
-            agent: 'planner',
+            agent: 'debate_planner',
             content: '',
             contentChunks: [],
           } as Message],
