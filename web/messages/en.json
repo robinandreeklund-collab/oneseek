@@ -174,7 +174,8 @@
       "downloadPodcast": "Download podcast",
       "generatePodcastPrompt": "Please generate a podcast for the above research.",
       "editPlan": "Edit plan",
-      "startResearch": "Start research"
+      "startResearch": "Start research",
+      "startDebate": "Start debate"
     },
     "evaluation": {
       "title": "Report Quality Evaluation",

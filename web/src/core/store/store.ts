@@ -472,11 +472,14 @@ export function useMessageIds() {
 export function useRenderableMessageIds() {
   return useStore(
     useShallow((state) => {
+      const seenPlannerContent = new Set<string>();
+      const renderableIds: string[] = [];
       // Filter to only messages that will actually render in MessageListView
       // This prevents duplicate keys and React warnings when messages change state
-      return state.messageIds.filter((messageId) => {
+      for (let i = state.messageIds.length - 1; i >= 0; i--) {
+        const messageId = state.messageIds[i]!;
         const message = state.messages.get(messageId);
-        if (!message) return false;
+        if (!message) continue;
 
         // Only include messages that match MessageListItem rendering conditions
         // These are the same conditions checked in MessageListItem component
@@ -485,18 +488,31 @@ export function useRenderableMessageIds() {
         const isStartOfResearch = state.researchIds.includes(messageId);
 
         // Planner, podcast, and research cards always render (they have their own content)
-        if (isPlanner || isPodcast || isStartOfResearch) {
-          return true;
-        }
+        let isRenderable = isPlanner || isPodcast || isStartOfResearch;
 
         // For user and coordinator messages, only include if they have content
         // This prevents empty dividers from appearing in the UI
-        if (message.role === "user" || message.agent === "coordinator") {
-          return !!message.content;
+        if (!isRenderable && (message.role === "user" || message.agent === "coordinator")) {
+          isRenderable = !!message.content;
         }
 
-        return false;
-      });
+        if (!isRenderable) {
+          continue;
+        }
+
+        if (isPlanner) {
+          const contentKey = (message.content ?? "").trim();
+          if (contentKey && !message.isStreaming) {
+            if (seenPlannerContent.has(contentKey)) {
+              continue;
+            }
+            seenPlannerContent.add(contentKey);
+          }
+        }
+
+        renderableIds.push(messageId);
+      }
+      return renderableIds.reverse();
     }),
   );
 }
@@ -504,11 +520,11 @@ export function useRenderableMessageIds() {
 export function useLastInterruptMessage() {
   return useStore(
     useShallow((state) => {
-      if (state.messageIds.length >= 2) {
-        const lastMessage = state.messages.get(
-          state.messageIds[state.messageIds.length - 1]!,
-        );
-        return lastMessage?.finishReason === "interrupt" ? lastMessage : null;
+      for (let i = state.messageIds.length - 1; i >= 0; i--) {
+        const message = state.messages.get(state.messageIds[i]!);
+        if (message?.finishReason === "interrupt") {
+          return message;
+        }
       }
       return null;
     }),
@@ -518,12 +534,21 @@ export function useLastInterruptMessage() {
 export function useLastFeedbackMessageId() {
   const waitingForFeedbackMessageId = useStore(
     useShallow((state) => {
-      if (state.messageIds.length >= 2) {
-        const lastMessage = state.messages.get(
-          state.messageIds[state.messageIds.length - 1]!,
-        );
-        if (lastMessage && lastMessage.finishReason === "interrupt") {
-          return state.messageIds[state.messageIds.length - 2];
+      let interruptIndex = -1;
+      for (let i = state.messageIds.length - 1; i >= 0; i--) {
+        const message = state.messages.get(state.messageIds[i]!);
+        if (message?.finishReason === "interrupt") {
+          interruptIndex = i;
+          break;
+        }
+      }
+      if (interruptIndex <= 0) {
+        return null;
+      }
+      for (let i = interruptIndex - 1; i >= 0; i--) {
+        const message = state.messages.get(state.messageIds[i]!);
+        if (isPlannerAgent(message?.agent)) {
+          return state.messageIds[i]!;
         }
       }
       return null;

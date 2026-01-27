@@ -174,7 +174,8 @@
       "downloadPodcast": "Ladda ner podcast",
       "generatePodcastPrompt": "Vänligen generera en podcast för ovanstående forskning.",
       "editPlan": "Redigera plan",
-      "startResearch": "Starta forskning"
+      "startResearch": "Starta forskning",
+      "startDebate": "Start Debatt"
     },
     "evaluation": {
       "title": "Utvärdering av rapportkvalitet",
