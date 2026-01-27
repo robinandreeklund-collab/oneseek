@@ -47,7 +47,9 @@ coordinator (analyzes query and routes based on mode)
 
 4. **Research Team → Researcher Node**
    - Executes debate plan steps sequentially
-   - When in debate mode, receives specialized debate tools:
+   - **Key Point**: Tools are exposed to LLM ONLY in researcher node, NOT in debate_planner
+   - Debate_planner creates plan WITHOUT seeing tools (just knows debate pattern)
+   - When researcher receives the plan in debate mode, it loads specialized debate tools:
      - `start_debate_round` - Initialize round with randomized order
      - `query_model_in_round` - Query a specific AI model
      - `run_internal_analysis` - OneSeek's internal fact-checking
@@ -604,6 +606,268 @@ LLM finishes → Returns completion message
 ```
 
 This pattern repeats for Steps 2 (Round 2), 3 (Round 3), and 4 (Voting).
+
+### Tool Exposure Flow: Planner vs Researcher 🔍
+
+**CRITICAL ARCHITECTURAL UNDERSTANDING**: Tools are exposed ONLY in the researcher node, NOT in the planner node!
+
+#### Where Tools Are Visible
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│              Tool Visibility Across Nodes                        │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  coordinator node:     🚫 NO TOOLS                              │
+│    └─ Routes based on mode flags                                │
+│                                                                  │
+│  debate_planner node:  🚫 NO TOOLS VISIBLE                      │
+│    └─ Creates plan from pattern knowledge                       │
+│    └─ Knows: "Debate = 3 rounds + 5 models + voting"            │
+│    └─ Does NOT see actual tool signatures or parameters         │
+│    └─ Uses debate-specific prompt with structure knowledge      │
+│                                                                  │
+│  human_feedback node:  🚫 NO TOOLS                              │
+│    └─ Reviews and approves plan                                 │
+│                                                                  │
+│  research_team node:   🚫 NO TOOLS                              │
+│    └─ Routing logic only                                        │
+│                                                                  │
+│  researcher node:      ✅ TOOLS EXPOSED HERE!                   │
+│    └─ Receives approved plan from debate_planner                │
+│    └─ Dynamically loads tools based on enable_debate_mode flag  │
+│    └─ LLM sees tools + step description → makes tool calls      │
+│    └─ Tool swapping happens here (debate vs research tools)     │
+│                                                                  │
+│  reporter node:        🚫 NO TOOLS                              │
+│    └─ Synthesizes results                                       │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+#### How Plans Are Created Without Tools
+
+**The Key Insight**: The debate_planner doesn't need to see tools! It creates a strategic plan based on:
+
+1. **Debate-specific prompt**: System prompt teaches the debate structure
+2. **Pattern knowledge**: "Debates have 3 rounds, models answer sequentially, then vote"
+3. **High-level steps**: Creates step descriptions like "Round 1: All models argue"
+
+**Example Plan Creation**:
+
+```python
+# debate_planner_node (NO TOOLS VISIBLE)
+# Just knows the debate pattern from its prompt
+
+def debate_planner_node(state):
+    # LLM reads debate-specific prompt:
+    # "Create a plan for multi-model debate.
+    #  Structure: 3 rounds + voting.
+    #  Each round: models speak in random order."
+    
+    # Creates strategic plan:
+    plan = Plan(
+        topic=state.query,
+        steps=[
+            Step(1, "Round 1: Initial arguments from all 5 models"),
+            Step(2, "Round 2: Development based on Round 1"),
+            Step(3, "Round 3: Synthesis and final positions"),
+            Step(4, "Voting: External models vote on best answer")
+        ]
+    )
+    
+    return Command(goto="human_feedback", update={"plan": plan})
+
+# researcher_node (TOOLS VISIBLE HERE)
+# Executes the plan with actual debate tools
+
+def researcher_node(state):
+    # Tool swapping based on mode:
+    if state.enable_debate_mode:
+        tools = get_debate_tools()  # ← Tools loaded HERE
+    else:
+        tools = get_research_tools()
+    
+    # LLM sees Step 1: "Round 1: Initial arguments from all 5 models"
+    # LLM also sees available tools with schemas
+    # LLM decides: "I need start_debate_round, then query_model_in_round 5 times"
+    
+    agent = create_agent_with_tools(tools)
+    result = await agent.execute(state.current_step)
+    
+    return Command(goto="research_team", update=result)
+```
+
+**Why This Separation?**
+
+1. **Clean separation of concerns**: Strategy (planner) vs. execution (researcher)
+2. **Flexibility**: Same plan can use different tool implementations
+3. **Simplicity**: Planner focuses on "what to do", researcher on "how to do it"
+4. **Maintainability**: Tool changes don't require planner changes
+
+### Parallelism and Performance Optimization ⚡
+
+**IMPORTANT PERFORMANCE CONSIDERATION**: The system supports **up to 250 parallel model calls**!
+
+#### Current Limitation in `run_internal_analysis`
+
+The current `run_internal_analysis` tool bundles multiple operations into ONE sequential call:
+
+```python
+# CURRENT (Suboptimal):
+@tool
+async def run_internal_analysis(query: str) -> str:
+    # Does EVERYTHING in sequence within one tool call:
+    debate_flow = get_debate_flow()
+    
+    # 1. Web search (5 seconds)
+    search_results = await search_tool.invoke(query)
+    
+    # 2. Claim detection (potential, not implemented)
+    # claims = await claim_detector.detect(responses)
+    
+    # 3. Fact checking (potential, not implemented)
+    # facts = await fact_checker.verify(claims)
+    
+    # 4. Logical consistency (potential, not implemented)
+    # consistency = await consistency_checker.check(responses)
+    
+    return "Analysis complete"  # 1 tool call = 1 slot used
+```
+
+**Problem**: This uses only **1 out of 250 parallel slots**!
+
+#### Optimized Approach: Separate Tools for Parallel Execution
+
+**RECOMMENDED ARCHITECTURE**:
+
+Break `run_internal_analysis` into multiple specialized tools that LLM can call in parallel:
+
+```python
+# OPTIMIZED (Better parallelism):
+
+@tool
+async def web_search_query(query: str) -> str:
+    """Search web for claims verification."""
+    return await search_tool.invoke(query)
+
+@tool
+async def detect_claims(text: str) -> List[str]:
+    """Meta-agent: Extract factual claims from text."""
+    return await claim_detector_agent.detect(text)
+
+@tool
+async def verify_fact(claim: str) -> dict:
+    """Meta-agent: Verify a specific factual claim."""
+    return await fact_checker_agent.verify(claim)
+
+@tool
+async def check_logical_consistency(argument: str) -> dict:
+    """Meta-agent: Analyze logical structure."""
+    return await logic_checker_agent.check(argument)
+
+@tool
+async def find_counter_arguments(position: str) -> List[str]:
+    """Find counter-arguments to a position."""
+    return await counter_arg_finder.find(position)
+
+@tool
+async def validate_sources(sources: List[str]) -> dict:
+    """Meta-agent: Validate credibility of sources."""
+    return await source_validator.validate(sources)
+```
+
+**LLM Can Now Make Parallel Calls**:
+
+```python
+# Instead of 1 sequential call using 1 slot:
+run_internal_analysis("query")  # 1 slot, sequential inside
+
+# LLM makes 6 parallel calls using 6 slots simultaneously:
+[
+    web_search_query("nuclear power climate"),      # Slot 1 ⎤
+    detect_claims(model_response),                  # Slot 2 ⎥
+    verify_fact("Nuclear reduces CO2"),             # Slot 3 ⎬ Parallel!
+    check_logical_consistency(argument),            # Slot 4 ⎥
+    find_counter_arguments("Pro-nuclear stance"),   # Slot 5 ⎥
+    validate_sources(["IEA", "IPCC"])              # Slot 6 ⎦
+]
+
+# All 6 execute in parallel → Results come back together
+# Total time = slowest single call, NOT sum of all calls
+```
+
+#### Performance Benefit Example
+
+**Sequential (current)**:
+- Web search: 5s
+- Claim detection: 3s
+- Fact checking: 4s
+- Logic check: 2s
+- **Total: 14 seconds** ⏱️
+
+**Parallel (optimized)**:
+- All run simultaneously
+- **Total: 5 seconds** (longest single operation) ⚡
+- **~3x faster!**
+
+#### Recommended Debate Tools Architecture
+
+```
+Current (5 tools):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ start_debate_round          - Initialize round
+✅ query_model_in_round         - Query AI model
+⚠️  run_internal_analysis       - Bundled analysis (sequential)
+✅ collect_debate_votes         - Gather votes
+✅ get_debate_summary           - Compile results
+
+Optimized (10+ tools):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ start_debate_round           - Initialize round
+✅ query_model_in_round          - Query AI model
+
+Analysis Tools (can run in parallel):
+✅ web_search_query             - Search web
+✅ detect_claims                - Meta-agent: Extract claims
+✅ verify_fact                  - Meta-agent: Check facts
+✅ check_logical_consistency    - Meta-agent: Logic analysis
+✅ find_counter_arguments       - Find opposing views
+✅ validate_sources             - Meta-agent: Source credibility
+
+Completion Tools:
+✅ collect_debate_votes         - Gather votes
+✅ get_debate_summary           - Compile results
+```
+
+#### Implementation Benefit
+
+With separate tools, after each model responds in debate, LLM can:
+
+```
+Model 1 responds →
+  LLM makes 5 PARALLEL analysis calls:
+  ├─ web_search_query("verify claim X")          ⎤
+  ├─ detect_claims(model1_response)              ⎥
+  ├─ verify_fact("claim from response")          ⎬ All parallel!
+  ├─ check_logical_consistency(argument)         ⎥
+  └─ find_counter_arguments(model1_position)     ⎦
+  
+  Results arrive → Model 2 can respond with enriched context
+```
+
+This maximizes the system's 250 parallel call capacity and dramatically improves performance!
+
+### Migration Path
+
+To implement optimized parallelism:
+
+1. **Keep current `run_internal_analysis` for compatibility**
+2. **Add new specialized tools** (web_search_query, detect_claims, etc.)
+3. **Update debate prompt** to encourage parallel tool usage
+4. **Meta-agents** (claim_detector, fact_checker, etc.) become **individual tools**
+5. **Monitor performance** improvement (should see ~2-3x speedup)
+
 - `human_feedback` → `research_team`
 - `research_team` → `reporter`
 - `reporter` → END

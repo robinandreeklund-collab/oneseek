@@ -422,6 +422,373 @@ LLM Reasoning & Tool Calls:
 5. **State-driven**: Tool selection is driven by state flags (enable_debate_mode, etc.)
 6. **Plan-driven**: The plan's step descriptions guide the LLM's tool usage strategy
 
+### Critical Architectural Clarification: Tool Exposure Flow 🔍
+
+**IMPORTANT**: Tools are exposed ONLY in the **researcher node**, NOT in planner nodes!
+
+#### Complete Tool Visibility Map
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│           Tool Visibility Across All Nodes                      │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  START node:           🚫 NO TOOLS                             │
+│                                                                 │
+│  coordinator node:     🚫 NO TOOLS                             │
+│    Role: Routing based on mode flags                           │
+│    Decision: Check enable_debate_mode, enable_ai_comparison    │
+│                                                                 │
+│  planner node:         🚫 NO TOOLS (Research Planning)         │
+│    Role: Create research plan                                  │
+│    Method: Uses LLM with planning prompt (NO tool access)      │
+│    Creates: Plan object with steps                             │
+│    Knowledge: Understands research patterns from prompt        │
+│                                                                 │
+│  debate_planner node:  🚫 NO TOOLS (Debate Planning)           │
+│    Role: Create debate plan                                    │
+│    Method: Uses LLM with debate-specific prompt (NO tools)     │
+│    Creates: Plan with 4 steps (Round 1, 2, 3, Voting)          │
+│    Knowledge: Understands debate structure from prompt         │
+│      - "Debates have 3 rounds"                                 │
+│      - "Models speak in random order"                          │
+│      - "Voting happens after round 3"                          │
+│    Does NOT need: Actual tool signatures/parameters            │
+│                                                                 │
+│  human_feedback node:  🚫 NO TOOLS                             │
+│    Role: Plan review and approval                              │
+│    Interaction: User approves/rejects plan                     │
+│                                                                 │
+│  research_team node:   🚫 NO TOOLS (Routing Logic)             │
+│    Role: Route to appropriate specialist                       │
+│    Method: Check current_step, route to researcher/etc.        │
+│                                                                 │
+│  background_investigator: 🔧 TOOLS (Background Research)       │
+│    Tools: web_search, crawler, summarizer                      │
+│    Role: Quick context gathering before main research          │
+│                                                                 │
+│  researcher node:      ✅ TOOLS EXPOSED HERE!                  │
+│    Role: Execute plan steps with tools                         │
+│    Method: Tool swapping based on state.enable_debate_mode     │
+│                                                                 │
+│    IF enable_debate_mode = True:                               │
+│      Tools = [start_debate_round, query_model_in_round,        │
+│               run_internal_analysis, collect_debate_votes,     │
+│               get_debate_summary]                              │
+│                                                                 │
+│    ELSE (normal research):                                     │
+│      Tools = [web_search, crawl, retriever, calculator,        │
+│               python_repl, ...]                                │
+│                                                                 │
+│    LLM sees: Current step description + Available tools        │
+│    LLM decides: Which tools to call and in what order          │
+│                                                                 │
+│  ai_comparison node:   🔧 TOOLS (Internal, Not LLM-Exposed)    │
+│    Tools: query_external_model (used internally, not by LLM)   │
+│    Role: Compare AI model responses                            │
+│    Method: Hardcoded tool sequence (not LLM-driven)            │
+│                                                                 │
+│  reporter node:        🚫 NO TOOLS                             │
+│    Role: Synthesize results into final report                  │
+│    Method: Format results from state                           │
+│                                                                 │
+│  END node:             🚫 NO TOOLS                             │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### Why Planners Don't Need Tools
+
+**Key Architectural Principle**: Separation of strategy (planning) from tactics (execution).
+
+**Planner Node (debate_planner example)**:
+```python
+def debate_planner_node(state: State) -> Command:
+    """
+    Creates debate plan WITHOUT seeing tools.
+    Uses debate-specific system prompt that teaches structure.
+    """
+    
+    # System prompt contains knowledge:
+    system_prompt = """
+    You are creating a plan for a multi-model debate.
+    
+    Structure:
+    - 3 rounds of sequential model responses
+    - Each round: randomize order, all 5 models respond
+    - After each model: internal analysis for fact-checking
+    - After round 3: external models vote on best answer
+    - Finally: compile summary
+    
+    Create a plan with 4 steps following this structure.
+    """
+    
+    # LLM creates plan based on PATTERN KNOWLEDGE, not tool access
+    llm = get_llm("basic")  # No tools attached!
+    
+    response = llm.invoke([
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=f"Create debate plan for: {state.query}")
+    ])
+    
+    plan = parse_plan(response)  # Extracts Plan object
+    
+    # Plan contains high-level steps:
+    # Step 1: "Round 1: All models provide initial arguments"
+    # Step 2: "Round 2: Models develop arguments"
+    # Step 3: "Round 3: Final positions and synthesis"
+    # Step 4: "Voting and summary"
+    
+    return Command(goto="human_feedback", update={"plan": plan})
+```
+
+**Researcher Node (execution with tools)**:
+```python
+def researcher_node(state: State) -> Command:
+    """
+    Executes plan WITH tools.
+    Tools are loaded based on mode.
+    """
+    
+    # Tool swapping based on mode
+    if state.enable_debate_mode:
+        tools = get_debate_tools()  # ← Tools loaded HERE
+    else:
+        tools = get_research_tools()
+    
+    # LLM with tools
+    llm = get_llm("basic")
+    agent = create_agent(llm, tools)  # Tools bound to agent
+    
+    # Execute current step
+    current_step = state.plan.steps[state.current_step_index]
+    
+    # LLM sees:
+    # 1. Step description: "Round 1: All models provide initial arguments"
+    # 2. Available tools with full schemas
+    # 3. System prompt explaining how to use tools
+    
+    result = agent.invoke({
+        "step": current_step,
+        "history": state.messages
+    })
+    
+    # LLM made tool calls: start_debate_round, query_model_in_round, etc.
+    
+    return Command(goto="research_team", update={"step_result": result})
+```
+
+**Benefits of This Separation**:
+
+1. **Simplicity**: Planners focus on "what to do", not "how to do it"
+2. **Flexibility**: Same plan can be executed with different tool implementations
+3. **Testability**: Can test planning and execution independently
+4. **Maintainability**: Tool changes don't affect planner logic
+5. **Clarity**: Clear boundary between strategy and tactics
+
+### Performance Optimization: Parallelism and Tool Design ⚡
+
+**CRITICAL PERFORMANCE INSIGHT**: The system supports **up to 250 parallel LLM calls**!
+
+#### Current Bottleneck: Bundled Tools
+
+Many operations are currently bundled into single tools, limiting parallelism:
+
+```python
+# CURRENT (Suboptimal for parallelism):
+@tool
+async def run_internal_analysis(query: str) -> str:
+    """
+    Performs multiple analyses sequentially within one tool call.
+    Uses only 1 out of 250 parallel slots!
+    """
+    # 1. Web search (5 seconds)
+    search_results = await web_search(query)
+    
+    # 2. Claim detection (3 seconds) - Meta-agent
+    # claims = await claim_detector_agent.detect(responses)
+    
+    # 3. Fact verification (4 seconds) - Meta-agent
+    # verified = await fact_checker_agent.verify(claims)
+    
+    # 4. Logical consistency (2 seconds) - Meta-agent
+    # consistency = await logic_checker_agent.check(argument)
+    
+    # Total: 14 seconds sequentially
+    # Uses: 1 parallel slot
+    
+    return "Analysis complete with all checks"
+```
+
+**Problem**: All operations run sequentially inside ONE tool call!
+
+#### Optimized Approach: Granular Tools for Parallel Execution
+
+**RECOMMENDED**: Break bundled tools into fine-grained tools that LLM can call in parallel:
+
+```python
+# OPTIMIZED (Better parallelism):
+
+@tool
+async def web_search_query(query: str, max_results: int = 5) -> dict:
+    """Search the web for information."""
+    return await web_search_tool.invoke(query, max_results)
+
+@tool
+async def detect_claims_in_text(text: str) -> List[str]:
+    """
+    Meta-agent: Extract factual claims from text.
+    Uses specialized claim detection model.
+    """
+    return await claim_detector_agent.detect(text)
+
+@tool
+async def verify_factual_claim(claim: str) -> dict:
+    """
+    Meta-agent: Verify a specific factual claim against sources.
+    Returns: {verified: bool, confidence: float, sources: List[str]}
+    """
+    return await fact_checker_agent.verify(claim)
+
+@tool
+async def check_logical_consistency(argument: str) -> dict:
+    """
+    Meta-agent: Analyze logical structure and detect fallacies.
+    Returns: {is_consistent: bool, fallacies: List[str], score: float}
+    """
+    return await logic_checker_agent.check(argument)
+
+@tool
+async def find_counter_arguments(position: str, topic: str) -> List[str]:
+    """Find counter-arguments to a given position."""
+    return await counter_argument_finder.find(position, topic)
+
+@tool
+async def validate_information_sources(sources: List[str]) -> dict:
+    """
+    Meta-agent: Validate credibility and reliability of sources.
+    Returns: {source: str, credibility_score: float, reputation: str}
+    """
+    return await source_validator.validate(sources)
+
+@tool
+async def extract_key_entities(text: str) -> List[dict]:
+    """
+    Meta-agent: Extract named entities and their relationships.
+    Returns entities with types and confidence scores.
+    """
+    return await entity_extractor_agent.extract(text)
+```
+
+#### Parallel Execution Example
+
+With granular tools, the LLM can make parallel calls:
+
+```python
+# After Model 1 responds in debate:
+model1_response = "Nuclear power produces 55% less CO2 than coal..."
+
+# LLM makes 6 PARALLEL tool calls:
+parallel_calls = [
+    web_search_query("nuclear power CO2 emissions vs coal"),     # Slot 1  ⎤
+    detect_claims_in_text(model1_response),                      # Slot 2  ⎥
+    verify_factual_claim("Nuclear power 55% less CO2"),          # Slot 3  ⎥
+    check_logical_consistency(model1_response),                  # Slot 4  ⎬ Parallel!
+    find_counter_arguments("Pro-nuclear stance", topic),         # Slot 5  ⎥
+    validate_information_sources(["IEA", "IPCC", "WNA"]),       # Slot 6  ⎦
+]
+
+# All execute simultaneously
+# Total time = max(call_times) ≈ 5 seconds
+# NOT sum(call_times) ≈ 21 seconds
+```
+
+**Performance Gain**: ~4x faster! (5s vs 21s)
+
+#### Meta-Agents as Individual Tools
+
+**Current Confusion**: Are meta-agents tools or not?
+
+**Answer**: Meta-agents SHOULD be exposed as individual tools for maximum parallelism!
+
+**Meta-Agent Tool Pattern**:
+
+```python
+@tool
+async def claim_detector_meta_agent(text: str) -> List[str]:
+    """
+    Specialized meta-agent for claim detection.
+    Uses fine-tuned model for extracting factual claims.
+    
+    This is a TOOL that wraps a meta-agent.
+    """
+    meta_agent = get_meta_agent("claim_detector")
+    claims = await meta_agent.process(text)
+    return claims
+
+# Benefits:
+# 1. Can be called in parallel with other tools
+# 2. Encapsulates complex meta-agent logic
+# 3. LLM sees it as a regular tool in the toolset
+# 4. Maintains separation of concerns
+```
+
+#### Recommended Tool Architecture for Debate Mode
+
+```
+Current Debate Tools (5):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ start_debate_round           - Round initialization
+✅ query_model_in_round          - AI model query
+⚠️  run_internal_analysis        - Bundled (suboptimal)
+✅ collect_debate_votes          - Voting collection
+✅ get_debate_summary            - Final compilation
+
+Optimized Debate Tools (13+):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Core Debate:
+✅ start_debate_round           - Round initialization
+✅ query_model_in_round          - AI model query
+
+Analysis Tools (parallel-capable):
+✅ web_search_query             - Web search
+✅ detect_claims                - Meta-agent tool
+✅ verify_fact                  - Meta-agent tool
+✅ check_logical_consistency    - Meta-agent tool
+✅ find_counter_arguments       - Counter-arg finder
+✅ validate_sources             - Meta-agent tool
+✅ extract_entities             - Meta-agent tool
+✅ detect_bias                  - Meta-agent tool (optional)
+
+Completion:
+✅ collect_debate_votes         - Voting collection
+✅ get_debate_summary           - Final compilation
+```
+
+#### Migration Strategy
+
+To implement optimized parallelism without breaking existing functionality:
+
+1. **Phase 1**: Keep `run_internal_analysis` for backward compatibility
+2. **Phase 2**: Add new granular tools (web_search_query, detect_claims, etc.)
+3. **Phase 3**: Update debate system prompt to encourage parallel tool usage
+4. **Phase 4**: Expose meta-agents as individual tools
+5. **Phase 5**: Monitor performance improvement (expect 2-4x speedup)
+6. **Phase 6**: Deprecate `run_internal_analysis` once new tools are proven
+
+#### Performance Metrics
+
+**Expected Improvements with Parallel Tools**:
+
+| Scenario | Sequential (current) | Parallel (optimized) | Speedup |
+|----------|---------------------|---------------------|---------|
+| After each model response | 14s (bundled) | 5s (parallel) | 2.8x |
+| Full Round 1 (5 models) | 70s analysis time | 25s analysis time | 2.8x |
+| Complete 3-round debate | 210s analysis | 75s analysis | 2.8x |
+| With 250 parallel capacity | Limited to ~20 ops | Can do 250 parallel | 12.5x potential |
+
+**Real-World Benefit**: A 3-round debate that takes 5 minutes today could take ~2 minutes with optimized parallelism!
+
 ## State Management
 
 Key state fields used for routing:
