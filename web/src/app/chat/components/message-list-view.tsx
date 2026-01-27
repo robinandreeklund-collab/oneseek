@@ -36,6 +36,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "~/components/ui/collapsible";
+import { isPlannerAgent } from "~/core/messages";
 import type { Message, Option } from "~/core/messages";
 import {
   closeResearch,
@@ -145,12 +146,12 @@ function MessageListItem({
     if (
       message.role === "user" ||
       message.agent === "coordinator" ||
-      message.agent === "planner" ||
+      isPlannerAgent(message.agent) ||
       message.agent === "podcast" ||
       startOfResearch
     ) {
       let content: React.ReactNode;
-      if (message.agent === "planner") {
+      if (isPlannerAgent(message.agent)) {
         content = (
           <div className="w-full px-4">
             <PlanCard

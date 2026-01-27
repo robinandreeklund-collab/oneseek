@@ -7,8 +7,8 @@ import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 
 import { chatStream, generatePodcast } from "../api";
+import { isPlannerAgent, mergeMessage } from "../messages";
 import type { Citation, Message, Resource } from "../messages";
-import { mergeMessage } from "../messages";
 import { parseJSON } from "../utils";
 
 import { getChatStreamSettings } from "./settings-store";
@@ -319,7 +319,7 @@ function appendResearch(researchId: string) {
   const reversedMessageIds = [...useStore.getState().messageIds].reverse();
   for (const messageId of reversedMessageIds) {
     const message = getMessage(messageId);
-    if (!planMessage && message?.agent === "planner") {
+    if (!planMessage && isPlannerAgent(message?.agent)) {
       planMessage = message;
     }
     if (!userQuery && message?.role === "user") {
@@ -479,7 +479,7 @@ export function useRenderableMessageIds() {
 
         // Only include messages that match MessageListItem rendering conditions
         // These are the same conditions checked in MessageListItem component
-        const isPlanner = message.agent === "planner";
+        const isPlanner = isPlannerAgent(message.agent);
         const isPodcast = message.agent === "podcast";
         const isStartOfResearch = state.researchIds.includes(messageId);
 
