@@ -339,12 +339,18 @@ def background_investigation_node(state: State, config: RunnableConfig):
 
 def planner_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["human_feedback", "reporter"]]:
+) -> Command[Literal["human_feedback", "reporter", "ai_comparison"]]:
     """Planner node that generate the full plan."""
     logger.info("Planner generating full plan with locale: %s", state.get("locale", "en-US"))
     configurable = Configuration.from_runnable_config(config)
     plan_iterations = state["plan_iterations"] if state.get("plan_iterations", 0) else 0
 
+    # Determine which prompt template to use based on mode
+    prompt_name = "planner"  # default
+    if state.get("enable_debate_mode", False):
+        prompt_name = "debate_planner"
+        logger.info("Using debate_planner prompt template")
+    
     # For clarification feature: use the clarified research topic (complete history)
     if state.get("enable_clarification", False) and state.get(
         "clarified_research_topic"
@@ -355,14 +361,14 @@ def planner_node(
             {"role": "user", "content": state["clarified_research_topic"]}
         ]
         modified_state["research_topic"] = state["clarified_research_topic"]
-        messages = apply_prompt_template("planner", modified_state, configurable, state.get("locale", "en-US"))
+        messages = apply_prompt_template(prompt_name, modified_state, configurable, state.get("locale", "en-US"))
 
         logger.info(
             f"Clarification mode: Using clarified research topic: {state['clarified_research_topic']}"
         )
     else:
         # Normal mode: use full conversation history
-        messages = apply_prompt_template("planner", state, configurable, state.get("locale", "en-US"))
+        messages = apply_prompt_template(prompt_name, state, configurable, state.get("locale", "en-US"))
 
     if state.get("enable_background_investigation") and state.get(
         "background_investigation_results"
@@ -477,6 +483,11 @@ def planner_node(
             },
             goto="reporter",
         )
+    # Check if debate mode is enabled - debate mode still goes through human_feedback
+    # The only difference is the prompt used to generate the plan (debate_planner vs planner)
+    # and the tools used in researcher (debate tools vs research tools)
+    # No special routing needed - let it go to human_feedback like normal research
+    
     # Check if AI comparison mode is enabled
     if state.get("enable_ai_comparison", False):
         logger.info("Planner: AI comparison mode enabled, routing to ai_comparison node")
@@ -791,10 +802,12 @@ def coordinator_node(
                     if tool_name == "handoff_to_planner":
                         logger.info("Handing off to planner")
                         
-                        # Check debate mode first - route directly to debate_planner
+                        # Always route to planner first (planner will handle all modes)
+                        goto = "planner"
+                        
+                        # Log if debate mode is enabled (planner will use debate_planner prompt)
                         if state.get("enable_debate_mode", False):
-                            logger.info("Debate mode enabled, routing to debate_planner")
-                            goto = "debate_planner"
+                            logger.info("Debate mode enabled, planner will use debate_planner prompt")
                         # Check AI comparison mode - route to planner (which routes to ai_comparison)
                         elif state.get("enable_ai_comparison", False):
                             logger.info("AI comparison mode enabled, planner will route to ai_comparison")
@@ -990,10 +1003,12 @@ def coordinator_node(
                 if tool_name in ["handoff_to_planner", "handoff_after_clarification"]:
                     logger.info("Handing off to planner")
                     
-                    # Check debate mode first - route directly to debate_planner
+                    # Always route to planner first (planner will handle all modes)
+                    goto = "planner"
+                    
+                    # Log if debate mode is enabled (planner will use debate_planner prompt)
                     if state.get("enable_debate_mode", False):
-                        logger.info("Debate mode enabled, routing to debate_planner")
-                        goto = "debate_planner"
+                        logger.info("Debate mode enabled, planner will use debate_planner prompt")
                     # Check AI comparison mode - route to planner (which routes to ai_comparison)
                     elif state.get("enable_ai_comparison", False):
                         logger.info("AI comparison mode enabled, planner will route to ai_comparison")
