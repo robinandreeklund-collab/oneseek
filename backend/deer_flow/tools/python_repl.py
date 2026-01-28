@@ -3,10 +3,11 @@
 
 import logging
 import os
-from typing import Annotated, Optional
+import sys
+from io import StringIO
+from typing import Annotated, Optional, Dict, Any
 
 from langchain_core.tools import tool
-from langchain_experimental.utilities import PythonREPL
 
 from .decorators import log_io
 
@@ -20,8 +21,52 @@ def _is_python_repl_enabled() -> bool:
     return False
 
 
-# Initialize REPL and logger
-repl: Optional[PythonREPL] = PythonREPL() if _is_python_repl_enabled() else None
+class SimplePythonREPL:
+    """A simple Python REPL that maintains a persistent namespace.
+    
+    This implementation fixes the issue where function definitions
+    don't work properly by using a single namespace dict for both
+    globals and locals in exec().
+    """
+    
+    def __init__(self):
+        """Initialize the REPL with a persistent namespace."""
+        # Use a single namespace for both globals and locals
+        # This ensures function definitions are available when called
+        self.namespace: Dict[str, Any] = {
+            "__builtins__": __builtins__,
+        }
+    
+    def run(self, code: str) -> str:
+        """Execute Python code and return the output.
+        
+        Args:
+            code: Python code to execute
+            
+        Returns:
+            String output from stdout, or empty string if no output
+        """
+        # Capture stdout
+        old_stdout = sys.stdout
+        sys.stdout = StringIO()
+        
+        try:
+            # Execute code with the persistent namespace
+            # Using the same dict for both globals and locals ensures
+            # function definitions are available when called
+            exec(code, self.namespace, self.namespace)
+            
+            # Get the output
+            output = sys.stdout.getvalue()
+            return output
+            
+        finally:
+            # Always restore stdout
+            sys.stdout = old_stdout
+
+
+# Initialize REPL with custom implementation
+repl: Optional[SimplePythonREPL] = SimplePythonREPL() if _is_python_repl_enabled() else None
 logger = logging.getLogger(__name__)
 
 
@@ -49,10 +94,8 @@ def python_repl_tool(
     logger.info("Executing Python code")
     try:
         result = repl.run(code)
-        # Check if the result is an error message by looking for typical error patterns
-        if isinstance(result, str) and ("Error" in result or "Exception" in result):
-            logger.error(result)
-            return f"Error executing code:\n```python\n{code}\n```\nError: {result}"
+        # The SimplePythonREPL returns stdout output directly
+        # Empty result means successful execution with no output
         logger.info("Code execution successful")
     except BaseException as e:
         error_msg = repr(e)
