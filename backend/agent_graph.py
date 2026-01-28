@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 import operator
 
 from tools import AVAILABLE_TOOLS
+from backend.deer_flow.tools import get_workspace_files, clear_workspace_files
 
 load_dotenv()
 
@@ -398,6 +399,9 @@ class OneSeekGraphAgent:
             "enable_thinking": enable_thinking
         }
         
+        # Clear workspace files at start of run
+        clear_workspace_files()
+        
         max_iterations = 5  # Prevent infinite loops
         iteration = 0
         
@@ -486,6 +490,11 @@ class OneSeekGraphAgent:
                             "error": str(e)
                         }
                     
+                    # Add workspace files if any were tracked
+                    workspace_files = get_workspace_files()
+                    if workspace_files:
+                        tool_action["workspace_files"] = workspace_files
+                    
                     # Update the tool action in the list
                     callback("tool_action", tool_action)
             
@@ -569,6 +578,9 @@ class OneSeekGraphAgent:
             "system_prompt": system_prompt,
             "enable_thinking": enable_thinking
         }
+        
+        # Clear workspace files at start of run
+        clear_workspace_files()
         
         max_iterations = 5
         iteration = 0
@@ -657,6 +669,11 @@ class OneSeekGraphAgent:
                             "content": msg.content,
                             "error": str(e)
                         }
+                    
+                    # Add workspace files if any were tracked
+                    workspace_files = get_workspace_files()
+                    if workspace_files:
+                        tool_action["workspace_files"] = workspace_files
                     
                     # Update the tool action in the list and trigger realtime callback
                     callback("tool_action", tool_action)  # This triggers realtime_callback immediately!

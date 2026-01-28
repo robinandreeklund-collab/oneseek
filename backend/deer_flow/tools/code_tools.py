@@ -11,14 +11,60 @@ import os
 import subprocess
 import tempfile
 import json
-from typing import Annotated, Optional, Dict, Any
+import threading
+from typing import Annotated, Optional, Dict, Any, List
 from pathlib import Path
+from datetime import datetime
 
 from langchain_core.tools import tool
 
 from .decorators import log_io
 
 logger = logging.getLogger(__name__)
+
+# Thread-local storage for tracking workspace files
+_workspace_context = threading.local()
+
+
+def get_workspace_files() -> List[Dict[str, Any]]:
+    """Get the list of workspace files tracked in the current context."""
+    if not hasattr(_workspace_context, 'files'):
+        _workspace_context.files = []
+    return _workspace_context.files
+
+
+def clear_workspace_files():
+    """Clear the workspace files context."""
+    _workspace_context.files = []
+
+
+def track_workspace_file(path: str, operation: str, size: int = 0, content: Optional[str] = None):
+    """Track a file operation in the workspace context."""
+    if not hasattr(_workspace_context, 'files'):
+        _workspace_context.files = []
+    
+    # Find existing entry for this path
+    existing = next((f for f in _workspace_context.files if f['path'] == path), None)
+    
+    file_info = {
+        'path': path,
+        'name': os.path.basename(path),
+        'size': size,
+        'operation': operation,
+        'modified': datetime.now().isoformat()
+    }
+    
+    # Only include first 1000 chars of content to avoid huge payloads
+    if content and operation == 'write':
+        file_info['content'] = content[:1000] if len(content) > 1000 else content
+        file_info['truncated'] = len(content) > 1000
+    
+    if existing:
+        # Update existing entry
+        existing.update(file_info)
+    else:
+        # Add new entry
+        _workspace_context.files.append(file_info)
 
 
 def _is_linux_sandbox_enabled() -> bool:
@@ -179,6 +225,11 @@ def file_system_tool(
             
             target_path.parent.mkdir(parents=True, exist_ok=True)
             target_path.write_text(content, encoding='utf-8')
+            
+            # Track this file operation
+            file_size = len(content.encode('utf-8'))
+            track_workspace_file(path, operation, file_size, content)
+            
             return f"✓ Successfully wrote {len(content)} bytes to '{path}'"
         
         elif operation == "list":
