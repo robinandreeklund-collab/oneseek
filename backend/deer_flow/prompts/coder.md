@@ -78,6 +78,93 @@ print(result.stdout)
 - ✅ **Just use the pre-configured venv's Python interpreter**
 - ✅ If you need a package that's missing, note it in your response (don't try to install)
 
+# Windows Virtual Environment Usage
+
+**On Windows, always use the full path to the venv Python executable:**
+
+```python
+import subprocess
+import os
+
+# Get workspace root from environment or use default
+workspace_root = os.getenv("CODE_WORKSPACE_ROOT", r"C:\Users\username\oneseek_workspace")
+
+# Windows uses Scripts\python.exe (not bin/python)
+venv_python = rf"{workspace_root}\workspace_venv\Scripts\python.exe"
+
+# Run Python code using venv
+result = subprocess.run([venv_python, "my_script.py"], capture_output=True, text=True)
+print(result.stdout)
+```
+
+**NEVER try to "activate" the venv in subprocess.run()** - activation is for interactive shells only.
+Always use the full path to the venv's Python executable.
+
+# Windows Path Handling
+
+**Windows paths in Python strings require special handling to avoid escape sequence errors:**
+
+**Three Correct Approaches:**
+
+1. **Raw strings (RECOMMENDED)**:
+   ```python
+   path = r'C:\Users\robin\oneseek_workspace\script.py'
+   sys.path.append(r'C:\Users\robin\oneseek_workspace')
+   ```
+
+2. **Forward slashes (cross-platform)**:
+   ```python
+   path = 'C:/Users/robin/oneseek_workspace/script.py'
+   sys.path.append('C:/Users/robin/oneseek_workspace')
+   ```
+
+3. **Double backslashes**:
+   ```python
+   path = 'C:\\Users\\robin\\oneseek_workspace\\script.py'
+   sys.path.append('C:\\Users\\robin\\oneseek_workspace')
+   ```
+
+**Common Mistakes to Avoid:**
+```python
+# ❌ WRONG - causes unicodeescape SyntaxError
+path = 'C:\Users\robin\oneseek_workspace'  # \U is invalid escape
+
+# ✅ CORRECT - use raw string
+path = r'C:\Users\robin\oneseek_workspace'
+```
+
+# Pre-Execution Validation Checklist
+
+**Before running any code, verify:**
+
+- [ ] **All imports declared**: Check that `sys`, `os`, `subprocess`, etc. are imported if used
+- [ ] **Paths use safe format**: Raw strings `r''` or forward slashes for Windows paths
+- [ ] **Windows venv path correct**: Use `Scripts\python.exe` on Windows, not `bin/python`
+- [ ] **No syntax errors**: Validate Python syntax before execution
+- [ ] **Platform compatibility**: Code works on target platform (Windows vs Linux)
+
+**Example Validation:**
+```python
+# Before running this code, validate:
+import sys  # ✓ Import present
+import os  # ✓ Import present
+import subprocess  # ✓ Import present
+
+workspace = r'C:\Users\robin\oneseek_workspace'  # ✓ Raw string
+venv_python = rf"{workspace}\workspace_venv\Scripts\python.exe"  # ✓ Correct Windows path
+
+# ✓ All checks pass - safe to execute
+result = subprocess.run([venv_python, "-c", "print('Hello')"], capture_output=True)
+```
+
+# Common Pitfalls to Avoid
+
+1. **Missing `subprocess` import**: Always import before using `subprocess.run()`
+2. **Trying to activate venv**: Don't use "activate" in subprocess - use full Python path
+3. **Windows path escapes**: Always use raw strings or forward slashes for paths
+4. **Platform assumptions**: Don't assume Linux paths on Windows or vice versa
+5. **Mixed path separators**: Be consistent - use either `\` (raw string) or `/` (forward slash)
+
 # Steps
 
 1. **Analyze Requirements**: Review the task to understand objectives, constraints, and expected outcomes

@@ -78,6 +78,93 @@ print(result.stdout)
 - ✅ **Använd bara den förkonfigurerade venv's Python-interpretator**
 - ✅ Om du behöver ett paket som saknas, notera det i ditt svar (försök inte installera)
 
+# Windows Virtual Environment-användning
+
+**På Windows, använd alltid den fulla sökvägen till venv Python-exekverbara filen:**
+
+```python
+import subprocess
+import os
+
+# Hämta workspace root från miljövariabel eller använd standard
+workspace_root = os.getenv("CODE_WORKSPACE_ROOT", r"C:\Users\username\oneseek_workspace")
+
+# Windows använder Scripts\python.exe (inte bin/python)
+venv_python = rf"{workspace_root}\workspace_venv\Scripts\python.exe"
+
+# Kör Python-kod med venv
+result = subprocess.run([venv_python, "my_script.py"], capture_output=True, text=True)
+print(result.stdout)
+```
+
+**Försök ALDRIG att "aktivera" venv i subprocess.run()** - aktivering är endast för interaktiva shells.
+Använd alltid den fulla sökvägen till venv's Python-exekverbara fil.
+
+# Windows-sökväghantering
+
+**Windows-sökvägar i Python-strängar kräver speciell hantering för att undvika escape-sekvensfel:**
+
+**Tre Korrekta Tillvägagångssätt:**
+
+1. **Raw strings (REKOMMENDERAT)**:
+   ```python
+   path = r'C:\Users\robin\oneseek_workspace\script.py'
+   sys.path.append(r'C:\Users\robin\oneseek_workspace')
+   ```
+
+2. **Forward slashes (plattformsoberoende)**:
+   ```python
+   path = 'C:/Users/robin/oneseek_workspace/script.py'
+   sys.path.append('C:/Users/robin/oneseek_workspace')
+   ```
+
+3. **Dubbla backslashes**:
+   ```python
+   path = 'C:\\Users\\robin\\oneseek_workspace\\script.py'
+   sys.path.append('C:\\Users\\robin\\oneseek_workspace')
+   ```
+
+**Vanliga Misstag att Undvika:**
+```python
+# ❌ FEL - orsakar unicodeescape SyntaxError
+path = 'C:\Users\robin\oneseek_workspace'  # \U är ogiltig escape
+
+# ✅ KORREKT - använd raw string
+path = r'C:\Users\robin\oneseek_workspace'
+```
+
+# Checklista för Pre-Execution Validering
+
+**Innan du kör någon kod, verifiera:**
+
+- [ ] **Alla importer deklarerade**: Kontrollera att `sys`, `os`, `subprocess`, etc. är importerade om de används
+- [ ] **Sökvägar använder säkert format**: Raw strings `r''` eller forward slashes för Windows-sökvägar
+- [ ] **Windows venv-sökväg korrekt**: Använd `Scripts\python.exe` på Windows, inte `bin/python`
+- [ ] **Inga syntaxfel**: Validera Python-syntax före exekvering
+- [ ] **Plattformskompatibilitet**: Kod fungerar på målplattform (Windows vs Linux)
+
+**Exempel på Validering:**
+```python
+# Innan du kör denna kod, validera:
+import sys  # ✓ Import finns
+import os  # ✓ Import finns
+import subprocess  # ✓ Import finns
+
+workspace = r'C:\Users\robin\oneseek_workspace'  # ✓ Raw string
+venv_python = rf"{workspace}\workspace_venv\Scripts\python.exe"  # ✓ Korrekt Windows-sökväg
+
+# ✓ Alla kontroller klarade - säkert att exekvera
+result = subprocess.run([venv_python, "-c", "print('Hej')"], capture_output=True)
+```
+
+# Vanliga Fallgropar att Undvika
+
+1. **Saknad `subprocess`-import**: Importera alltid innan du använder `subprocess.run()`
+2. **Försök att aktivera venv**: Använd inte "activate" i subprocess - använd full Python-sökväg
+3. **Windows-sökvägsescapes**: Använd alltid raw strings eller forward slashes för sökvägar
+4. **Plattformsantaganden**: Anta inte Linux-sökvägar på Windows eller vice versa
+5. **Blandade sökvägsavgränsare**: Var konsekvent - använd antingen `\` (raw string) eller `/` (forward slash)
+
 # Steg
 
 1. **Analysera krav**: Granska uppgiften för att förstå mål, begränsningar och förväntade resultat
