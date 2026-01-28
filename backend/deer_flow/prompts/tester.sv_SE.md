@@ -46,7 +46,10 @@ Din roll är att:
 
 **🎉 Alla testverktyg är REDAN INSTALLERADE i en förkonfigurerad virtuell miljö!**
 
-**Plats**: `backend/deer_flow/workspace_venv/`
+**Plats**: `{CODE_WORKSPACE_ROOT}/workspace_venv/`
+- Standard: `/tmp/oneseek_workspace/workspace_venv/` (Linux/Mac)
+- Windows exempel: `C:\Users\användarnamn\oneseek_react_sandboxes\workspace_venv\`
+- Plats beror på CODE_WORKSPACE_ROOT miljövariabel
 
 **Vad som är förinstallerat**:
 - Testramverk: pytest, pytest-cov, pytest-mock, coverage
@@ -61,10 +64,12 @@ Din roll är att:
 **Steg 1: Använd venv's Python för testning**
 ```python
 import subprocess
+import os
 
-# Sökväg till venv Python (justera för OS)
-venv_python = "backend/deer_flow/workspace_venv/bin/python"  # Linux/Mac
-# venv_python = "backend/deer_flow/workspace_venv/Scripts/python.exe"  # Windows
+# Hämta workspace root och konstruera venv Python sökväg
+workspace_root = os.getenv("CODE_WORKSPACE_ROOT", "/tmp/oneseek_workspace")
+venv_python = f"{workspace_root}/workspace_venv/bin/python"  # Linux/Mac
+# venv_python = f"{workspace_root}\\workspace_venv\\Scripts\\python.exe"  # Windows
 
 # Kör pytest med venv Python
 result = subprocess.run(

@@ -46,7 +46,10 @@ Your role is to:
 
 **🎉 All testing tools are ALREADY INSTALLED in a pre-configured virtual environment!**
 
-**Location**: `backend/deer_flow/workspace_venv/`
+**Location**: `{CODE_WORKSPACE_ROOT}/workspace_venv/`
+- Default: `/tmp/oneseek_workspace/workspace_venv/` (Linux/Mac)
+- Windows example: `C:\Users\username\oneseek_react_sandboxes\workspace_venv\`
+- Location depends on CODE_WORKSPACE_ROOT environment variable
 
 **What's Pre-Installed**:
 - Testing Framework: pytest, pytest-cov, pytest-mock, coverage
@@ -61,10 +64,12 @@ Your role is to:
 **Step 1: Use venv's Python for testing**
 ```python
 import subprocess
+import os
 
-# Path to venv Python (adjust for OS)
-venv_python = "backend/deer_flow/workspace_venv/bin/python"  # Linux/Mac
-# venv_python = "backend/deer_flow/workspace_venv/Scripts/python.exe"  # Windows
+# Get workspace root and construct venv Python path
+workspace_root = os.getenv("CODE_WORKSPACE_ROOT", "/tmp/oneseek_workspace")
+venv_python = f"{workspace_root}/workspace_venv/bin/python"  # Linux/Mac
+# venv_python = f"{workspace_root}\\workspace_venv\\Scripts\\python.exe"  # Windows
 
 # Run pytest with venv Python
 result = subprocess.run(

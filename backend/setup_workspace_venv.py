@@ -9,21 +9,45 @@ import subprocess
 import sys
 from pathlib import Path
 
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    print("⚠️  python-dotenv not installed. Using default CODE_WORKSPACE_ROOT.")
+    load_dotenv = None
+
 def setup_workspace_venv():
     """Create and configure the workspace virtual environment."""
     
-    # Determine paths
+    # Load .env file
     script_dir = Path(__file__).parent
-    venv_path = script_dir / "deer_flow" / "workspace_venv"
+    env_file = script_dir / ".env"
+    if env_file.exists() and load_dotenv is not None:
+        load_dotenv(env_file)
+        print(f"✓ Loaded .env from {env_file}")
+    
+    # Get workspace root from environment
+    workspace_root = os.getenv("CODE_WORKSPACE_ROOT", "/tmp/oneseek_workspace")
+    workspace_path = Path(workspace_root)
+    
+    # Venv will be created in workspace
+    venv_path = workspace_path / "workspace_venv"
     requirements_file = script_dir / "deer_flow" / "workspace_requirements.txt"
     
     print("=" * 60)
     print("Setting up Workspace Virtual Environment")
     print("=" * 60)
     print(f"Script directory: {script_dir}")
+    print(f"Workspace root: {workspace_path}")
     print(f"Venv path: {venv_path}")
     print(f"Requirements file: {requirements_file}")
     print()
+    
+    # Ensure workspace directory exists
+    if not workspace_path.exists():
+        print(f"📁 Creating workspace directory: {workspace_path}")
+        workspace_path.mkdir(parents=True, exist_ok=True)
+        print("✓ Workspace directory created")
+        print()
     
     # Check if requirements file exists
     if not requirements_file.exists():

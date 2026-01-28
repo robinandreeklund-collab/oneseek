@@ -44,7 +44,10 @@ You have access to powerful development tools:
 
 **🎉 A fully configured virtual environment is ALREADY SET UP and ready to use!**
 
-**Location**: `backend/deer_flow/workspace_venv/`
+**Location**: `{CODE_WORKSPACE_ROOT}/workspace_venv/`
+- Default: `/tmp/oneseek_workspace/workspace_venv/` (Linux/Mac)
+- Windows example: `C:\Users\username\oneseek_react_sandboxes\workspace_venv\`
+- Location depends on CODE_WORKSPACE_ROOT environment variable
 
 **What's Already Installed**:
 - Testing: pytest, pytest-cov, pytest-mock, coverage
@@ -57,10 +60,12 @@ You have access to powerful development tools:
 ```python
 # Use venv's Python for running scripts
 import subprocess
+import os
 
-# Path to venv Python (adjust based on OS)
-venv_python = "backend/deer_flow/workspace_venv/bin/python"  # Linux/Mac
-# venv_python = "backend/deer_flow/workspace_venv/Scripts/python.exe"  # Windows
+# Get workspace root and construct venv Python path
+workspace_root = os.getenv("CODE_WORKSPACE_ROOT", "/tmp/oneseek_workspace")
+venv_python = f"{workspace_root}/workspace_venv/bin/python"  # Linux/Mac
+# venv_python = f"{workspace_root}\\workspace_venv\\Scripts\\python.exe"  # Windows
 
 # Run your script with venv Python
 result = subprocess.run([venv_python, "your_script.py"], capture_output=True, text=True)

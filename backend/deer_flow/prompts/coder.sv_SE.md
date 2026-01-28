@@ -44,7 +44,10 @@ Du har tillgång till kraftfulla utvecklingsverktyg:
 
 **🎉 En fullt konfigurerad virtuell miljö är REDAN UPPSATT och redo att använda!**
 
-**Plats**: `backend/deer_flow/workspace_venv/`
+**Plats**: `{CODE_WORKSPACE_ROOT}/workspace_venv/`
+- Standard: `/tmp/oneseek_workspace/workspace_venv/` (Linux/Mac)
+- Windows exempel: `C:\Users\användarnamn\oneseek_react_sandboxes\workspace_venv\`
+- Plats beror på CODE_WORKSPACE_ROOT miljövariabel
 
 **Vad som redan är installerat**:
 - Testning: pytest, pytest-cov, pytest-mock, coverage
@@ -57,10 +60,12 @@ Du har tillgång till kraftfulla utvecklingsverktyg:
 ```python
 # Använd venv's Python för att köra skript
 import subprocess
+import os
 
-# Sökväg till venv Python (justera efter OS)
-venv_python = "backend/deer_flow/workspace_venv/bin/python"  # Linux/Mac
-# venv_python = "backend/deer_flow/workspace_venv/Scripts/python.exe"  # Windows
+# Hämta workspace root och konstruera venv Python sökväg
+workspace_root = os.getenv("CODE_WORKSPACE_ROOT", "/tmp/oneseek_workspace")
+venv_python = f"{workspace_root}/workspace_venv/bin/python"  # Linux/Mac
+# venv_python = f"{workspace_root}\\workspace_venv\\Scripts\\python.exe"  # Windows
 
 # Kör ditt skript med venv Python
 result = subprocess.run([venv_python, "your_script.py"], capture_output=True, text=True)

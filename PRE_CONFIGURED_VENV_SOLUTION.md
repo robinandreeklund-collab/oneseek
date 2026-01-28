@@ -57,7 +57,10 @@ Instead of having agents create venvs and install packages (error-prone, slow, t
 **File**: `backend/setup_workspace_venv.py`
 
 **Features**:
-- Creates venv at `backend/deer_flow/workspace_venv/`
+- Reads CODE_WORKSPACE_ROOT from .env file
+- Creates venv at `{CODE_WORKSPACE_ROOT}/workspace_venv/`
+- Default location: `/tmp/oneseek_workspace/workspace_venv/`
+- Windows example: `C:\Users\username\oneseek_react_sandboxes\workspace_venv\`
 - Removes old venv if exists (clean slate)
 - Upgrades pip first
 - Installs all packages from `workspace_requirements.txt`
@@ -70,6 +73,7 @@ Instead of having agents create venvs and install packages (error-prone, slow, t
 **Usage**:
 ```bash
 cd backend
+# Ensure CODE_WORKSPACE_ROOT is set in .env
 python setup_workspace_venv.py
 ```
 
@@ -79,7 +83,8 @@ python setup_workspace_venv.py
 Setting up Workspace Virtual Environment
 ============================================================
 Script directory: /home/runner/work/oneseek/oneseek/backend
-Venv path: /home/runner/work/oneseek/oneseek/backend/deer_flow/workspace_venv
+Workspace root: /tmp/oneseek_workspace
+Venv path: /tmp/oneseek_workspace/workspace_venv
 Requirements file: .../workspace_requirements.txt
 
 🔨 Creating new virtual environment...
@@ -113,7 +118,8 @@ Requirements file: .../workspace_requirements.txt
 **Changes**:
 - Removed 15+ lines of installation instructions
 - Added "Pre-Configured Python Virtual Environment" section
-- Clear location: `backend/deer_flow/workspace_venv/`
+- Location: `{CODE_WORKSPACE_ROOT}/workspace_venv/` (workspace-based)
+- Default: `/tmp/oneseek_workspace/workspace_venv/`
 - Simple usage pattern: `subprocess.run([venv_python, "script.py"])`
 - Critical rules: ❌ Don't install, ❌ Don't create venv, ✅ Just use it
 
@@ -130,10 +136,11 @@ Requirements file: .../workspace_requirements.txt
 ```markdown
 # Pre-Configured Python Virtual Environment
 🎉 Fully configured venv is ALREADY SET UP!
-**Location**: backend/deer_flow/workspace_venv/
+**Location**: {CODE_WORKSPACE_ROOT}/workspace_venv/
 **What's Installed**: pytest, pylint, mypy, flask, ...
 **How to Use**:
-  venv_python = "backend/deer_flow/workspace_venv/bin/python"
+  workspace_root = os.getenv("CODE_WORKSPACE_ROOT", "/tmp/oneseek_workspace")
+  venv_python = f"{workspace_root}/workspace_venv/bin/python"
   subprocess.run([venv_python, "script.py"])
 **CRITICAL RULES**:
   ❌ DO NOT install packages
