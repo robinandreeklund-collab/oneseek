@@ -29,7 +29,7 @@ You MUST create a plan with EXACTLY 4 steps that orchestrate a multi-model debat
 ## Step 4: Democratic Voting
 - Title: "Voting: Democratic Selection"
 - Description: External AI models (excluding OneSeek) vote on which argument was most compelling and well-reasoned. Votes are tallied and a winner is declared based on majority vote.
-- step_type: "analysis"
+- step_type: "research"
 - need_search: false
 
 ## Context Assessment
@@ -72,7 +72,7 @@ You MUST create a plan with EXACTLY 4 steps following this JSON schema:
       "need_search": false,
       "title": "Röstning: Demokratiskt val",
       "description": "Externa AI-modeller (exkl. OneSeek) röstar på vilket argument som var mest övertygande och välgrundat. Röster räknas samman och en vinnare utses baserat på majoritetsröst.",
-      "step_type": "analysis"
+      "step_type": "research"
     }
   ]
 }

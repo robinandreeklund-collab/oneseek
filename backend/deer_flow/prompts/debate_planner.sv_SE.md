@@ -29,7 +29,7 @@ Du MÅSTE skapa en plan med EXAKT 4 steg som orkestrera en multi-modellsdebatt:
 ## Steg 4: Demokratisk röstning
 - Titel: "Röstning: Demokratiskt val"
 - Beskrivning: Externa AI-modeller (exkl. OneSeek) röstar på vilket argument som var mest övertygande och välgrundat. Röster räknas samman och en vinnare utses baserat på majoritetsröst.
-- step_type: "analysis"
+- step_type: "research"
 - need_search: false
 
 ## Kontextbedömning
@@ -72,7 +72,7 @@ Du MÅSTE skapa en plan med EXAKT 4 steg enligt detta JSON-schema:
       "need_search": false,
       "title": "Röstning: Demokratiskt val",
       "description": "Externa AI-modeller (exkl. OneSeek) röstar på vilket argument som var mest övertygande och välgrundat. Röster räknas samman och en vinnare utses baserat på majoritetsröst.",
-      "step_type": "analysis"
+      "step_type": "research"
     }
   ]
 }
