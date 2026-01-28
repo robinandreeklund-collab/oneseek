@@ -19,6 +19,10 @@ mypy>=1.5.0
 # Code Coverage
 coverage>=7.3.0
 
+# Web Frameworks
+flask>=3.0.0
+flask-restful>=0.3.10
+
 # Common Development Dependencies
 requests>=2.31.0
 python-dotenv>=1.0.0

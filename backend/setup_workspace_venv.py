@@ -12,8 +12,18 @@ from pathlib import Path
 try:
     from dotenv import load_dotenv
 except ImportError:
-    print("⚠️  python-dotenv not installed. Using default CODE_WORKSPACE_ROOT.")
-    load_dotenv = None
+    print("⚠️  python-dotenv not installed. Will attempt to install it...")
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "python-dotenv"],
+            check=True,
+            capture_output=True
+        )
+        from dotenv import load_dotenv
+        print("✓ python-dotenv installed successfully")
+    except (subprocess.CalledProcessError, ImportError):
+        print("⚠️  Could not install python-dotenv. Using platform-specific default workspace path.")
+        load_dotenv = None
 
 def setup_workspace_venv():
     """Create and configure the workspace virtual environment."""
@@ -25,8 +35,13 @@ def setup_workspace_venv():
         load_dotenv(env_file)
         print(f"✓ Loaded .env from {env_file}")
     
-    # Get workspace root from environment
-    workspace_root = os.getenv("CODE_WORKSPACE_ROOT", "/tmp/oneseek_workspace")
+    # Get workspace root from environment with platform-specific defaults
+    if os.name == 'nt':  # Windows
+        default_workspace = str(Path.home() / "oneseek_workspace")
+    else:  # Unix/Linux/Mac
+        default_workspace = "/tmp/oneseek_workspace"
+    
+    workspace_root = os.getenv("CODE_WORKSPACE_ROOT", default_workspace)
     workspace_path = Path(workspace_root)
     
     # Venv will be created in workspace
