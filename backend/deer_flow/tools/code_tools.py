@@ -85,6 +85,52 @@ def _is_react_sandbox_enabled() -> bool:
     return env_enabled in ("true", "1", "yes", "on")
 
 
+def ensure_workspace_requirements() -> str:
+    """
+    Ensure workspace_requirements.txt exists in the workspace root.
+    This file contains all Python testing and development tools.
+    Returns the path to the requirements file.
+    """
+    workspace_root = Path(os.getenv("CODE_WORKSPACE_ROOT", tempfile.gettempdir())) / "oneseek_workspace"
+    workspace_root.mkdir(parents=True, exist_ok=True)
+    
+    requirements_path = workspace_root / "workspace_requirements.txt"
+    
+    # Content for workspace requirements
+    requirements_content = """# OneSeek Workspace Requirements
+# This file contains all Python testing and development tools needed for the workspace
+# Install with: pip install -r workspace_requirements.txt
+
+# Testing Framework
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-mock>=3.11.1
+
+# Code Quality & Linting
+pylint>=3.0.0
+flake8>=6.1.0
+black>=23.7.0
+isort>=5.12.0
+
+# Type Checking
+mypy>=1.5.0
+
+# Code Coverage
+coverage>=7.3.0
+
+# Common Development Dependencies
+requests>=2.31.0
+python-dotenv>=1.0.0
+"""
+    
+    # Create or update the requirements file if it doesn't exist
+    if not requirements_path.exists():
+        requirements_path.write_text(requirements_content, encoding='utf-8')
+        logger.info(f"Created workspace_requirements.txt at {requirements_path}")
+    
+    return str(requirements_path)
+
+
 @tool
 @log_io
 def linux_sandbox_tool(
@@ -108,6 +154,9 @@ def linux_sandbox_tool(
         error_msg = "Linux sandbox tool is disabled. Set ENABLE_LINUX_SANDBOX=true to enable."
         logger.warning(error_msg)
         return f"Tool disabled: {error_msg}"
+    
+    # Ensure workspace_requirements.txt exists
+    ensure_workspace_requirements()
     
     logger.info(f"Executing command in Linux sandbox: {command}")
     
@@ -197,6 +246,9 @@ def file_system_tool(
     # Get workspace root from environment or use temp directory
     workspace_root = Path(os.getenv("CODE_WORKSPACE_ROOT", tempfile.gettempdir())) / "oneseek_workspace"
     workspace_root.mkdir(parents=True, exist_ok=True)
+    
+    # Ensure workspace_requirements.txt exists in workspace
+    ensure_workspace_requirements()
     
     # Resolve and validate path
     try:

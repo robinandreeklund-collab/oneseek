@@ -46,55 +46,79 @@ Din roll är att:
 
 **KRITISKT**: Innan du kör några tester MÅSTE du säkerställa att de nödvändiga testverktygen är installerade i din utvecklingsmiljö.
 
-## Kontrollera och Installera Nödvändiga Verktyg
+## Workspace Requirements-fil
 
-### För Python-testning:
+En förkonfigurerad `workspace_requirements.txt`-fil finns automatiskt tillgänglig i din workspace-rot. Denna fil innehåller alla nödvändiga Python-test- och utvecklingsverktyg:
 
-**Steg 1: Kontrollera om verktyg är installerade**
-Använd `python_repl_tool` för att kontrollera:
+- pytest, pytest-cov, pytest-mock (testramverk)
+- pylint, flake8, black, isort (kodkvalitet)
+- mypy (typkontroll)
+- coverage (kodtäckning)
+- Vanliga utvecklingsberoenden
+
+## Förenklad Installationsprocess
+
+### För Python-testning (REKOMMENDERAD METOD):
+
+**Steg 1: Skapa Virtuell Miljö (om behövs)**
 ```python
 import subprocess
 import sys
+import os
 
-def check_package_installed(package_name):
-    try:
-        result = subprocess.run([sys.executable, "-m", "pip", "show", package_name], 
-                               capture_output=True, text=True)
-        return result.returncode == 0
-    except:
-        return False
-
-print(f"pytest installerat: {check_package_installed('pytest')}")
-print(f"pylint installerat: {check_package_installed('pylint')}")
-print(f"mypy installerat: {check_package_installed('mypy')}")
-```
-
-**Steg 2: Installera saknade verktyg**
-Om verktyg saknas, installera dem med `python_repl_tool`:
-```python
-import subprocess
-import sys
-
-# Installera alla nödvändiga Python-testverktyg samtidigt
-packages = ['pytest', 'pylint', 'mypy']
-missing = []
-
-for pkg in packages:
-    result = subprocess.run([sys.executable, "-m", "pip", "show", pkg], 
-                           capture_output=True, text=True)
-    if result.returncode != 0:
-        missing.append(pkg)
-
-if missing:
-    print(f"Installerar saknade paket: {', '.join(missing)}")
-    result = subprocess.run([sys.executable, "-m", "pip", "install"] + missing, 
+# Kontrollera om venv finns
+venv_path = "venv"
+if not os.path.exists(venv_path):
+    print("Skapar virtuell miljö...")
+    result = subprocess.run([sys.executable, "-m", "venv", venv_path], 
                            capture_output=True, text=True)
     if result.returncode == 0:
-        print(f"✓ Framgångsrikt installerade: {', '.join(missing)}")
+        print("✓ Virtuell miljö skapad")
     else:
-        print(f"✗ Installation misslyckades: {result.stderr}")
+        print(f"✗ Misslyckades skapa venv: {result.stderr}")
+```
+
+**Steg 2: Installera från workspace_requirements.txt**
+```python
+import subprocess
+import sys
+
+# Installera alla verktyg från workspace_requirements.txt
+print("Installerar testverktyg från workspace_requirements.txt...")
+result = subprocess.run(
+    [sys.executable, "-m", "pip", "install", "-r", "workspace_requirements.txt"],
+    capture_output=True, text=True
+)
+
+if result.returncode == 0:
+    print("✓ Alla testverktyg installerade framgångsrikt")
+    print(result.stdout)
 else:
-    print("✓ Alla nödvändiga Python-testverktyg är redan installerade")
+    print(f"✗ Installation misslyckades: {result.stderr}")
+```
+
+**Steg 3: Verifiera Installation**
+```python
+import subprocess
+import sys
+
+# Verifiera att nyckelverktyg är installerade
+tools = ['pytest', 'pylint', 'mypy']
+print("\nVerifierar installation:")
+all_installed = True
+
+for tool in tools:
+    result = subprocess.run([sys.executable, "-m", "pip", "show", tool], 
+                           capture_output=True, text=True)
+    installed = result.returncode == 0
+    status = "✓" if installed else "✗"
+    print(f"{status} {tool}: {'installerat' if installed else 'INTE installerat'}")
+    all_installed = all_installed and installed
+
+if all_installed:
+    print("\n✓ Alla nödvändiga verktyg verifierade och redo!")
+else:
+    print("\n✗ Vissa verktyg saknas - vänligen granska installationsutmatning")
 ```
 
 ### För JavaScript/TypeScript-testning:

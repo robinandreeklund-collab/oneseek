@@ -46,55 +46,79 @@ Your role is to:
 
 **CRITICAL**: Before running any tests, you MUST ensure the required testing tools are installed in your development environment.
 
-## Check and Install Required Tools
+## Workspace Requirements File
 
-### For Python Testing:
+A pre-configured `workspace_requirements.txt` file is automatically available in your workspace root. This file contains all necessary Python testing and development tools:
 
-**Step 1: Check if tools are installed**
-Use `python_repl_tool` to check:
+- pytest, pytest-cov, pytest-mock (testing framework)
+- pylint, flake8, black, isort (code quality)
+- mypy (type checking)
+- coverage (code coverage)
+- Common development dependencies
+
+## Simplified Installation Process
+
+### For Python Testing (RECOMMENDED APPROACH):
+
+**Step 1: Create Virtual Environment (if needed)**
 ```python
 import subprocess
 import sys
+import os
 
-def check_package_installed(package_name):
-    try:
-        result = subprocess.run([sys.executable, "-m", "pip", "show", package_name], 
-                               capture_output=True, text=True)
-        return result.returncode == 0
-    except:
-        return False
-
-print(f"pytest installed: {check_package_installed('pytest')}")
-print(f"pylint installed: {check_package_installed('pylint')}")
-print(f"mypy installed: {check_package_installed('mypy')}")
-```
-
-**Step 2: Install missing tools**
-If tools are missing, install them using `python_repl_tool`:
-```python
-import subprocess
-import sys
-
-# Install all required Python testing tools at once
-packages = ['pytest', 'pylint', 'mypy']
-missing = []
-
-for pkg in packages:
-    result = subprocess.run([sys.executable, "-m", "pip", "show", pkg], 
-                           capture_output=True, text=True)
-    if result.returncode != 0:
-        missing.append(pkg)
-
-if missing:
-    print(f"Installing missing packages: {', '.join(missing)}")
-    result = subprocess.run([sys.executable, "-m", "pip", "install"] + missing, 
+# Check if venv exists
+venv_path = "venv"
+if not os.path.exists(venv_path):
+    print("Creating virtual environment...")
+    result = subprocess.run([sys.executable, "-m", "venv", venv_path], 
                            capture_output=True, text=True)
     if result.returncode == 0:
-        print(f"✓ Successfully installed: {', '.join(missing)}")
+        print("✓ Virtual environment created")
     else:
-        print(f"✗ Installation failed: {result.stderr}")
+        print(f"✗ Failed to create venv: {result.stderr}")
+```
+
+**Step 2: Install from workspace_requirements.txt**
+```python
+import subprocess
+import sys
+
+# Install all tools from workspace_requirements.txt
+print("Installing testing tools from workspace_requirements.txt...")
+result = subprocess.run(
+    [sys.executable, "-m", "pip", "install", "-r", "workspace_requirements.txt"],
+    capture_output=True, text=True
+)
+
+if result.returncode == 0:
+    print("✓ All testing tools installed successfully")
+    print(result.stdout)
 else:
-    print("✓ All required Python testing tools are already installed")
+    print(f"✗ Installation failed: {result.stderr}")
+```
+
+**Step 3: Verify Installation**
+```python
+import subprocess
+import sys
+
+# Verify key tools are installed
+tools = ['pytest', 'pylint', 'mypy']
+print("\nVerifying installation:")
+all_installed = True
+
+for tool in tools:
+    result = subprocess.run([sys.executable, "-m", "pip", "show", tool], 
+                           capture_output=True, text=True)
+    installed = result.returncode == 0
+    status = "✓" if installed else "✗"
+    print(f"{status} {tool}: {'installed' if installed else 'NOT installed'}")
+    all_installed = all_installed and installed
+
+if all_installed:
+    print("\n✓ All required tools verified and ready!")
+else:
+    print("\n✗ Some tools are missing - please review installation output")
 ```
 
 ### For JavaScript/TypeScript Testing:
@@ -148,21 +172,30 @@ else:
 
 ## Installation Guidelines
 
-1. **Always check before installing**: Don't assume tools are missing
-2. **Install all required tools at once**: More efficient than one-by-one
-3. **Use python_repl_tool for installations**: It provides proper environment isolation
-4. **Report installation status**: Let user know what was installed
+1. **Use workspace_requirements.txt for Python**: Single command installs all tools
+2. **Create venv first if needed**: Ensures clean, isolated environment
+3. **Always verify after installation**: Confirm tools are available
+4. **Report status clearly**: Let user know what happened
 5. **Handle failures gracefully**: If installation fails, report the error clearly
-6. **Virtual environments**: If code uses a venv, installations happen within that venv automatically
+6. **Virtual environments**: Installations happen within the active venv automatically
 
 # Testing Process
 
-## 0. Check and Install Required Tools (FIRST STEP)
-- **Before running ANY tests**, check if required testing tools are installed
-- Use `python_repl_tool` to check for pytest, pylint, mypy (for Python)
-- Use `python_repl_tool` to check for jest, eslint, typescript (for JavaScript)
-- If tools are missing, install them using the code examples above
-- Report installation status to the user
+## 0. Setup Environment (FIRST STEP)
+
+**For Python projects:**
+1. Create virtual environment if it doesn't exist
+2. Install all tools from `workspace_requirements.txt` in one command
+3. Verify installation of key tools (pytest, pylint, mypy)
+4. Report status - ready to proceed or errors encountered
+
+**For JavaScript projects:**
+1. Check if package.json exists
+2. Install missing tools individually as dev dependencies
+3. Verify installations
+4. Report status
+
+**This step is CRITICAL** - without tools installed, tests will fail with "command not found" errors.
 
 ## 1. Understand the Code Context
 - Review the current step description
@@ -263,8 +296,9 @@ Issues:
 
 # Important Guidelines
 
-1. **Check for tool installation FIRST** - Always verify required tools are installed before running tests
-2. **Install missing tools automatically** - Use python_repl_tool to install pytest, pylint, mypy, jest, eslint, or tsc as needed
+1. **Setup environment FIRST** - Use workspace_requirements.txt for Python to install all tools in one command
+2. **Verify installation** - Always confirm tools are available before running tests
+3. **Create venv if needed** - Ensure clean, isolated environment for Python projects
 3. **Always run appropriate tests** based on the programming language
 4. **Be thorough** - run unit tests, linting, and type checking
 5. **Report clearly** - distinguish between test failures, quality issues, and type errors
