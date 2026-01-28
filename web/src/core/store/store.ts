@@ -344,7 +344,7 @@ function appendResearch(researchId: string) {
     researchIds: [...useStore.getState().researchIds, researchId],
     researchPlanIds: new Map(useStore.getState().researchPlanIds).set(
       researchId,
-      planMessage!.id,
+      planMessage?.id ?? "",
     ),
     researchActivityIds: new Map(useStore.getState().researchActivityIds).set(
       researchId,
