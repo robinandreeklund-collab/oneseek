@@ -46,18 +46,15 @@ Du MÅSTE skapa en plan som delar upp koduppgiften i tydliga, körbara steg. Pla
 - Algoritmimplementering
 - Applikationsscaffolding
 - Allt faktiskt kodningsarbete
-
-### Teststeg (`step_type: "testing"`, `need_search: false`) - **ANVÄND INTE**
-- **VIKTIGT: Skapa INTE teststeg i dina planer**
-- Testning hanteras nu separat efter att kodningen är klar
-- Användaren kommer att tillfrågas om de vill testa koden
-- Fokusera dina planer på implementation endast
+- **Detta är huvudstegtypen för kodningsuppgifter**
 
 ### Analyssteg (`step_type: "analysis"`, `need_search: false`)
 - Kodgranskning och validering
 - Arkitekturbedömning
 - Prestandaanalys
 - Säkerhetsgranskning
+
+**Notering om Testning:** Testning ingår INTE i planer. Efter att kodningen är klar kommer användaren tillfrågas separat om de vill testa koden. Skapa INTE några testrelaterade steg.
 
 ## Kontextbedömning
 
@@ -105,9 +102,9 @@ Ditt svar MÅSTE vara giltig JSON som matchar detta schema:
 
 1. **Minst 1-3 steg** för de flesta koduppgifter:
    - Minst ett bearbetningssteg (själva kodningen)
-   - **Skapa INTE teststeg** (testning hanteras separat)
    - Valfritt forskningssteg om dokumentation behövs
    - Valfritt analyssteg för komplexa uppgifter
+   - **Giltiga stegtyper: "research", "processing", "analysis" ENDAST**
 
 2. **Var Specifik**:
    - Ange tydligt vad som behöver kodas
@@ -118,13 +115,15 @@ Ditt svar MÅSTE vara giltig JSON som matchar detta schema:
 3. **Överväg Beroenden**:
    - Forskning före implementering
    - Implementeringssteg i logisk ordning
-   - **Skapa INTE teststeg** - testning sker efter användarens godkännande
+   - Analys efter implementering om nödvändigt
+   - **Testning erbjuds separat efter att alla steg är klara**
 
 4. **Fokusera på Implementation**:
    - Skapa tydliga, körbara kodningssteg
    - Specificera verktyg att använda (python_repl_tool, file_system_tool, etc.)
    - Definiera vad framgång ser ut som för varje implementeringssteg
-   - Efter kodning är klar kommer användaren tillfrågas om de vill ha testning
+   - Kom ihåg: Använd endast stegtyper "research", "processing" eller "analysis"
+   - Testning kommer erbjudas användaren efter att kodningen är klar
 
 ## Exempelplaner
 

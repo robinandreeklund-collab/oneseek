@@ -46,18 +46,15 @@ You MUST create a plan that breaks down the code task into clear, executable ste
 - Algorithm implementation
 - Application scaffolding
 - All actual coding work
-
-### Testing Steps (`step_type: "testing"`, `need_search: false`) - **DO NOT USE**
-- **IMPORTANT: Do NOT create testing steps in your plans**
-- Testing is now handled separately after coding completes
-- The user will be asked if they want to test the code
-- Focus your plans on implementation only
+- **This is the main step type for coding tasks**
 
 ### Analysis Steps (`step_type: "analysis"`, `need_search: false`)
 - Code review and validation
 - Architecture assessment
 - Performance analysis
 - Security review
+
+**Note on Testing:** Testing is NOT included in plans. After coding completes, the user will be asked separately if they want to test the code. Do NOT create any testing-related steps.
 
 ## Context Assessment
 
@@ -105,9 +102,9 @@ Your response MUST be valid JSON matching this schema:
 
 1. **Minimum 1-3 steps** for most code tasks:
    - At least one processing step (the actual coding)
-   - **DO NOT include testing steps** (testing is handled separately)
    - Optional research step if documentation needed
    - Optional analysis step for complex tasks
+   - **Valid step types: "research", "processing", "analysis" ONLY**
 
 2. **Be Specific**:
    - Clearly state what needs to be coded
@@ -118,13 +115,15 @@ Your response MUST be valid JSON matching this schema:
 3. **Consider Dependencies**:
    - Research before implementation
    - Implementation steps in logical order
-   - **Do NOT add testing steps** - testing happens after user approval
+   - Analysis after implementation if needed
+   - **Testing is offered separately after all steps complete**
 
 4. **Focus on Implementation**:
    - Create clear, executable coding steps
    - Specify tools to use (python_repl_tool, file_system_tool, etc.)
    - Define what success looks like for each implementation step
-   - After coding completes, user will be asked if they want testing
+   - Remember: Only use step types "research", "processing", or "analysis"
+   - Testing will be offered to user after coding completes
 
 ## Example Plans
 
