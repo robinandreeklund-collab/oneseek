@@ -1661,6 +1661,39 @@ async def _execute_agent_step(
             f"{agent_name.capitalize()} agent made {tool_message_count} tool calls. "
             f"All tool results will be preserved and streamed to frontend."
         )
+    
+    # For direct agent calls (especially coder), ensure there's a meaningful final message
+    # If the last AIMessage has empty/minimal content, create a summary message
+    if agent_messages and current_plan and len(current_plan.steps) == 1:  # Synthetic plan (direct call)
+        last_msg = agent_messages[-1]
+        from langchain_core.messages import AIMessage, ToolMessage
+        
+        if isinstance(last_msg, AIMessage):
+            content_to_check = str(last_msg.content).strip()
+            # If final message is empty or very short and there were tool calls, create summary
+            if (not content_to_check or len(content_to_check) < 10) and tool_message_count > 0:
+                logger.info(f"[{agent_name}] Final AIMessage has minimal content, creating summary from tool results")
+                
+                # Build summary from tool messages
+                tool_summaries = []
+                for msg in agent_messages:
+                    if isinstance(msg, ToolMessage):
+                        tool_name = getattr(msg, 'name', 'unknown_tool')
+                        tool_content = str(msg.content)[:200]  # First 200 chars
+                        tool_summaries.append(f"**{tool_name}**: {tool_content}")
+                
+                summary_content = f"{response_content}\n\n## Tool Results\n\n" + "\n\n".join(tool_summaries)
+                
+                # Create a new AIMessage with the summary
+                enhanced_message = AIMessage(
+                    content=summary_content,
+                    name=agent_name,
+                    id=last_msg.id
+                )
+                
+                # Replace the last message with the enhanced one
+                agent_messages[-1] = enhanced_message
+                logger.info(f"[{agent_name}] Enhanced final message with tool results summary")
 
     # Extract citations from tool call results (web_search, crawl)
     existing_citations = state.get("citations", [])
