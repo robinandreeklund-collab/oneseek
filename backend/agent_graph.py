@@ -491,9 +491,14 @@ class OneSeekGraphAgent:
                         }
                     
                     # Add workspace files if any were tracked
+                    logger.info("Getting workspace files for tool action")
                     workspace_files = get_workspace_files()
+                    logger.info(f"Retrieved {len(workspace_files)} workspace files")
                     if workspace_files:
                         tool_action["workspace_files"] = workspace_files
+                        logger.info(f"Attaching {len(workspace_files)} workspace files to tool action: {[f['path'] for f in workspace_files]}")
+                    else:
+                        logger.info("No workspace files to attach")
                     
                     # Update the tool action in the list
                     callback("tool_action", tool_action)
@@ -671,9 +676,14 @@ class OneSeekGraphAgent:
                         }
                     
                     # Add workspace files if any were tracked
+                    logger.info("Getting workspace files for tool action (stream mode)")
                     workspace_files = get_workspace_files()
+                    logger.info(f"Retrieved {len(workspace_files)} workspace files (stream mode)")
                     if workspace_files:
                         tool_action["workspace_files"] = workspace_files
+                        logger.info(f"Attaching {len(workspace_files)} workspace files to tool action: {[f['path'] for f in workspace_files]}")
+                    else:
+                        logger.info("No workspace files to attach (stream mode)")
                     
                     # Update the tool action in the list and trigger realtime callback
                     callback("tool_action", tool_action)  # This triggers realtime_callback immediately!

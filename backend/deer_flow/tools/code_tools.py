@@ -30,6 +30,7 @@ def get_workspace_files() -> List[Dict[str, Any]]:
     """Get the list of workspace files tracked in the current context."""
     if not hasattr(_workspace_context, 'files'):
         _workspace_context.files = []
+    logger.info(f"Retrieved {len(_workspace_context.files)} workspace files")
     return _workspace_context.files
 
 
@@ -62,9 +63,13 @@ def track_workspace_file(path: str, operation: str, size: int = 0, content: Opti
     if existing:
         # Update existing entry
         existing.update(file_info)
+        logger.info(f"Updated workspace file: {path}, operation: {operation}")
     else:
         # Add new entry
         _workspace_context.files.append(file_info)
+        logger.info(f"Tracking workspace file: {path}, operation: {operation}")
+    
+    logger.info(f"Current workspace files count: {len(_workspace_context.files)}")
 
 
 def _is_linux_sandbox_enabled() -> bool:
