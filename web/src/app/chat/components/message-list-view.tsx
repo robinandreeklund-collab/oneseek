@@ -148,6 +148,7 @@ function MessageListItem({
       message.agent === "coordinator" ||
       isPlannerAgent(message.agent) ||
       message.agent === "podcast" ||
+      message.agent === "coder" ||
       startOfResearch
     ) {
       let content: React.ReactNode;
