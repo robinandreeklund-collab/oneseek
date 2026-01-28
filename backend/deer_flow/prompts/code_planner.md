@@ -47,12 +47,11 @@ You MUST create a plan that breaks down the code task into clear, executable ste
 - Application scaffolding
 - All actual coding work
 
-### Testing Steps (`step_type: "testing"`, `need_search: false`)
-- Run unit tests (pytest, jest, etc.)
-- Execute linters (pylint, eslint, etc.)
-- Type checking (mypy, tsc, etc.)
-- Integration testing
-- Code quality validation
+### Testing Steps (`step_type: "testing"`, `need_search: false`) - **DO NOT USE**
+- **IMPORTANT: Do NOT create testing steps in your plans**
+- Testing is now handled separately after coding completes
+- The user will be asked if they want to test the code
+- Focus your plans on implementation only
 
 ### Analysis Steps (`step_type: "analysis"`, `need_search: false`)
 - Code review and validation
@@ -83,7 +82,7 @@ Your response MUST be valid JSON matching this schema:
 {
   "locale": "en-US",
   "has_enough_context": false,
-  "thought": "Breaking down the code task into [X] steps: research documentation, implement core functionality, create tests, and validate",
+  "thought": "Breaking down the code task into [X] steps: research documentation and implement core functionality. Testing will be offered after implementation.",
   "title": "Code Task: [Short description]",
   "steps": [
     {
@@ -97,18 +96,6 @@ Your response MUST be valid JSON matching this schema:
       "title": "Implement [Feature/Component]",
       "description": "Create [specific component] with [requirements]. Use [tool] for execution.",
       "step_type": "processing"
-    },
-    {
-      "need_search": false,
-      "title": "Test Implementation",
-      "description": "Run [test type] using [test framework]. Validate [specific aspects].",
-      "step_type": "testing"
-    },
-    {
-      "need_search": false,
-      "title": "Validate Code Quality",
-      "description": "Check code style with [linter], type safety with [type checker]",
-      "step_type": "testing"
     }
   ]
 }
@@ -116,9 +103,9 @@ Your response MUST be valid JSON matching this schema:
 
 ## Important Guidelines
 
-1. **Minimum 2-4 steps** for most code tasks:
+1. **Minimum 1-3 steps** for most code tasks:
    - At least one processing step (the actual coding)
-   - At least one testing step (validation)
+   - **DO NOT include testing steps** (testing is handled separately)
    - Optional research step if documentation needed
    - Optional analysis step for complex tasks
 
@@ -130,14 +117,14 @@ Your response MUST be valid JSON matching this schema:
 
 3. **Consider Dependencies**:
    - Research before implementation
-   - Implementation before testing
-   - Testing before final validation
+   - Implementation steps in logical order
+   - **Do NOT add testing steps** - testing happens after user approval
 
-4. **Test Strategy**:
-   - Include appropriate tests for the language
-   - Python: pytest + pylint + mypy
-   - JavaScript: jest/vitest + eslint + tsc
-   - Always validate code quality
+4. **Focus on Implementation**:
+   - Create clear, executable coding steps
+   - Specify tools to use (python_repl_tool, file_system_tool, etc.)
+   - Define what success looks like for each implementation step
+   - After coding completes, user will be asked if they want testing
 
 ## Example Plans
 
@@ -146,31 +133,25 @@ Your response MUST be valid JSON matching this schema:
 {
   "locale": "en-US",
   "has_enough_context": true,
-  "thought": "Simple Python function with testing - 2 steps",
+  "thought": "Simple Python function - 1 implementation step. Testing will be offered after completion.",
   "title": "Code Task: Python sorting function",
   "steps": [
     {
       "need_search": false,
       "title": "Implement Sorting Function",
-      "description": "Create a Python function to sort a list using quicksort algorithm. Use python_repl_tool for implementation and testing.",
+      "description": "Create a Python function to sort a list using quicksort algorithm. Use python_repl_tool for implementation and basic validation.",
       "step_type": "processing"
-    },
-    {
-      "need_search": false,
-      "title": "Test and Validate",
-      "description": "Run unit tests with pytest, check code quality with pylint",
-      "step_type": "testing"
     }
   ]
 }
 ```
 
-### React Component with Tests
+### React Component with Research
 ```json
 {
   "locale": "en-US",
   "has_enough_context": false,
-  "thought": "React component development with documentation research, implementation, and testing - 3 steps",
+  "thought": "React component development with documentation research and implementation - 2 steps. Testing will be offered after implementation.",
   "title": "Code Task: React authentication form",
   "steps": [
     {
@@ -184,12 +165,6 @@ Your response MUST be valid JSON matching this schema:
       "title": "Implement Authentication Form",
       "description": "Create React component with form validation, error handling, and submit logic. Use react_sandbox_tool for development and preview.",
       "step_type": "processing"
-    },
-    {
-      "need_search": false,
-      "title": "Test Component",
-      "description": "Write unit tests with Jest, check TypeScript types with tsc, lint code with eslint",
-      "step_type": "testing"
     }
   ]
 }
@@ -206,7 +181,8 @@ Your response MUST be valid JSON matching this schema:
 
 - The plan will be reviewed by a human before execution (human feedback)
 - Coder agent will execute processing steps
-- Tester agent will execute testing steps
 - Researcher agent will execute research steps (if needed)
-- Focus on creating clear, actionable steps that agents can execute independently
+- **Testing is NOT automatic** - after coding, user will be asked: "Would you like me to test the code?"
+- If user approves testing, Tester agent will run appropriate tests
+- Focus on creating clear, actionable implementation steps
 - Always output in the locale of **{{ locale }}**

@@ -47,12 +47,11 @@ Du MÅSTE skapa en plan som delar upp koduppgiften i tydliga, körbara steg. Pla
 - Applikationsscaffolding
 - Allt faktiskt kodningsarbete
 
-### Teststeg (`step_type: "testing"`, `need_search: false`)
-- Kör enhetstester (pytest, jest, etc.)
-- Kör linters (pylint, eslint, etc.)
-- Typkontroll (mypy, tsc, etc.)
-- Integrationstestning
-- Kodkvalitetsvalidering
+### Teststeg (`step_type: "testing"`, `need_search: false`) - **ANVÄND INTE**
+- **VIKTIGT: Skapa INTE teststeg i dina planer**
+- Testning hanteras nu separat efter att kodningen är klar
+- Användaren kommer att tillfrågas om de vill testa koden
+- Fokusera dina planer på implementation endast
 
 ### Analyssteg (`step_type: "analysis"`, `need_search: false`)
 - Kodgranskning och validering
@@ -83,7 +82,7 @@ Ditt svar MÅSTE vara giltig JSON som matchar detta schema:
 {
   "locale": "sv-SE",
   "has_enough_context": false,
-  "thought": "Delar upp koduppgiften i [X] steg: forska dokumentation, implementera kärnfunktionalitet, skapa tester och validera",
+  "thought": "Delar upp koduppgiften i [X] steg: forska dokumentation och implementera kärnfunktionalitet. Testning kommer erbjudas efter implementation.",
   "title": "Koduppgift: [Kort beskrivning]",
   "steps": [
     {
@@ -97,18 +96,6 @@ Ditt svar MÅSTE vara giltig JSON som matchar detta schema:
       "title": "Implementera [Funktion/Komponent]",
       "description": "Skapa [specifik komponent] med [krav]. Använd [verktyg] för exekvering.",
       "step_type": "processing"
-    },
-    {
-      "need_search": false,
-      "title": "Testa Implementering",
-      "description": "Kör [testtyp] med [testramverk]. Validera [specifika aspekter].",
-      "step_type": "testing"
-    },
-    {
-      "need_search": false,
-      "title": "Validera Kodkvalitet",
-      "description": "Kontrollera kodstil med [linter], typsäkerhet med [typkontrollant]",
-      "step_type": "testing"
     }
   ]
 }
@@ -116,9 +103,9 @@ Ditt svar MÅSTE vara giltig JSON som matchar detta schema:
 
 ## Viktiga Riktlinjer
 
-1. **Minst 2-4 steg** för de flesta koduppgifter:
+1. **Minst 1-3 steg** för de flesta koduppgifter:
    - Minst ett bearbetningssteg (själva kodningen)
-   - Minst ett teststeg (validering)
+   - **Skapa INTE teststeg** (testning hanteras separat)
    - Valfritt forskningssteg om dokumentation behövs
    - Valfritt analyssteg för komplexa uppgifter
 
@@ -130,14 +117,14 @@ Ditt svar MÅSTE vara giltig JSON som matchar detta schema:
 
 3. **Överväg Beroenden**:
    - Forskning före implementering
-   - Implementering före testning
-   - Testning före slutlig validering
+   - Implementeringssteg i logisk ordning
+   - **Skapa INTE teststeg** - testning sker efter användarens godkännande
 
-4. **Teststrategi**:
-   - Inkludera lämpliga tester för språket
-   - Python: pytest + pylint + mypy
-   - JavaScript: jest/vitest + eslint + tsc
-   - Validera alltid kodkvalitet
+4. **Fokusera på Implementation**:
+   - Skapa tydliga, körbara kodningssteg
+   - Specificera verktyg att använda (python_repl_tool, file_system_tool, etc.)
+   - Definiera vad framgång ser ut som för varje implementeringssteg
+   - Efter kodning är klar kommer användaren tillfrågas om de vill ha testning
 
 ## Exempelplaner
 
@@ -165,12 +152,12 @@ Ditt svar MÅSTE vara giltig JSON som matchar detta schema:
 }
 ```
 
-### React-komponent med Tester
+### React-komponent med Forskning
 ```json
 {
   "locale": "sv-SE",
   "has_enough_context": false,
-  "thought": "React-komponentutveckling med dokumentationsforskning, implementering och testning - 3 steg",
+  "thought": "React-komponentutveckling med dokumentationsforskning och implementering - 2 steg. Testning kommer erbjudas efter implementation.",
   "title": "Koduppgift: React autentiseringsformulär",
   "steps": [
     {
@@ -184,12 +171,6 @@ Ditt svar MÅSTE vara giltig JSON som matchar detta schema:
       "title": "Implementera Autentiseringsformulär",
       "description": "Skapa React-komponent med formulärvalidering, felhantering och skicka-logik. Använd react_sandbox_tool för utveckling och förhandsgranskning.",
       "step_type": "processing"
-    },
-    {
-      "need_search": false,
-      "title": "Testa Komponent",
-      "description": "Skriv enhetstester med Jest, kontrollera TypeScript-typer med tsc, granska kod med eslint",
-      "step_type": "testing"
     }
   ]
 }
@@ -206,7 +187,8 @@ Ditt svar MÅSTE vara giltig JSON som matchar detta schema:
 
 - Planen kommer att granskas av en människa före exekvering (mänsklig feedback)
 - Coder-agent kommer att utföra bearbetningssteg
-- Tester-agent kommer att utföra teststeg
 - Researcher-agent kommer att utföra forskningssteg (om det behövs)
-- Fokusera på att skapa tydliga, åtgärdbara steg som agenter kan utföra självständigt
+- **Testning är INTE automatisk** - efter kodning kommer användaren tillfrågas: "Vill du att jag testar koden?"
+- Om användaren godkänner testning kommer Tester-agenten köra lämpliga tester
+- Fokusera på att skapa tydliga, åtgärdbara implementeringssteg
 - Svara alltid i lokalen **{{ locale }}**
