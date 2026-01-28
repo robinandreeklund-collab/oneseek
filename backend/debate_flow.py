@@ -84,6 +84,15 @@ class DebateFlow:
         self.oneseek_analyses = []  # OneSeek internal analyses
         self.facts = []  # Shared facts accumulated from tools
         
+        # Token counting for context monitoring
+        self.token_encoder = None
+        try:
+            import tiktoken
+            self.token_encoder = tiktoken.encoding_for_model("gpt-3.5-turbo")
+            logger.info("Token encoder initialized for context monitoring")
+        except Exception as e:
+            logger.warning(f"tiktoken not available, using character-based estimation: {e}")
+        
         # Initialize tools
         try:
             self.search_tool = get_web_search_tool(max_search_results=max_search_results)
@@ -195,6 +204,53 @@ class DebateFlow:
         logger.info(f"Round {self.current_round} order: {available_models}")
         return available_models
 
+    def _count_tokens(self, text: str) -> int:
+        """
+        Count tokens in text for context monitoring.
+        
+        Args:
+            text: Text to count tokens for
+            
+        Returns:
+            Estimated token count
+        """
+        if self.token_encoder:
+            try:
+                return len(self.token_encoder.encode(text))
+            except Exception as e:
+                logger.debug(f"Token encoding failed: {e}, using fallback")
+        
+        # Fallback: 1 token ≈ 4 characters (rough estimate)
+        return len(text) // 4
+    
+    def _summarize_round(self, responses: List[Dict[str, Any]]) -> str:
+        """
+        Summarize a round's responses to reduce context size.
+        
+        Takes first 150 chars (~40 tokens) from each response to create
+        a compact summary instead of including full responses.
+        
+        Args:
+            responses: List of response dicts from a round
+            
+        Returns:
+            Summarized text for context
+        """
+        summary_parts = []
+        for resp in responses:
+            if not resp.get("error"):
+                # Take first 150 chars of response
+                snippet = resp['response'][:150]
+                if len(resp['response']) > 150:
+                    snippet += "..."
+                summary_parts.append(f"- **{resp['display_name']}**: {snippet}")
+        
+        summary = "\n".join(summary_parts)
+        token_count = self._count_tokens(summary)
+        logger.debug(f"Round summary created: {len(responses)} responses → {token_count} tokens")
+        
+        return summary
+
     def start_new_round(self, round_number: int):
         """
         Start a new debate round with clean state.
@@ -223,9 +279,22 @@ class DebateFlow:
         Add a verified fact to the debate context.
         This is used when the Agent explicitly calls `debater_web_search`.
         These facts ARE shared with all models to ground the debate.
+        
+        FIX: Limit fact size and array length to prevent context explosion.
         """
+        # Truncate individual facts to prevent bloat
+        if len(fact) > 500:
+            fact = fact[:500] + "... [trunkerat för kontextbegränsning]"
+            logger.debug(f"Truncated fact to 500 chars")
+        
         self.facts.append({"content": fact, "source": source, "round": self.current_round})
         logger.info(f"Added fact to debate context: {fact[:50]}...")
+        
+        # Keep only last 10 facts to prevent unbounded growth
+        if len(self.facts) > 10:
+            removed_count = len(self.facts) - 10
+            self.facts = self.facts[-10:]
+            logger.info(f"Trimmed facts array: removed {removed_count} oldest facts, kept last 10")
 
     def build_context_for_model(
         self, 
@@ -236,12 +305,14 @@ class DebateFlow:
         """
         Build context for a model based on round and position.
         
+        FIXED: Uses summarization for previous rounds to prevent context explosion.
+        
         Round 1:
         - First model: user query + language rule + token limit
-        - Other models: user query + chain_so_far
+        - Other models: user query + limited chain_so_far (last 3)
         
         Round 2 & 3:
-        - All models: user query + full_previous_round (+ chain_so_far for non-first)
+        - All models: user query + SUMMARY of full_previous_round + limited chain_so_far
         
         Args:
             model_key: Model identifier
@@ -259,18 +330,16 @@ class DebateFlow:
         # Add user query
         context_parts.append(f"Användares fråga: {user_query}\n")
         
-        # Add facts if available
+        # Add facts if available - ONLY for OneSeek and limited to last 5
         # Note: These are facts explicitly gathered by the Agent via debater_web_search
-        # Internal OneSeek analysis facts are NOT added here to avoid leakage/bias
         # STRICT ISOLATION: Only share facts with OneSeek (to support synthesis)
-        # Other models should rely on their training data and the debate flow (what other models say)
         if self.facts and model_key == "oneseek-local":
-            context_parts.append("\n**Verifierade Fakta (från webbsökning - ENDAST FÖR ONESEEK):**\n")
-            for fact in self.facts[-5:]: # Show last 5 facts to keep context small
-                context_parts.append(f"- {fact['content']} (Källa: {fact['source']})\n")
+            context_parts.append("\n**Verifierade Fakta (senaste 5):**\n")
+            for fact in self.facts[-5:]:  # Last 5 facts to keep context small
+                context_parts.append(f"- {fact['content']}\n")
         
         # Add instruction to include name
-        context_parts.append(f"VIKTIGT: Inled ditt svar med ditt namn: **{model_key}** (eller ditt displaynamn).")
+        context_parts.append(f"\nVIKTIGT: Inled ditt svar med ditt namn: **{model_key}** (eller ditt displaynamn).\n")
         
         # Round 1: First model gets minimal context
         if self.current_round == 1:
@@ -280,34 +349,59 @@ class DebateFlow:
                 context_parts.append(f"Svara på {language} och håll ditt svar under 500 tokens.")
                 context_parts.append(f"Ge ett genomtänkt och välunderbyggt svar på frågan.")
             else:
-                context_parts.append(f"\nDetta är runda 1. Tidigare svar i denna runda:\n")
-                for resp in self.chain_so_far:
-                    context_parts.append(f"\n{resp['display_name']}: {resp['response']}\n")
+                # FIXED: Limit to last 3 responses instead of all
+                recent = self.chain_so_far[-3:]
+                context_parts.append(f"\nDetta är runda 1. Senaste {len(recent)} svar:\n")
+                for resp in recent:
+                    # Truncate each response to 300 chars
+                    snippet = resp['response'][:300]
+                    if len(resp['response']) > 300:
+                        snippet += "..."
+                    context_parts.append(f"\n{resp['display_name']}: {snippet}\n")
                 context_parts.append(f"\nDitt svar (på {language}, max 500 tokens):")
         
-        # Round 2 & 3: Include previous round
+        # Round 2 & 3: FIXED - Use SUMMARY instead of full previous round
         else:
             if self.full_previous_round:
                 prev_round = self.current_round - 1
-                context_parts.append(f"\nKomplett Runda {prev_round}:\n")
-                for resp in self.full_previous_round:
-                    context_parts.append(f"\n{resp['display_name']}: {resp['response']}\n")
+                # CRITICAL FIX: Summarize instead of including full responses
+                summary = self._summarize_round(self.full_previous_round)
+                context_parts.append(f"\n**Sammanfattning av Runda {prev_round}:**\n")
+                context_parts.append(summary)
+                context_parts.append("\n")
             
-            # Add current round so far if not first
+            # FIXED: Limit chain_so_far to last 3 responses
             if self.chain_so_far:
-                context_parts.append(f"\nRunda {self.current_round} hittills:\n")
-                for resp in self.chain_so_far:
-                    context_parts.append(f"\n{resp['display_name']}: {resp['response']}\n")
+                recent = self.chain_so_far[-3:]
+                context_parts.append(f"\nRunda {self.current_round}, senaste {len(recent)} svar:\n")
+                for resp in recent:
+                    # Truncate to 300 chars
+                    snippet = resp['response'][:300]
+                    if len(resp['response']) > 300:
+                        snippet += "..."
+                    context_parts.append(f"\n{resp['display_name']}: {snippet}\n")
             
             # Round 3 specific instructions for OneSeek
             if self.current_round == 3 and model_key == "oneseek-local":
                 context_parts.append(f"\nDetta är runda 3 och din sista chans att ge ett syntetiserat svar.")
-                context_parts.append(f"Du har tillgång till alla tidigare argument och dina interna analyser.")
+                context_parts.append(f"Du har tillgång till sammanfattningar av tidigare argument och dina interna analyser.")
                 context_parts.append(f"Skapa ditt bästa, mest genomtänkta svar som väger alla perspektiv.")
             else:
                 context_parts.append(f"\nDitt svar för runda {self.current_round} (på {language}, max 500 tokens):")
         
-        return "\n".join(context_parts)
+        context = "\n".join(context_parts)
+        
+        # NEW: Log token count for monitoring
+        token_count = self._count_tokens(context)
+        logger.info(f"Context for {model_key} round {self.current_round}: {token_count} tokens")
+        
+        # Warnings for large contexts
+        if token_count > 10000:
+            logger.error(f"⚠️ CRITICAL: Context {token_count} tokens exceeds 10K! Risk of VLLM crash!")
+        elif token_count > 5000:
+            logger.warning(f"⚠️ WARNING: Context {token_count} tokens exceeds 5K")
+        
+        return context
 
     async def query_model_in_debate(
         self,
@@ -317,6 +411,8 @@ class DebateFlow:
     ) -> Dict[str, Any]:
         """
         Query a model with debate context.
+        
+        FIXED: Added context size guard to prevent VLLM crashes.
         """
         if model_key not in self.models:
             logger.warning(f"Model {model_key} not available")
@@ -334,8 +430,20 @@ class DebateFlow:
             
             # Build context for this model
             context = self.build_context_for_model(model_key, user_query, locale)
+            token_count = self._count_tokens(context)
             
-            logger.info(f"Querying {display_name} in round {self.current_round}")
+            # NEW: Hard limit to prevent VLLM crashes
+            if token_count > 15000:
+                logger.error(f"Context too large ({token_count} tokens) for {model_key}, skipping")
+                return {
+                    "model": model_key,
+                    "display_name": display_name,
+                    "response": f"❌ Hoppades över: Kontexten ({token_count} tokens) överskrider gränsen på 15K tokens. Detta skulle ha kraschat VLLM.",
+                    "error": True,
+                    "context_used": f"Context too large: {token_count} tokens"
+                }
+            
+            logger.info(f"Querying {display_name} in round {self.current_round} (context: {token_count} tokens)")
             
             # Query the model
             messages = [HumanMessage(content=context)]
@@ -458,6 +566,9 @@ class DebateFlow:
         Collect votes from external models on best answer from round 3.
         Models cannot vote for themselves.
         
+        FIXED: Drastically reduced voting context to prevent VLLM crashes.
+        Each response truncated to 300 chars instead of 1000.
+        
         Args:
             user_query: Original user question
             round_3_responses: All responses from round 3
@@ -470,19 +581,26 @@ class DebateFlow:
         votes = {}
         vote_details = []
         
-        # Build voting context
-        # Truncate responses to avoid huge prompts that might crash VLLM
-        voting_context = f"Fråga: {user_query}\n\nRunda 3 svar:\n"
+        # Build MINIMAL voting context to prevent VLLM crashes
+        voting_context = f"Fråga: {user_query}\n\nRunda 3 svar (sammanfattade):\n"
+        
         for idx, resp in enumerate(round_3_responses):
             if not resp.get("error"):
-                # Limit each response to 1000 chars for voting context
+                # CRITICAL FIX: Reduce from 1000 to 300 chars (~75 tokens instead of ~250)
                 response_text = resp['response']
-                if len(response_text) > 1000:
-                    response_text = response_text[:1000] + "... [trunkerat]"
+                if len(response_text) > 300:
+                    response_text = response_text[:300] + "... [fortsätter]"
                 voting_context += f"\n[{idx}] {resp['display_name']}: {response_text}\n"
         
         voting_context += "\n\nRösta på det bästa svaret genom att ange numret [0-" + str(len(round_3_responses)-1) + "]. "
         voting_context += "Du får INTE rösta på ditt eget svar. Ge endast nummret."
+        
+        # Log voting context size for monitoring
+        token_count = self._count_tokens(voting_context)
+        logger.info(f"Voting context: {token_count} tokens (reduced from ~5,300)")
+        
+        if token_count > 3000:
+            logger.warning(f"⚠️ Voting context still large: {token_count} tokens")
         
         # Ask each model to vote (including OneSeek, per user request)
         available_models = list(self.models.keys())
