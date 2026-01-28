@@ -570,6 +570,58 @@ curl -X POST http://localhost:8001/chat \
 
 ---
 
+### Problem 7: Python REPL NameError med funktionsdefinitioner
+
+**Symptom**: Python-kod med funktionsdefinitioner misslyckas med:
+```
+NameError: name 'function_name' is not defined
+```
+
+**Exempel på fel**:
+```python
+def factorial(n):
+    return n * factorial(n-1) if n > 0 else 1
+print(factorial(5))
+# Error: NameError("name 'factorial' is not defined")
+```
+
+**Lösning**: 
+Detta problem har åtgärdats i den senaste versionen (commit e9ca88e).
+
+**Om du fortfarande får felet**:
+1. **Uppdatera koden**: Hämta senaste versionen
+   ```bash
+   git pull origin copilot/integrera-ny-router-kodfror
+   ```
+
+2. **Verifiera fix finns**: Kontrollera att `backend/deer_flow/tools/python_repl.py` innehåller `SimplePythonREPL` klass
+
+3. **Starta om backend**: 
+   ```bash
+   cd backend
+   uvicorn app:app --reload --port 8001
+   ```
+
+**Teknisk förklaring**: 
+Den gamla implementationen använde `langchain_experimental.utilities.PythonREPL` som använder separata `globals` och `locals` namespaces i `exec()`. Detta orsakade att funktionsdefinitioner hamnade i `locals` men anrop letade i `globals`, vilket gav NameError.
+
+Den nya `SimplePythonREPL`-implementationen:
+- Använder en enda persistent namespace för både globals och locals
+- Funktioner, variabler och klasser finns kvar mellan körningar
+- Inga externa beroenden (langchain_experimental borttaget)
+
+**Bekräfta fix fungerar**:
+```bash
+# Testa en kodfråga med funktionsdefinition
+curl -X POST http://localhost:8001/chat \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"Skriv en Python-funktion för att beräkna fibonacci och testa med n=10"}]}'
+
+# Förväntat: Funktionen körs utan fel och returnerar korrekt resultat
+```
+
+---
+
 ## Avancerad användning
 
 ### Anpassa Docker-bild
