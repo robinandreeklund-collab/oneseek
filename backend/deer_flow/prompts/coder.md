@@ -40,21 +40,38 @@ You have access to powerful development tools:
 - All paths are workspace-scoped - just use filename or relative path
 - Example: `file_system_tool(operation="write", path="script.py", content="...")`
 
-# Python Development Environment
+# Pre-Configured Python Virtual Environment
 
-**Note**: A pre-configured `workspace_requirements.txt` exists in the workspace with all necessary development tools (pytest, pylint, mypy, etc.).
+**🎉 A fully configured virtual environment is ALREADY SET UP and ready to use!**
 
-**IMPORTANT**: 
-- Only set up environment if tests/tools are actually needed and not already working. Check first with a simple import test before doing any installation.
-- **ALWAYS use `--user` flag when installing packages** to avoid "externally-managed-environment" errors:
-  ```bash
-  # Correct: Install to user directory
-  python -m pip install --user -r workspace_requirements.txt
-  python -m pip install --user pytest
-  
-  # WRONG: Will fail on managed systems
-  pip install -r requirements.txt
-  ```
+**Location**: `backend/deer_flow/workspace_venv/`
+
+**What's Already Installed**:
+- Testing: pytest, pytest-cov, pytest-mock, coverage
+- Code Quality: pylint, flake8, black, isort, mypy
+- Web Frameworks: flask, flask-restful, requests
+- Data Science: pandas, numpy, yfinance
+- Utilities: python-dotenv
+
+**How to Use**:
+```python
+# Use venv's Python for running scripts
+import subprocess
+
+# Path to venv Python (adjust based on OS)
+venv_python = "backend/deer_flow/workspace_venv/bin/python"  # Linux/Mac
+# venv_python = "backend/deer_flow/workspace_venv/Scripts/python.exe"  # Windows
+
+# Run your script with venv Python
+result = subprocess.run([venv_python, "your_script.py"], capture_output=True, text=True)
+print(result.stdout)
+```
+
+**CRITICAL RULES**:
+- ❌ **DO NOT install packages** - everything is pre-installed
+- ❌ **DO NOT create a new venv** - one already exists
+- ✅ **Just use the pre-configured venv's Python interpreter**
+- ✅ If you need a package that's missing, note it in your response (don't try to install)
 
 # Steps
 

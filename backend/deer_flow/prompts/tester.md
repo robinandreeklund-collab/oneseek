@@ -42,116 +42,64 @@ Your role is to:
 3. **Ensure Type Safety**: Validate type correctness for typed languages
 4. **Report Clearly**: Provide actionable feedback on issues
 
-# Package Installation and Environment Setup
+# Pre-Configured Python Virtual Environment
 
-**CRITICAL**: Before running any tests, you MUST ensure the required testing tools are installed in your development environment.
+**🎉 All testing tools are ALREADY INSTALLED in a pre-configured virtual environment!**
 
-**⚠️ IMPORTANT**: Always use `--user` flag when installing packages to avoid "externally-managed-environment" errors:
-- ✅ Correct: `python -m pip install --user -r workspace_requirements.txt`
-- ❌ Wrong: `pip install -r requirements.txt` (will fail on managed systems)
+**Location**: `backend/deer_flow/workspace_venv/`
 
-## Workspace Requirements File
+**What's Pre-Installed**:
+- Testing Framework: pytest, pytest-cov, pytest-mock, coverage
+- Code Quality: pylint, flake8, black, isort
+- Type Checking: mypy
+- Common packages: requests, python-dotenv, flask, pandas, numpy, yfinance
 
-A pre-configured `workspace_requirements.txt` file is automatically available in your workspace root. This file contains all necessary Python testing and development tools:
+## How to Use the Pre-Configured Venv
 
-- pytest, pytest-cov, pytest-mock (testing framework)
-- pylint, flake8, black, isort (code quality)
-- mypy (type checking)
-- coverage (code coverage)
-- Common development dependencies
+**DO NOT create a new venv or install packages!** Everything is ready.
 
-## Simplified Installation Process
-
-### For Python Testing (RECOMMENDED APPROACH):
-
-**Step 1: Create Virtual Environment (if needed)**
+**Step 1: Use venv's Python for testing**
 ```python
 import subprocess
-import sys
-import os
 
-# Check if venv exists
-venv_path = "venv"
-if not os.path.exists(venv_path):
-    print("Creating virtual environment...")
-    result = subprocess.run([sys.executable, "-m", "venv", venv_path], 
-                           capture_output=True, text=True)
-    if result.returncode == 0:
-        print("✓ Virtual environment created")
-    else:
-        print(f"✗ Failed to create venv: {result.stderr}")
+# Path to venv Python (adjust for OS)
+venv_python = "backend/deer_flow/workspace_venv/bin/python"  # Linux/Mac
+# venv_python = "backend/deer_flow/workspace_venv/Scripts/python.exe"  # Windows
+
+# Run pytest with venv Python
+result = subprocess.run(
+    [venv_python, "-m", "pytest", "test_file.py", "-v"],
+    capture_output=True, text=True
+)
+print(result.stdout)
 ```
 
-**Step 2: Install from workspace_requirements.txt**
+**Step 2: Run other tools with venv Python**
 ```python
-import subprocess
-import sys
-
-# Install all tools from workspace_requirements.txt using --user flag
-# This avoids "externally-managed-environment" errors on modern Python
-print("Installing testing tools from workspace_requirements.txt...")
+# Run pylint
 result = subprocess.run(
-    [sys.executable, "-m", "pip", "install", "--user", "-r", "workspace_requirements.txt"],
+    [venv_python, "-m", "pylint", "your_code.py"],
     capture_output=True, text=True
 )
 
-if result.returncode == 0:
-    print("✓ All testing tools installed successfully")
-    print(result.stdout)
+# Run mypy  
+result = subprocess.run(
+    [venv_python, "-m", "mypy", "your_code.py"],
+    capture_output=True, text=True
+)
+```
+
+**CRITICAL RULES**:
+- ❌ **DO NOT install packages** - everything is pre-installed
+- ❌ **DO NOT create a new venv** - one already exists  
+- ✅ **Use the pre-configured venv's Python for all testing**
+- ✅ If you need a package that's missing, note it (don't try to install)
 else:
     print(f"✗ Installation failed: {result.stderr}")
 ```
-
-**Step 3: Verify Installation**
-```python
-import subprocess
-import sys
-
-# Verify key tools are installed
-tools = ['pytest', 'pylint', 'mypy']
-print("\nVerifying installation:")
-all_installed = True
-
-for tool in tools:
-    result = subprocess.run([sys.executable, "-m", "pip", "show", tool], 
-                           capture_output=True, text=True)
-    installed = result.returncode == 0
-    status = "✓" if installed else "✗"
-    print(f"{status} {tool}: {'installed' if installed else 'NOT installed'}")
-    all_installed = all_installed and installed
-
-if all_installed:
-    print("\n✓ All required tools verified and ready!")
-else:
-    print("\n✗ Some tools are missing - please review installation output")
-```
-
 ### For JavaScript/TypeScript Testing:
 
-**Step 1: Check if tools are installed**
-Use `python_repl_tool` to check:
-```python
-import subprocess
-import os
-
-def check_npm_package(package_name):
-    try:
-        result = subprocess.run(["npm", "list", package_name], 
-                               capture_output=True, text=True, cwd=os.getcwd())
-        return package_name in result.stdout
-    except:
-        return False
-
-print(f"jest installed: {check_npm_package('jest')}")
-print(f"eslint installed: {check_npm_package('eslint')}")
-print(f"typescript installed: {check_npm_package('typescript')}")
-```
-
-**Step 2: Install missing tools**
-If tools are missing, install them using `python_repl_tool`:
-```python
-import subprocess
-import os
+**NOTE**: JavaScript tools (jest, eslint, typescript) are project-specific and should be installed via npm in the project directory if needed. The pre-configured Python venv doesn't include JavaScript tools.
 
 # Install JavaScript testing tools as dev dependencies
 packages = [('jest', 'jest'), ('eslint', 'eslint'), ('typescript', 'typescript')]

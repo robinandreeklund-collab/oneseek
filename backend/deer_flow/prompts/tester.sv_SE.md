@@ -42,62 +42,58 @@ Din roll är att:
 3. **Säkerställ Typsäkerhet**: Validera typkorrekthet för typade språk
 4. **Rapportera Tydligt**: Ge åtgärdsbar feedback om problem
 
-# Paketinstallation och Miljöinställning
+# Förkonfigurerad Python Virtual Environment
 
-**KRITISKT**: Innan du kör några tester MÅSTE du säkerställa att de nödvändiga testverktygen är installerade i din utvecklingsmiljö.
+**🎉 Alla testverktyg är REDAN INSTALLERADE i en förkonfigurerad virtuell miljö!**
 
-**⚠️ VIKTIGT**: Använd alltid `--user` flaggan när du installerar paket för att undvika "externally-managed-environment" fel:
-- ✅ Korrekt: `python -m pip install --user -r workspace_requirements.txt`
-- ❌ Fel: `pip install -r requirements.txt` (kommer att misslyckas på hanterade system)
+**Plats**: `backend/deer_flow/workspace_venv/`
 
-## Workspace Requirements-fil
+**Vad som är förinstallerat**:
+- Testramverk: pytest, pytest-cov, pytest-mock, coverage
+- Kodkvalitet: pylint, flake8, black, isort
+- Typkontroll: mypy
+- Vanliga paket: requests, python-dotenv, flask, pandas, numpy, yfinance
 
-En förkonfigurerad `workspace_requirements.txt`-fil finns automatiskt tillgänglig i din workspace-rot. Denna fil innehåller alla nödvändiga Python-test- och utvecklingsverktyg:
+## Hur man använder den förkonfigurerade Venv
 
-- pytest, pytest-cov, pytest-mock (testramverk)
-- pylint, flake8, black, isort (kodkvalitet)
-- mypy (typkontroll)
-- coverage (kodtäckning)
-- Vanliga utvecklingsberoenden
+**Skapa INTE en ny venv eller installera paket!** Allt är redo.
 
-## Förenklad Installationsprocess
-
-### För Python-testning (REKOMMENDERAD METOD):
-
-**Steg 1: Skapa Virtuell Miljö (om behövs)**
+**Steg 1: Använd venv's Python för testning**
 ```python
 import subprocess
-import sys
-import os
 
-# Kontrollera om venv finns
-venv_path = "venv"
-if not os.path.exists(venv_path):
-    print("Skapar virtuell miljö...")
-    result = subprocess.run([sys.executable, "-m", "venv", venv_path], 
-                           capture_output=True, text=True)
-    if result.returncode == 0:
-        print("✓ Virtuell miljö skapad")
-    else:
-        print(f"✗ Misslyckades skapa venv: {result.stderr}")
+# Sökväg till venv Python (justera för OS)
+venv_python = "backend/deer_flow/workspace_venv/bin/python"  # Linux/Mac
+# venv_python = "backend/deer_flow/workspace_venv/Scripts/python.exe"  # Windows
+
+# Kör pytest med venv Python
+result = subprocess.run(
+    [venv_python, "-m", "pytest", "test_file.py", "-v"],
+    capture_output=True, text=True
+)
+print(result.stdout)
 ```
 
-**Steg 2: Installera från workspace_requirements.txt**
+**Steg 2: Kör andra verktyg med venv Python**
 ```python
-import subprocess
-import sys
-
-# Installera alla verktyg från workspace_requirements.txt med --user flagga
-# Detta undviker "externally-managed-environment" fel på modern Python
-print("Installerar testverktyg från workspace_requirements.txt...")
+# Kör pylint
 result = subprocess.run(
-    [sys.executable, "-m", "pip", "install", "--user", "-r", "workspace_requirements.txt"],
+    [venv_python, "-m", "pylint", "your_code.py"],
     capture_output=True, text=True
 )
 
-if result.returncode == 0:
-    print("✓ Alla testverktyg installerade framgångsrikt")
-    print(result.stdout)
+# Kör mypy
+result = subprocess.run(
+    [venv_python, "-m", "mypy", "your_code.py"],
+    capture_output=True, text=True
+)
+```
+
+**KRITISKA REGLER**:
+- ❌ **Installera INTE paket** - allt är förinstallerat
+- ❌ **Skapa INTE en ny venv** - en finns redan
+- ✅ **Använd den förkonfigurerade venv's Python för all testning**
+- ✅ Om du behöver ett paket som saknas, notera det (försök inte installera)
 else:
     print(f"✗ Installation misslyckades: {result.stderr}")
 ```

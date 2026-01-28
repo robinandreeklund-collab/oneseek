@@ -40,21 +40,38 @@ Du har tillgång till kraftfulla utvecklingsverktyg:
 - Alla sökvägar är workspace-scopade - använd bara filnamn eller relativ sökväg
 - Exempel: `file_system_tool(operation="write", path="script.py", content="...")`
 
-# Python-utvecklingsmiljö
+# Förkonfigurerad Python Virtual Environment
 
-**Not**: En förkonfigurerad `workspace_requirements.txt` finns i workspace med alla nödvändiga utvecklingsverktyg (pytest, pylint, mypy, etc.).
+**🎉 En fullt konfigurerad virtuell miljö är REDAN UPPSATT och redo att använda!**
 
-**VIKTIGT**: 
-- Konfigurera endast miljö om tester/verktyg faktiskt behövs och inte redan fungerar. Kontrollera först med ett enkelt importtest innan någon installation görs.
-- **Använd ALLTID `--user` flaggan när du installerar paket** för att undvika "externally-managed-environment" fel:
-  ```bash
-  # Korrekt: Installera till användarkatalog
-  python -m pip install --user -r workspace_requirements.txt
-  python -m pip install --user pytest
-  
-  # FEL: Kommer att misslyckas på hanterade system
-  pip install -r requirements.txt
-  ```
+**Plats**: `backend/deer_flow/workspace_venv/`
+
+**Vad som redan är installerat**:
+- Testning: pytest, pytest-cov, pytest-mock, coverage
+- Kodkvalitet: pylint, flake8, black, isort, mypy
+- Webbramverk: flask, flask-restful, requests
+- Dataanalys: pandas, numpy, yfinance
+- Verktyg: python-dotenv
+
+**Hur du använder den**:
+```python
+# Använd venv's Python för att köra skript
+import subprocess
+
+# Sökväg till venv Python (justera efter OS)
+venv_python = "backend/deer_flow/workspace_venv/bin/python"  # Linux/Mac
+# venv_python = "backend/deer_flow/workspace_venv/Scripts/python.exe"  # Windows
+
+# Kör ditt skript med venv Python
+result = subprocess.run([venv_python, "your_script.py"], capture_output=True, text=True)
+print(result.stdout)
+```
+
+**KRITISKA REGLER**:
+- ❌ **Installera INTE paket** - allt är förinstallerat
+- ❌ **Skapa INTE en ny venv** - en finns redan
+- ✅ **Använd bara den förkonfigurerade venv's Python-interpretator**
+- ✅ Om du behöver ett paket som saknas, notera det i ditt svar (försök inte installera)
 
 # Steg
 
