@@ -290,16 +290,19 @@ function appendMessage(message: Message) {
     message.agent === "reporter" ||
     message.agent === "researcher" ||
     message.agent === "analyst" ||
-    message.agent === "ai_comparison"
+    message.agent === "ai_comparison" ||
+    message.agent === "coder"  // Added back - needed for message storage
   ) {
     if (!getOngoingResearchId()) {
       const id = message.id;
       appendResearch(id);
-      openResearch(id);
+      // Don't auto-open research sidebar for coder (displays in main chat)
+      if (message.agent !== "coder") {
+        openResearch(id);
+      }
     }
     appendResearchActivity(message);
   }
-  // Note: "coder" removed from research agents - displays directly in chat
   useStore.getState().appendMessage(message);
 }
 
