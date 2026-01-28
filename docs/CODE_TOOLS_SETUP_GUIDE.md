@@ -622,6 +622,62 @@ curl -X POST http://localhost:8001/chat \
 
 ---
 
+### Problem 8: Coder Executes But Nothing Shows on Frontend
+
+**Symptom**:
+- Backend logs show coder executing successfully
+- Tools run (file_system_tool, python_repl_tool, etc.)
+- Backend says "Step execution completed"
+- Frontend shows nothing - blank response area
+
+**Example logs**:
+```
+✅ Coder node is coding
+✅ Tool file_system_tool called
+✅ Successfully wrote 15 bytes to 'hello.txt'
+✅ Coder agent made 1 tool calls
+✅ Step execution completed
+❌ Frontend: [blank/nothing displayed]
+```
+
+**Orsak**:
+När LLM-agenten använder verktyg genom `agent.ainvoke()`, kan det sista AIMessage vara tomt. LLM:en tror att verktygsresultatet talar för sig själv och lägger inte till extra kommentar. Detta resulterar i att inget innehåll visas på frontend.
+
+**Lösning**:
+Uppdatera till senaste versionen som innehåller fix (commit 5f7597d):
+
+```bash
+cd /path/to/oneseek
+git pull origin copilot/integrera-ny-router-kodfror
+```
+
+**Verifiera fix fungerar**:
+```bash
+# Testa en kod-fråga
+curl -X POST http://localhost:8001/chat \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"Skapa en fil test.txt med innehållet Testing!"}]}'
+
+# Backend logs ska visa:
+# ✅ "Final AIMessage has minimal content, creating summary"
+# ✅ "Enhanced final message with tool results summary"
+
+# Frontend ska nu visa:
+# ✅ Uppgiftsbeskrivning
+# ✅ "## Tool Results" sektion
+# ✅ Verktygsresultat synliga
+```
+
+**Teknisk förklaring**:
+Fixen detekterar när det sista meddelandet från agenten är tomt (<10 tecken) och det finns verktygsanrop. Den skapar då automatiskt ett förbättrat meddelande med:
+- Original response content
+- "## Tool Results" sektion
+- Sammanfattning av alla verktygsresultat
+
+Detta säkerställer att frontend alltid har meningsfullt innehåll att visa.
+
+---
+
 ## Avancerad användning
 
 ### Anpassa Docker-bild
