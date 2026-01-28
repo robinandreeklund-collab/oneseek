@@ -1426,6 +1426,37 @@ async def _execute_agent_step(
                 goto="research_team"
             )
     
+    # Handle case where current_plan is None (direct call from coordinator for code questions)
+    if current_plan is None:
+        logger.info(f"[_execute_agent_step] current_plan is None, creating synthetic plan for direct {agent_name} call")
+        from backend.deer_flow.prompts.planner_model import Plan, Step, StepType
+        
+        # Get research topic from state (should have [CODE] prefix for direct code calls)
+        research_topic = state.get("research_topic", "Code Task")
+        
+        # Remove [CODE] prefix if present
+        if research_topic.startswith("[CODE]"):
+            research_topic = research_topic[6:].strip()
+        
+        # Create a simple synthetic plan with one step
+        step_type = StepType.PROCESSING if agent_name == "coder" else StepType.RESEARCH
+        current_plan = Plan(
+            locale=state.get("locale", "en-US"),
+            has_enough_context=False,
+            thought=f"Direct {agent_name} execution for: {research_topic}",
+            title=research_topic,
+            steps=[
+                Step(
+                    need_search=False,
+                    step_type=step_type,
+                    title=research_topic,
+                    description=f"Execute {agent_name} task: {research_topic}",
+                    execution_res=None
+                )
+            ]
+        )
+        logger.info(f"[_execute_agent_step] Created synthetic plan for direct call: {current_plan.title}")
+    
     plan_title = current_plan.title
     observations = state.get("observations", [])
     logger.debug(f"[_execute_agent_step] Plan title: {plan_title}, observations count: {len(observations)}")
