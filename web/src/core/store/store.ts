@@ -287,7 +287,6 @@ function findMessageByToolCallId(toolCallId: string) {
 
 function appendMessage(message: Message) {
   if (
-    message.agent === "coder" ||
     message.agent === "reporter" ||
     message.agent === "researcher" ||
     message.agent === "analyst" ||
@@ -300,6 +299,7 @@ function appendMessage(message: Message) {
     }
     appendResearchActivity(message);
   }
+  // Note: "coder" removed from research agents - displays directly in chat
   useStore.getState().appendMessage(message);
 }
 
