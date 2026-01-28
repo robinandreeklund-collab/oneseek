@@ -1,0 +1,289 @@
+"""
+Multi-Round Debate Tools
+
+These tools enable the debate agent to run a 3-round debate where all models
+(including OneSeek) participate sequentially with strict context control.
+"""
+
+import logging
+from typing import Any, List, Dict
+from langchain_core.tools import tool
+
+from backend.debate_flow import get_debate_flow
+
+logger = logging.getLogger(__name__)
+
+
+@tool
+async def start_debate_round(round_number: int, user_query: str, locale: str = "sv-SE") -> str:
+    """
+    Start a new debate round and get the randomized order of models.
+    
+    Args:
+        round_number: Round number (1, 2, or 3)
+        user_query: The user's question
+        locale: Language locale (default: sv-SE for Swedish)
+        
+    Returns:
+        Information about the round and model order
+    """
+    try:
+        debate_flow = get_debate_flow(max_search_results=3, resources=[])
+        debate_flow.start_new_round(round_number)
+        
+        order = debate_flow.get_randomized_order()
+        
+        language = "svenska" if locale.startswith("sv") else "engelska"
+        
+        return f"""### 🎯 Runda {round_number} startar
+
+**Deltagare och ordning:**
+{chr(10).join([f"{i+1}. **{debate_flow.models[m].__class__.__name__ if m in debate_flow.models else m}** (ID: `{m}`)" for i, m in enumerate(order)])}
+
+_Språkinställning: {language}_
+_Föregående runda: {len(debate_flow.full_previous_round)} svar_
+"""
+    except Exception as e:
+        logger.error(f"Error starting debate round: {e}", exc_info=True)
+        return f"Fel vid start av runda {round_number}: {str(e)}"
+
+
+@tool
+async def query_model_in_round(model_key: str, user_query: str, locale: str = "sv-SE") -> str:
+    """
+    Query a specific model in the current debate round.
+    The model will receive context based on:
+    - Round 1: User query + chain_so_far
+    - Round 2/3: Full previous round + chain_so_far
+    
+    Args:
+        model_key: Model identifier (e.g., "gpt-3.5-turbo", "oneseek-local")
+        user_query: The user's original question
+        locale: Language locale
+        
+    Returns:
+        The model's response in the debate
+    """
+    try:
+        # Check if model_key contains ID in parentheses from start_debate_round output
+        # e.g., "GPT-3.5 (OpenAI) (ID: gpt-3.5-turbo)" -> extract "gpt-3.5-turbo"
+        import re
+        id_match = re.search(r'\(ID: ([^)]+)\)', model_key)
+        if id_match:
+            actual_key = id_match.group(1)
+            logger.info(f"Extracted model ID '{actual_key}' from '{model_key}'")
+            model_key = actual_key
+            
+        debate_flow = get_debate_flow()
+        
+        result = await debate_flow.query_model_in_debate(model_key, user_query, locale)
+        
+        if result.get("error"):
+            return f"❌ **{result['display_name']}:** {result['response']}"
+        
+        # Helper for clean context display
+        context_preview = result.get('context_used', 'Ingen kontext')
+        
+        return f"""### 🗣️ {result['display_name']} (Pos {result['position'] + 1})
+
+{result['response']}
+
+<details>
+<summary>Visa skickad kontext</summary>
+
+```text
+{context_preview}
+```
+</details>
+
+---
+"""
+    except Exception as e:
+        logger.error(f"Error querying model in debate: {e}", exc_info=True)
+        return f"Fel vid anrop till {model_key}: {str(e)}"
+
+
+@tool
+async def run_internal_analysis(user_query: str) -> str:
+    """
+    Run OneSeek's internal analysis of responses so far.
+    This performs fact-checking and identifies counterarguments.
+    The analysis is NOT shared with other models.
+    
+    Args:
+        user_query: The user's original question
+        
+    Returns:
+        Summary of internal analysis
+    """
+    try:
+        debate_flow = get_debate_flow()
+        
+        if not debate_flow.chain_so_far:
+            return "⚠️ Ingen analys att köra - inga svar ännu i denna runda."
+        
+        analysis = await debate_flow.run_oneseek_internal_analysis(
+            user_query,
+            debate_flow.chain_so_far
+        )
+        
+        return f"""🔍 **OneSeek Intern Analys** (Runda {analysis['round']}):
+
+Analyserade {len(analysis['insights'])} svar
+Faktakontroller genomförda: {sum(len(i.get('checks', [])) for i in analysis['insights'])}
+
+Detta används internt av OneSeek för att förbättra sitt syntetiserade svar.
+"""
+    except Exception as e:
+        logger.error(f"Error running internal analysis: {e}", exc_info=True)
+        return f"Fel vid intern analys: {str(e)}"
+
+
+@tool
+async def collect_debate_votes(user_query: str) -> str:
+    """
+    Collect votes from external models on the best answer from round 3.
+    Models cannot vote for themselves.
+    
+    Args:
+        user_query: The user's original question
+        
+    Returns:
+        Voting results with winner
+    """
+    try:
+        debate_flow = get_debate_flow()
+        
+        if debate_flow.current_round != 3:
+            return f"⚠️ Röstning kan endast ske efter runda 3. Nuvarande runda: {debate_flow.current_round}"
+        
+        if not debate_flow.chain_so_far:
+            return "⚠️ Inga svar att rösta på i runda 3."
+        
+        voting_results = await debate_flow.collect_votes(user_query, debate_flow.chain_so_far)
+        
+        # Format results
+        result_text = f"""### 🗳️ Röstningsresultat
+
+**Totalt antal röstande:** {voting_results['total_voters']}
+
+#### 🏆 Vinnare
+**{voting_results['winner'] if voting_results['winner'] else 'Ingen vinnare'}** ({voting_results['winner_votes']} röster)
+
+#### 📊 Detaljerade Röster
+"""
+        
+        for detail in voting_results['vote_details']:
+            result_text += f"- **{detail['voter']}** röstade på: `{detail['vote']}`\n"
+            
+        result_text += f"""
+<details>
+<summary>Visa röstningsprompt</summary>
+
+```text
+{voting_results.get('voting_prompt', 'Ingen prompt')}
+```
+</details>
+"""
+        
+        return result_text
+        
+    except Exception as e:
+        logger.error(f"Error collecting votes: {e}", exc_info=True)
+        return f"Fel vid röstning: {str(e)}"
+
+
+@tool
+async def get_debate_summary() -> str:
+    """
+    Get a summary of the entire debate including all rounds and voting results.
+    
+    Returns:
+        Complete debate summary
+    """
+    try:
+        debate_flow = get_debate_flow()
+        
+        summary = f"""📊 **Debattsammanfattning**
+
+Total antal ronder: {len(debate_flow.debate_history)}
+Nuvarande runda: {debate_flow.current_round}
+
+"""
+        
+        for round_data in debate_flow.debate_history:
+            summary += f"\n**Runda {round_data['round']}:**\n"
+            summary += f"Antal svar: {len(round_data['responses'])}\n"
+            for resp in round_data['responses']:
+                if not resp.get('error'):
+                    summary += f"- {resp['display_name']}: {resp['response'][:100]}...\n"
+        
+        if debate_flow.chain_so_far:
+            summary += f"\n**Aktuell runda {debate_flow.current_round}:**\n"
+            summary += f"Antal svar: {len(debate_flow.chain_so_far)}\n"
+        
+        if debate_flow.oneseek_analyses:
+            summary += f"\nOneSeek interna analyser: {len(debate_flow.oneseek_analyses)}\n"
+        
+        return summary
+        
+    except Exception as e:
+        logger.error(f"Error getting debate summary: {e}", exc_info=True)
+        return f"Fel vid hämtning av sammanfattning: {str(e)}"
+
+
+def get_debate_tools() -> List[Any]:
+    """
+    Get all debate tools for the debate agent.
+    
+    Returns:
+        List of debate tools
+    """
+    # Import web search tool directly
+    from backend.deer_flow.tools import get_web_search_tool
+    
+    # Create debater_web_search tool wrapper
+    @tool
+    async def debater_web_search(query: str) -> str:
+        """
+        Perform a web search to verify facts or gather information for the debate.
+        The results are added to the debate context and visible to OneSeek.
+        
+        Args:
+            query: Search query
+            
+        Returns:
+            Search results summary
+        """
+        try:
+            debate_flow = get_debate_flow()
+            search_tool = get_web_search_tool(max_search_results=3)
+            
+            logger.info(f"Debater performing web search: {query}")
+            results = await search_tool.ainvoke(query)
+            
+            # Format results
+            result_text = f"Sökresultat för '{query}':\n"
+            if isinstance(results, list):
+                for i, res in enumerate(results):
+                    content = res.get('content', '')[:200] + "..."
+                    result_text += f"{i+1}. {res.get('title')} - {content}\n"
+            else:
+                result_text += str(results)
+            
+            # Add to debate flow shared facts
+            debate_flow.add_fact(result_text, source=f"Web Search: {query}")
+            
+            return result_text
+        except Exception as e:
+            logger.error(f"Error in debater web search: {e}")
+            return f"Sökfel: {str(e)}"
+
+    return [
+        start_debate_round,
+        query_model_in_round,
+        run_internal_analysis,
+        collect_debate_votes,
+        get_debate_summary,
+        debater_web_search, # Added granular tool
+    ]

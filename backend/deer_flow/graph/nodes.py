@@ -28,6 +28,7 @@ from backend.deer_flow.tools import (
     python_repl_tool,
 )
 from backend.deer_flow.tools.ai_comparison_tools import get_ai_comparison_tools
+from backend.deer_flow.tools.debate_tools import get_debate_tools
 from backend.deer_flow.tools.search import LoggedTavilySearch
 from backend.deer_flow.utils.context_manager import ContextManager, validate_message_content
 from backend.deer_flow.utils.json_utils import repair_json_output, sanitize_tool_response
@@ -498,6 +499,117 @@ def planner_node(
     )
 
 
+def debate_planner_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["human_feedback"]]:
+    """
+    Debate planner node - creates a debate plan with multiple rounds where AI models
+    participate as equal debaters. Follows the same workflow as normal research planning:
+    debate_planner → human_feedback → research_team → researcher (with debate tools) → reporter
+    
+    This is essentially a simplified version of planner_node that generates a fixed debate plan structure.
+    """
+    logger.info("Debate planner generating debate plan with locale: %s", state.get("locale", "en-US"))
+    configurable = Configuration.from_runnable_config(config)
+    
+    # Use the debate_planner prompt template
+    messages = apply_prompt_template("debate_planner", state, configurable, state.get("locale", "en-US"))
+    
+    # Get LLM for debate planner
+    if AGENT_LLM_MAP.get("debate_planner") == "basic":
+        llm = get_llm_by_type("basic")
+        llm = configure_llm_with_thinking(llm, enable_thinking=False)
+    else:
+        llm = get_llm_by_type(AGENT_LLM_MAP.get("debate_planner", "basic"))
+        llm = configure_llm_with_thinking(llm, enable_thinking=False)
+    
+    # Invoke/stream LLM to get debate plan (EXACT match to planner_node logic)
+    # CRITICAL: Use the same invoke/stream logic as planner_node for frontend streaming
+    full_response = ""
+    if AGENT_LLM_MAP.get("debate_planner") == "basic" and not configurable.enable_deep_thinking:
+        response = llm.invoke(messages)
+        full_response = get_message_content(response) or ""
+    else:
+        response = llm.stream(messages)
+        for chunk in response:
+            full_response += chunk.content
+    
+    logger.info(f"Debate planner response: {full_response}")
+    
+    # Strip <think> tags if present (matching planner_node behavior)
+    original_response = full_response
+    full_response = strip_think_tags(full_response, expect_json=True)
+    if '<think>' in original_response and '<think>' not in full_response:
+        logger.debug(f"Stripped think tags from debate planner response")
+    
+    # Strip markdown code fences if present (LLM sometimes wraps JSON in ```json ... ```)
+    full_response = full_response.strip()
+    if full_response.startswith("```"):
+        # Remove opening fence (e.g., ```json or just ```)
+        lines = full_response.split('\n')
+        if len(lines) > 0:
+            lines = lines[1:]  # Remove first line with ```
+        # Remove closing fence
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        full_response = '\n'.join(lines).strip()
+        logger.debug(f"Stripped markdown code fences from debate planner response")
+    
+    # Validate explicitly that response content is valid JSON before proceeding
+    if not is_json_like(full_response):
+        logger.warning("Debate planner response does not appear to be valid JSON")
+        return Command(
+            update=preserve_state_meta_fields(state),
+            goto="__end__"
+        )
+    
+    # Parse and repair JSON (matching planner_node behavior)
+    try:
+        curr_plan = json.loads(repair_json_output(full_response))
+        # Need to extract the plan from the full_response
+        curr_plan_content = extract_plan_content(curr_plan)
+        # load the current_plan
+        curr_plan = json.loads(repair_json_output(curr_plan_content))
+    except json.JSONDecodeError as e:
+        logger.warning(f"Debate planner response is not valid JSON: {e}")
+        return Command(
+            update=preserve_state_meta_fields(state),
+            goto="__end__"
+        )
+    
+    # Validate and fix plan to ensure web search requirements are met (matching planner_node)
+    if isinstance(curr_plan, dict):
+        curr_plan = validate_and_fix_plan(curr_plan, configurable.enforce_web_search, configurable.enable_web_search)
+    
+    # Check if plan has enough context (matching planner_node)
+    if isinstance(curr_plan, dict) and curr_plan.get("has_enough_context"):
+        logger.info("Debate planner response has enough context.")
+        new_plan = Plan.model_validate(curr_plan)
+        return Command(
+            update={
+                "messages": [AIMessage(content=json.dumps(curr_plan, ensure_ascii=False, indent=2), name="planner")],
+                "current_plan": new_plan,
+                **preserve_state_meta_fields(state),
+            },
+            goto="reporter",
+        )
+    
+    # Convert plan to JSON string for human_feedback (matching planner_node)
+    full_response = json.dumps(curr_plan, ensure_ascii=False, indent=2)
+    logger.debug(f"Successfully parsed and prepared debate plan for human_feedback")
+    
+    # Return the plan to human_feedback (same as planner_node)
+    # IMPORTANT: Use name="planner" so frontend recognizes it and displays the plan card
+    return Command(
+        update={
+            "messages": [AIMessage(content=full_response, name="planner")],
+            "current_plan": full_response,  # Pass as JSON string like planner does
+            **preserve_state_meta_fields(state),
+        },
+        goto="human_feedback",
+    )
+
+
 def extract_plan_content(plan_data: str | dict | Any) -> str:
     """
     Safely extract plan content from different types of plan data.
@@ -633,7 +745,7 @@ def human_feedback_node(
 
 def coordinator_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["planner", "background_investigator", "ai_comparison", "coordinator", "__end__"]]:
+) -> Command[Literal["planner", "background_investigator", "ai_comparison", "debate_planner", "coordinator", "__end__"]]:
     """Coordinator node that communicate with customers and handle clarification."""
     logger.info("Coordinator talking.")
     configurable = Configuration.from_runnable_config(config)
@@ -678,12 +790,18 @@ def coordinator_node(
 
                     if tool_name == "handoff_to_planner":
                         logger.info("Handing off to planner")
-                        # Always route to planner first (planner will route to ai_comparison if needed)
-                        goto = "planner"
                         
-                        # Log if AI comparison mode is enabled (planner will handle routing)
-                        if state.get("enable_ai_comparison", False):
+                        # Check debate mode first - route directly to debate_planner
+                        if state.get("enable_debate_mode", False):
+                            logger.info("Debate mode enabled, routing to debate_planner")
+                            goto = "debate_planner"
+                        # Check AI comparison mode - route to planner (which routes to ai_comparison)
+                        elif state.get("enable_ai_comparison", False):
                             logger.info("AI comparison mode enabled, planner will route to ai_comparison")
+                            goto = "planner"
+                        # Normal research mode
+                        else:
+                            goto = "planner"
 
                         # Extract research_topic if provided
                         if tool_args.get("research_topic"):
@@ -871,12 +989,18 @@ def coordinator_node(
 
                 if tool_name in ["handoff_to_planner", "handoff_after_clarification"]:
                     logger.info("Handing off to planner")
-                    # Always route to planner first (planner will route to ai_comparison if needed)
-                    goto = "planner"
                     
-                    # Log if AI comparison mode is enabled (planner will handle routing)
-                    if state.get("enable_ai_comparison", False):
+                    # Check debate mode first - route directly to debate_planner
+                    if state.get("enable_debate_mode", False):
+                        logger.info("Debate mode enabled, routing to debate_planner")
+                        goto = "debate_planner"
+                    # Check AI comparison mode - route to planner (which routes to ai_comparison)
+                    elif state.get("enable_ai_comparison", False):
                         logger.info("AI comparison mode enabled, planner will route to ai_comparison")
+                        goto = "planner"
+                    # Normal research mode
+                    else:
+                        goto = "planner"
 
                     if not enable_clarification and tool_args.get("research_topic"):
                         research_topic = tool_args["research_topic"]
@@ -911,8 +1035,9 @@ def coordinator_node(
             logger.info("No tool calls in legacy mode - ending workflow gracefully")
 
     # Apply background_investigation routing if enabled (unified logic)
-    # But skip if AI comparison mode is enabled (comparison doesn't need background investigation)
-    if goto == "planner" and state.get("enable_background_investigation") and not state.get("enable_ai_comparison"):
+    # But skip if AI comparison or debate mode is enabled (they don't need background investigation)
+    # Also skip if already routing to debate_planner
+    if goto == "planner" and state.get("enable_background_investigation") and not state.get("enable_ai_comparison") and not state.get("enable_debate_mode"):
         goto = "background_investigator"
 
     # Set default values for state variables (in case they're not defined in legacy mode)
@@ -944,6 +1069,21 @@ def reporter_node(state: State, config: RunnableConfig):
     """Reporter node that write a final report."""
     logger.info("Reporter write final report")
     configurable = Configuration.from_runnable_config(config)
+    
+    # Check if this is Debate mode (NEW)
+    debate_results = state.get("debate_results")
+    if debate_results:
+        logger.info("Handling debate results in reporter node")
+        final_report = debate_results.get("final_report", "Debate completed but no report generated.")
+        
+        # If the report seems short or missing, we might want to wrap it
+        if len(final_report) < 100:
+            final_report = f"# Debate Results\n\n{final_report}"
+            
+        return {
+            "final_report": final_report,
+            "citations": state.get("citations", []),
+        }
     
     # Check if this is AI comparison mode
     comparison_results = state.get("comparison_results")
@@ -1263,7 +1403,7 @@ async def _execute_agent_step(
         )
 
     # Invoke the agent
-    default_recursion_limit = 25
+    default_recursion_limit = 100
     try:
         env_value_str = os.getenv("AGENT_RECURSION_LIMIT", str(default_recursion_limit))
         parsed_limit = int(env_value_str)
@@ -1504,37 +1644,49 @@ async def _setup_and_execute_agent_step(
 async def researcher_node(
     state: State, config: RunnableConfig
 ) -> Command[Literal["research_team"]]:
-    """Researcher node that do research"""
+    """Researcher node that do research or execute debate"""
     logger.info("Researcher node is researching.")
     logger.debug(f"[researcher_node] Starting researcher agent")
     
     configurable = Configuration.from_runnable_config(config)
     logger.debug(f"[researcher_node] Max search results: {configurable.max_search_results}")
     
+    # Check if we're in debate mode
+    enable_debate_mode = state.get("enable_debate_mode", False)
+    
     # Build tools list based on configuration
     tools = []
     
-    # Add web search and crawl tools only if web search is enabled
-    if configurable.enable_web_search:
-        tools.extend([get_web_search_tool(configurable.max_search_results), crawl_tool])
+    if enable_debate_mode:
+        # In debate mode, use debate tools instead of research tools
+        logger.info("[researcher_node] Debate mode enabled - adding debate tools")
+        debate_tools = get_debate_tools()
+        tools.extend(debate_tools)
+        logger.info(f"[researcher_node] Debate tools count: {len(tools)}")
+        logger.debug(f"[researcher_node] Debate tools: {[tool.name if hasattr(tool, 'name') else str(tool) for tool in tools]}")
     else:
-        logger.info("[researcher_node] Web search is disabled, using only local RAG")
-    
-    # Add retriever tool if resources are available (always add, higher priority)
-    retriever_tool = get_retriever_tool(state.get("resources", []))
-    if retriever_tool:
-        logger.debug(f"[researcher_node] Adding retriever tool to tools list")
-        tools.insert(0, retriever_tool)
-    
-    # Warn if no tools are available
-    if not tools:
-        logger.warning("[researcher_node] No tools available (web search disabled, no resources). "
-                       "Researcher will operate in pure reasoning mode.")
-    
-    logger.info(f"[researcher_node] Researcher tools count: {len(tools)}")
-    logger.debug(f"[researcher_node] Researcher tools: {[tool.name if hasattr(tool, 'name') else str(tool) for tool in tools]}")
-    logger.info(f"[researcher_node] enforce_researcher_search={configurable.enforce_researcher_search}, "
-                f"enable_web_search={configurable.enable_web_search}")
+        # Normal research mode
+        # Add web search and crawl tools only if web search is enabled
+        if configurable.enable_web_search:
+            tools.extend([get_web_search_tool(configurable.max_search_results), crawl_tool])
+        else:
+            logger.info("[researcher_node] Web search is disabled, using only local RAG")
+        
+        # Add retriever tool if resources are available (always add, higher priority)
+        retriever_tool = get_retriever_tool(state.get("resources", []))
+        if retriever_tool:
+            logger.debug(f"[researcher_node] Adding retriever tool to tools list")
+            tools.insert(0, retriever_tool)
+        
+        # Warn if no tools are available
+        if not tools:
+            logger.warning("[researcher_node] No tools available (web search disabled, no resources). "
+                           "Researcher will operate in pure reasoning mode.")
+        
+        logger.info(f"[researcher_node] Researcher tools count: {len(tools)}")
+        logger.debug(f"[researcher_node] Researcher tools: {[tool.name if hasattr(tool, 'name') else str(tool) for tool in tools]}")
+        logger.info(f"[researcher_node] enforce_researcher_search={configurable.enforce_researcher_search}, "
+                    f"enable_web_search={configurable.enable_web_search}")
     
     return await _setup_and_execute_agent_step(
         state,
@@ -1683,6 +1835,155 @@ Provide a comprehensive comparison report with citations.""",
             update={
                 **result.update,
                 "current_plan": comparison_plan,  # Update with completed step
+            },
+            goto="reporter",
+        )
+    finally:
+        # Restore original recursion limit
+        if original_recursion_limit is not None:
+            os.environ["AGENT_RECURSION_LIMIT"] = original_recursion_limit
+        elif "AGENT_RECURSION_LIMIT" in os.environ:
+            del os.environ["AGENT_RECURSION_LIMIT"]
+
+
+async def debate_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["reporter"]]:
+    """
+    Multi-Round Debate node that orchestrates a 3-round debate between AI models.
+    
+    All models (including OneSeek) participate as equal debaters with:
+    - Randomized order each round
+    - Sequential chain-of-thought flow
+    - Strict context control between rounds
+    - OneSeek synthesis in round 3
+    - External model voting after round 3
+    
+    Routes directly to reporter to avoid research_team loops.
+    """
+    logger.info("Debate node starting - Multi-Round Debate Engine")
+    
+    configurable = Configuration.from_runnable_config(config)
+    
+    # Get debate tools
+    from backend.deer_flow.tools import get_debate_tools
+    tools = get_debate_tools()
+    logger.info(f"Debate tools count: {len(tools)}")
+    
+    # Get locale and research topic from state
+    locale = state.get("locale", "en-US")
+    research_topic = state.get("research_topic", "Unknown topic")
+    logger.info(f"Research topic: {research_topic}")
+    logger.info(f"Locale: {locale}")
+    
+    # Create a simple plan with one step for the debate
+    # This allows us to use _setup_and_execute_agent_step() which works for streaming
+    from backend.deer_flow.prompts.planner_model import Plan, Step, StepType
+    
+    debate_step = Step(
+        need_search=False,  # Debate uses internal web search via tools
+        step_type=StepType.RESEARCH,
+        title="Multi-Round Debate",
+        description=f"""Orchestrate a 3-round debate for: {research_topic}
+
+Follow the debate protocol:
+
+**Round 1:**
+1. start_debate_round(1, "{research_topic}", "{locale}")
+2. Query each model ONE AT A TIME in randomized order using query_model_in_round
+3. Use debater_web_search if needed to verify facts
+
+**Round 2:**
+1. start_debate_round(2, "{research_topic}", "{locale}")
+2. Query each model ONE AT A TIME in randomized order using query_model_in_round
+3. Use debater_web_search if needed
+
+**Round 3:**
+1. start_debate_round(3, "{research_topic}", "{locale}")
+2. Query each model ONE AT A TIME in randomized order using query_model_in_round
+3. OneSeek creates synthesis when it's OneSeek's turn
+4. Use debater_web_search if needed
+
+**Voting:**
+1. collect_debate_votes("{research_topic}")
+
+**Summary:**
+1. get_debate_summary()
+
+Provide a comprehensive debate report with all rounds, voting results, and conclusions.""",
+        execution_res=None
+    )
+    
+    debate_plan = Plan(
+        locale=state.get("locale", "en-US"),
+        has_enough_context=False,  # We need to execute this debate step
+        thought="Running multi-round debate with all AI models to provide comprehensive, debated analysis.",
+        title=research_topic,
+        steps=[debate_step]
+    )
+    
+    # Update state with debate plan
+    # Ensure debate_results is cleared from previous runs
+    state["current_plan"] = debate_plan
+    state["locale"] = locale
+    state["research_topic"] = research_topic
+    if "debate_results" in state:
+        del state["debate_results"]
+    
+    logger.info("Created debate plan with 1 step, using standard execution path")
+    
+    # Set a higher recursion limit for debate since it needs many sequential tool calls
+    # 3 rounds × ~5 models × 2 tools per model = ~30 calls minimum
+    # Plus voting and summary = ~35 calls
+    # We set to 100 to give plenty of buffer
+    import os
+    original_recursion_limit = os.getenv("AGENT_RECURSION_LIMIT")
+    os.environ["AGENT_RECURSION_LIMIT"] = "100"
+    
+    try:
+        logger.info("Executing debate step via standard agent execution path")
+        
+        # Use the EXACT SAME execution path as ai_comparison and researcher
+        result = await _setup_and_execute_agent_step(
+            state,
+            config,
+            "debate",
+            tools,
+        )
+        
+        # Mark the debate step as complete
+        debate_step.execution_res = "Multi-round debate completed successfully"
+        
+        # Go directly to reporter to avoid research_team loops
+        logger.info("Debate complete, routing directly to reporter")
+        
+        # Extract the final debate report from the messages
+        # The debate agent's last message should be the final report/summary
+        debate_report = None
+        if result.update.get("messages"):
+            last_message = result.update["messages"][-1]
+            if isinstance(last_message, AIMessage) and last_message.content:
+                debate_report = last_message.content
+                logger.info("Extracted debate report from final message")
+        
+        # If no report found in messages, try to get it from observations (tool outputs)
+        if not debate_report:
+            observations = result.update.get("observations", [])
+            if observations:
+                # The last observation might be the get_debate_summary output
+                debate_report = observations[-1]
+                logger.info("Using last observation as debate report")
+        
+        # Return updated state with completed step and goto reporter
+        # We pass debate_results to trigger special handling in reporter_node
+        return Command(
+            update={
+                **result.update,
+                "current_plan": debate_plan,
+                "debate_results": {
+                    "final_report": debate_report,
+                    "status": "completed"
+                }
             },
             goto="reporter",
         )

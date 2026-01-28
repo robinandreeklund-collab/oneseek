@@ -453,6 +453,19 @@ function ThoughtBlock({
 }
 
 const GREETINGS = ["Cool", "Sounds great", "Looks good", "Great", "Awesome"];
+function formatPlannerName(agent?: string) {
+  if (!agent || agent === "planner") {
+    return null;
+  }
+  if (agent.endsWith("_planner")) {
+    const base = agent.replace(/_planner$/, "").replace(/_/g, " ").trim();
+    if (!base) {
+      return null;
+    }
+    return base.charAt(0).toUpperCase() + base.slice(1);
+  }
+  return null;
+}
 function PlanCard({
   className,
   message,
@@ -484,6 +497,16 @@ function PlanCard({
   const hasMainContent = Boolean(
     message.content && message.content.trim() !== "",
   );
+  const startActionLabel = useMemo(() => {
+    if (message.agent === "debate_planner") {
+      return t("startDebate");
+    }
+    const plannerName = formatPlannerName(message.agent);
+    if (plannerName) {
+      return `Start ${plannerName}`;
+    }
+    return t("startResearch");
+  }, [message.agent, t]);
 
   // Check if thinking: has reasoning content but no main content yet
   const isThinking = Boolean(reasoningContent && !hasMainContent);
@@ -579,7 +602,8 @@ function PlanCard({
               )}
             </CardContent>
             <CardFooter className="flex justify-end">
-              {!message.isStreaming && interruptMessage?.options?.length && (
+              {interruptMessage?.options?.length &&
+                (!message.isStreaming || waitForFeedback) && (
                 <motion.div
                   className="flex gap-2"
                   initial={{ opacity: 0, y: 12 }}
@@ -603,7 +627,11 @@ function PlanCard({
                         }
                       }}
                     >
-                      {option.text}
+                      {option.value === "accepted"
+                        ? startActionLabel
+                        : option.value === "edit_plan"
+                          ? t("editPlan")
+                          : option.text}
                     </Button>
                   ))}
                 </motion.div>

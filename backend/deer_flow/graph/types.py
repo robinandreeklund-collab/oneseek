@@ -50,3 +50,7 @@ class State(MessagesState):
     # AI Comparison / Debate OS mode
     enable_ai_comparison: bool = False  # Enable AI comparison mode
     comparison_results: dict[str, Any] | None = None  # Results from AI comparison
+    
+    # Multi-Round Debate Engine mode
+    enable_debate_mode: bool = False  # Enable multi-round debate mode
+    debate_results: dict[str, Any] | None = None  # Results from debate (all rounds + voting)

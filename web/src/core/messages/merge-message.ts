@@ -104,12 +104,15 @@ function mergeToolCallMessage(
 
   message.toolCalls ??= [];
   for (const chunk of event.data.tool_call_chunks) {
+    let targetToolCall: ToolCallRuntime | undefined;
+    
     if (chunk.id) {
       const toolCall = message.toolCalls.find(
         (toolCall) => toolCall.id === chunk.id,
       );
       if (toolCall) {
         toolCall.argsChunks = [convertToolChunkArgs(chunk.args)];
+        targetToolCall = toolCall;
       }
     } else {
       const streamingToolCall = message.toolCalls.find(
@@ -117,7 +120,14 @@ function mergeToolCallMessage(
       );
       if (streamingToolCall) {
         streamingToolCall.argsChunks!.push(convertToolChunkArgs(chunk.args));
+        targetToolCall = streamingToolCall;
       }
+    }
+    
+    // Parse partial args for streaming UI feedback
+    if (targetToolCall && targetToolCall.argsChunks?.length) {
+      // Use safeParseToolArgs which uses best-effort-json-parser to handle incomplete JSON
+      targetToolCall.args = safeParseToolArgs(targetToolCall.argsChunks.join(""));
     }
   }
 }

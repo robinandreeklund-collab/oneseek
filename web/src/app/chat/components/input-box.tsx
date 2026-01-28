@@ -8,6 +8,7 @@ import { useTranslations } from "next-intl";
 import { useCallback, useRef, useState } from "react";
 
 import { AiCompare } from "~/components/deer-flow/icons/ai-compare";
+import { DebateIcon } from "~/components/deer-flow/icons/debate";
 import { Detective } from "~/components/deer-flow/icons/detective";
 import MessageInput, {
   type MessageInputRef,
@@ -23,6 +24,7 @@ import {
   setEnableDeepThinking,
   setEnableBackgroundInvestigation,
   setEnableAiComparison,
+  setEnableDebateMode,
   useSettingsStore,
 } from "~/core/store";
 import { cn } from "~/lib/utils";
@@ -59,6 +61,9 @@ export function InputBox({
   );
   const aiComparison = useSettingsStore(
     (state) => state.general.enableAiComparison,
+  );
+  const debateMode = useSettingsStore(
+    (state) => state.general.enableDebateMode,
   );
   const { config, loading } = useConfig();
   const reportStyle = useSettingsStore((state) => state.general.reportStyle);
@@ -305,6 +310,34 @@ export function InputBox({
               <AiCompare /> {t("aiComparison")}
             </Button>
           </Tooltip>
+          
+          <Tooltip
+            className="max-w-60"
+            title={
+              <div>
+                <h3 className="mb-2 font-bold">
+                  {t("debateModeTooltip.title", {
+                    status: debateMode ? t("on") : t("off"),
+                  })}
+                </h3>
+                <p>{t("debateModeTooltip.description")}</p>
+              </div>
+            }
+          >
+            <Button
+              className={cn(
+                "rounded-2xl",
+                debateMode && "!border-brand !text-brand",
+              )}
+              variant="outline"
+              onClick={() =>
+                setEnableDebateMode(!debateMode)
+              }
+            >
+              <DebateIcon className="h-4 w-4" /> {t("debateMode")}
+            </Button>
+          </Tooltip>
+          
           <ReportStyleDialog />
         </div>
         <div className="flex shrink-0 items-center gap-2">

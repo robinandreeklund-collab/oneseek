@@ -86,6 +86,9 @@ class ChatRequest(BaseModel):
     enable_ai_comparison: Optional[bool] = Field(
         False, description="Whether to enable AI comparison / Debate OS mode"
     )
+    enable_debate_mode: Optional[bool] = Field(
+        False, description="Whether to enable multi-round debate engine mode"
+    )
 
 
 class TTSRequest(BaseModel):

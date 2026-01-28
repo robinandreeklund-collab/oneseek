@@ -25,7 +25,7 @@ if _debug_mode:
 from fastapi import FastAPI, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
-from langchain_core.messages import AIMessageChunk, BaseMessage, ToolMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, ToolMessage
 from langgraph.store.memory import InMemoryStore
 from langgraph.types import Command
 
@@ -311,6 +311,7 @@ async def chat_stream(request: ChatRequest):
             request.locale,
             request.interrupt_before_tools,
             request.enable_ai_comparison,
+            request.enable_debate_mode,
         ),
         media_type="text/event-stream",
     )
@@ -549,6 +550,21 @@ async def _process_message_chunk(message_chunk, message_metadata, thread_id, age
         
         logger.debug(f"[{safe_thread_id}] Yielding tool_call_result event")
         yield _make_event("tool_call_result", event_stream_message)
+    elif isinstance(message_chunk, AIMessage):
+        # AI Message - Non-streaming full content
+        has_tool_calls = bool(message_chunk.tool_calls)
+        logger.debug(
+            f"[{safe_thread_id}] Processing AIMessage, tool_calls={has_tool_calls}"
+        )
+        if message_chunk.tool_calls:
+            event_stream_message["tool_calls"] = message_chunk.tool_calls
+            event_stream_message["tool_call_chunks"] = []
+            logger.debug(
+                f"[{safe_thread_id}] AIMessage has tool_calls, yielding tool_calls event"
+            )
+            yield _make_event("tool_calls", event_stream_message)
+        else:
+            yield _make_event("message_chunk", event_stream_message)
     elif isinstance(message_chunk, AIMessageChunk):
         # AI Message - Raw message tokens
         has_tool_calls = bool(message_chunk.tool_calls)
@@ -808,6 +824,7 @@ async def _astream_workflow_generator(
     locale: str = "en-US",
     interrupt_before_tools: Optional[List[str]] = None,
     enable_ai_comparison: bool = False,
+    enable_debate_mode: bool = False,
 ):
     safe_thread_id = sanitize_thread_id(thread_id)
     safe_feedback = sanitize_log_input(interrupt_feedback) if interrupt_feedback else ""
@@ -847,6 +864,11 @@ async def _astream_workflow_generator(
         logger.info(f"[{safe_thread_id}] AI comparison mode enabled, using AI_COMPARISON report style")
         report_style = ReportStyle.AI_COMPARISON
     
+    # If debate mode is enabled, automatically use DEBATE report style
+    if enable_debate_mode:
+        logger.info(f"[{safe_thread_id}] Debate mode enabled, using DEBATE report style")
+        report_style = ReportStyle.DEBATE
+    
     workflow_input = {
         "messages": messages,
         "plan_iterations": 0,
@@ -862,6 +884,7 @@ async def _astream_workflow_generator(
         "max_clarification_rounds": max_clarification_rounds,
         "locale": locale,
         "enable_ai_comparison": enable_ai_comparison,
+        "enable_debate_mode": enable_debate_mode,
     }
 
     if not auto_accepted_plan and interrupt_feedback:

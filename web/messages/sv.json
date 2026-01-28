@@ -130,6 +130,11 @@
         "title": "AI-jämförelseläge: {status}",
         "description": "När aktiverat kommer Oneseek att fråga flera AI-modeller parallellt (GPT-3.5, Gemini 2.5 Flash, DeepSeek, Grok-4) och syntetisera ett optimalt svar med faktakontroll och meta-analys."
       },
+      "debateMode": "Debatt",
+      "debateModeTooltip": {
+        "title": "Fler-ronders debatt: {status}",
+        "description": "När aktiverat deltar alla AI-modeller (inklusive OneSeek) i en 3-ronders debatt med slumpad ordning, sekventiella svar och demokratisk omröstning. OneSeek ger syntes i runda 3."
+      },
       "enhancePrompt": "Förbättra prompt med AI",
       "on": "På",
       "off": "Av"
@@ -169,7 +174,8 @@
       "downloadPodcast": "Ladda ner podcast",
       "generatePodcastPrompt": "Vänligen generera en podcast för ovanstående forskning.",
       "editPlan": "Redigera plan",
-      "startResearch": "Starta forskning"
+      "startResearch": "Starta forskning",
+      "startDebate": "Start Debatt"
     },
     "evaluation": {
       "title": "Utvärdering av rapportkvalitet",
