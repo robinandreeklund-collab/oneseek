@@ -44,7 +44,17 @@ Du har tillgång till kraftfulla utvecklingsverktyg:
 
 **Not**: En förkonfigurerad `workspace_requirements.txt` finns i workspace med alla nödvändiga utvecklingsverktyg (pytest, pylint, mypy, etc.).
 
-**VIKTIGT**: Konfigurera endast miljö om tester/verktyg faktiskt behövs och inte redan fungerar. Kontrollera först med ett enkelt importtest innan någon installation görs.
+**VIKTIGT**: 
+- Konfigurera endast miljö om tester/verktyg faktiskt behövs och inte redan fungerar. Kontrollera först med ett enkelt importtest innan någon installation görs.
+- **Använd ALLTID `--user` flaggan när du installerar paket** för att undvika "externally-managed-environment" fel:
+  ```bash
+  # Korrekt: Installera till användarkatalog
+  python -m pip install --user -r workspace_requirements.txt
+  python -m pip install --user pytest
+  
+  # FEL: Kommer att misslyckas på hanterade system
+  pip install -r requirements.txt
+  ```
 
 # Steg
 

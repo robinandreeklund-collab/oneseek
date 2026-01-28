@@ -46,6 +46,10 @@ Your role is to:
 
 **CRITICAL**: Before running any tests, you MUST ensure the required testing tools are installed in your development environment.
 
+**⚠️ IMPORTANT**: Always use `--user` flag when installing packages to avoid "externally-managed-environment" errors:
+- ✅ Correct: `python -m pip install --user -r workspace_requirements.txt`
+- ❌ Wrong: `pip install -r requirements.txt` (will fail on managed systems)
+
 ## Workspace Requirements File
 
 A pre-configured `workspace_requirements.txt` file is automatically available in your workspace root. This file contains all necessary Python testing and development tools:
@@ -83,10 +87,11 @@ if not os.path.exists(venv_path):
 import subprocess
 import sys
 
-# Install all tools from workspace_requirements.txt
+# Install all tools from workspace_requirements.txt using --user flag
+# This avoids "externally-managed-environment" errors on modern Python
 print("Installing testing tools from workspace_requirements.txt...")
 result = subprocess.run(
-    [sys.executable, "-m", "pip", "install", "-r", "workspace_requirements.txt"],
+    [sys.executable, "-m", "pip", "install", "--user", "-r", "workspace_requirements.txt"],
     capture_output=True, text=True
 )
 

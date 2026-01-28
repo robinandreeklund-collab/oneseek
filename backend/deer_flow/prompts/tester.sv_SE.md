@@ -46,6 +46,10 @@ Din roll är att:
 
 **KRITISKT**: Innan du kör några tester MÅSTE du säkerställa att de nödvändiga testverktygen är installerade i din utvecklingsmiljö.
 
+**⚠️ VIKTIGT**: Använd alltid `--user` flaggan när du installerar paket för att undvika "externally-managed-environment" fel:
+- ✅ Korrekt: `python -m pip install --user -r workspace_requirements.txt`
+- ❌ Fel: `pip install -r requirements.txt` (kommer att misslyckas på hanterade system)
+
 ## Workspace Requirements-fil
 
 En förkonfigurerad `workspace_requirements.txt`-fil finns automatiskt tillgänglig i din workspace-rot. Denna fil innehåller alla nödvändiga Python-test- och utvecklingsverktyg:
@@ -83,10 +87,11 @@ if not os.path.exists(venv_path):
 import subprocess
 import sys
 
-# Installera alla verktyg från workspace_requirements.txt
+# Installera alla verktyg från workspace_requirements.txt med --user flagga
+# Detta undviker "externally-managed-environment" fel på modern Python
 print("Installerar testverktyg från workspace_requirements.txt...")
 result = subprocess.run(
-    [sys.executable, "-m", "pip", "install", "-r", "workspace_requirements.txt"],
+    [sys.executable, "-m", "pip", "install", "--user", "-r", "workspace_requirements.txt"],
     capture_output=True, text=True
 )
 

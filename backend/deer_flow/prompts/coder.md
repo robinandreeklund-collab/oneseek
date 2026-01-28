@@ -44,7 +44,17 @@ You have access to powerful development tools:
 
 **Note**: A pre-configured `workspace_requirements.txt` exists in the workspace with all necessary development tools (pytest, pylint, mypy, etc.).
 
-**IMPORTANT**: Only set up environment if tests/tools are actually needed and not already working. Check first with a simple import test before doing any installation.
+**IMPORTANT**: 
+- Only set up environment if tests/tools are actually needed and not already working. Check first with a simple import test before doing any installation.
+- **ALWAYS use `--user` flag when installing packages** to avoid "externally-managed-environment" errors:
+  ```bash
+  # Correct: Install to user directory
+  python -m pip install --user -r workspace_requirements.txt
+  python -m pip install --user pytest
+  
+  # WRONG: Will fail on managed systems
+  pip install -r requirements.txt
+  ```
 
 # Steps
 
