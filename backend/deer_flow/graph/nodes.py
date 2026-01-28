@@ -829,9 +829,11 @@ def extract_plan_content(plan_data: str | dict | Any) -> str:
 def human_feedback_node(
     state: State, config: RunnableConfig
 ) -> Command[Literal["planner", "research_team", "reporter", "__end__"]]:
+    logger.info(f"[human_feedback_node] ENTERED - coder_just_completed={state.get('coder_just_completed', False)}")
+    
     # Check if coder just completed - if so, ask about testing
     if state.get("coder_just_completed", False):
-        logger.info("Coder just completed. Asking user about testing.")
+        logger.info("[human_feedback_node] Coder just completed. Asking user about testing.")
         locale = state.get("locale", "en-US")
         
         # Ask in appropriate language
@@ -840,11 +842,13 @@ def human_feedback_node(
         else:
             prompt = "Coding is complete! Would you like me to test the code?\n\nReply '[TEST]' to run tests (pytest, pylint, mypy), or '[SKIP]' to skip testing."
         
+        logger.info(f"[human_feedback_node] Calling interrupt() with prompt (locale={locale}): {prompt[:100]}...")
         feedback = interrupt(prompt)
+        logger.info(f"[human_feedback_node] interrupt() returned: {feedback}")
         
         # Handle feedback
         if not feedback:
-            logger.warning("No feedback received for testing decision. Skipping testing.")
+            logger.warning("[human_feedback_node] No feedback received for testing decision. Skipping testing.")
             return Command(
                 update={
                     "coder_just_completed": False,  # Clear flag
@@ -2110,10 +2114,16 @@ async def coder_node(
     # Check if this is a direct call from coordinator (code-specific question)
     # vs being called as part of research_team workflow
     current_plan = state.get("current_plan")
+    research_topic = state.get("research_topic", "")
+    
+    logger.info(f"[coder_node] Routing decision: current_plan={'exists' if current_plan else 'None'}, research_topic='{research_topic}'")
+    
     called_directly = current_plan is None or (
-        isinstance(state.get("research_topic", ""), str) and 
-        state.get("research_topic", "").startswith("[CODE]")
+        isinstance(research_topic, str) and 
+        research_topic.startswith("[CODE]")
     )
+    
+    logger.info(f"[coder_node] called_directly={called_directly}, will route to {'__end__' if called_directly else 'human_feedback'}")
     
     result = await _setup_and_execute_agent_step(
         state,
