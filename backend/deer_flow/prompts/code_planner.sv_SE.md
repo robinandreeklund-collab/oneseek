@@ -22,7 +22,7 @@ Du MÅSTE skapa en plan som delar upp koduppgiften i tydliga, körbara steg. Pla
    - Stegen ska vara körbara av tillgängliga agenter (Coder, Tester)
    - Inkludera forskningssteg om dokumentation/exempel behövs
 
-3. **Identifiera Verktygsbeho**
+3. **Identifiera Verktygsbehov**
    - Specificera vilka utvecklingsverktyg som behövs
    - Överväg: Python REPL, Linux Sandbox, File System, React Sandbox
    - Planera för testverktyg: pytest, jest, linting, typkontroll

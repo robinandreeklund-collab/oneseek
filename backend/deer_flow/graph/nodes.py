@@ -1085,7 +1085,7 @@ def coordinator_node(
 
         messages.append({"role": "system", "content": clarification_context})
 
-        # Bind clarification tools, handoff_to_coder, and handoff_to_code_planner - let LLM choose the appropriate one
+        # Bind all clarification and routing tools - let LLM choose the appropriate one
         tools = [handoff_to_planner, handoff_after_clarification, handoff_to_coder, handoff_to_code_planner]
 
         # Check if we've already reached max rounds
@@ -2093,13 +2093,14 @@ async def tester_node(
     test_tools = get_test_tools()
     tools.extend(test_tools)
     
-    # Add file_system_tool if available for reading test files
+    # Add file_system_tool if available for reading test files (optional)
     from backend.deer_flow.tools.code_tools import file_system_tool
     try:
-        # Only add if enabled
+        # File system tool is optional for tester but helpful for reading test files
         tools.append(file_system_tool)
+        logger.debug("Added file_system_tool to tester tools")
     except Exception as e:
-        logger.debug(f"File system tool not available: {e}")
+        logger.debug(f"File system tool not available (optional): {e}")
     
     logger.info(f"Tester node using {len(tools)} tools: {[t.name for t in tools]}")
     

@@ -20,6 +20,32 @@ from .decorators import log_io
 logger = logging.getLogger(__name__)
 
 
+def _validate_path(path: str) -> tuple[bool, str]:
+    """
+    Validate that a path is safe to use (no path traversal).
+    
+    Args:
+        path: The path to validate
+        
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    try:
+        # Resolve to absolute path
+        resolved_path = Path(path).resolve()
+        current_dir = Path.cwd().resolve()
+        
+        # Check if path is within or is the current directory
+        # This prevents access to parent directories or absolute paths outside cwd
+        try:
+            resolved_path.relative_to(current_dir)
+            return True, ""
+        except ValueError:
+            return False, f"Path '{path}' is outside the allowed directory"
+    except Exception as e:
+        return False, f"Invalid path '{path}': {str(e)}"
+
+
 def _is_python_test_tool_enabled() -> bool:
     """Check if Python test tools are enabled from configuration."""
     env_enabled = os.getenv("ENABLE_PYTHON_TEST_TOOL", "false").lower()
@@ -57,6 +83,12 @@ def python_test_tool(
         logger.warning(error_msg)
         return f"Tool disabled: {error_msg}"
     
+    # Validate path to prevent path traversal attacks
+    is_valid, error_msg = _validate_path(path)
+    if not is_valid:
+        logger.warning(f"Path validation failed: {error_msg}")
+        return f"Security error: {error_msg}"
+    
     logger.info(f"Running Python {test_type} on path: {path}")
     
     try:
@@ -85,7 +117,8 @@ def python_test_tool(
             capture_output=True,
             text=True,
             timeout=120,  # 2 minutes timeout
-            cwd=os.getcwd()
+            cwd=os.getcwd(),
+            shell=False  # Explicitly set for security
         )
         
         # Format output
@@ -143,6 +176,19 @@ def javascript_test_tool(
         logger.warning(error_msg)
         return f"Tool disabled: {error_msg}"
     
+    # Validate path to prevent path traversal attacks
+    is_valid, error_msg = _validate_path(path)
+    if not is_valid:
+        logger.warning(f"Path validation failed: {error_msg}")
+        return f"Security error: {error_msg}"
+    
+    # Validate project_path if provided
+    if project_path:
+        is_valid, error_msg = _validate_path(project_path)
+        if not is_valid:
+            logger.warning(f"Project path validation failed: {error_msg}")
+            return f"Security error: {error_msg}"
+    
     logger.info(f"Running JavaScript {test_type} on path: {path}")
     
     try:
@@ -176,7 +222,8 @@ def javascript_test_tool(
             capture_output=True,
             text=True,
             timeout=120,  # 2 minutes timeout
-            cwd=project_path if project_path and test_type == "tsc" else os.getcwd()
+            cwd=project_path if project_path and test_type == "tsc" else os.getcwd(),
+            shell=False  # Explicitly set for security
         )
         
         # Format output
