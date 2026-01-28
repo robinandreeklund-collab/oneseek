@@ -795,7 +795,7 @@ def human_feedback_node(
 
 def coordinator_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["planner", "background_investigator", "ai_comparison", "debate_planner", "coordinator", "human_feedback", "__end__"]]:
+) -> Command[Literal["planner", "background_investigator", "ai_comparison", "debate_planner", "coordinator", "coder", "human_feedback", "__end__"]]:
     """Coordinator node that communicate with customers and handle clarification."""
     logger.info("Coordinator talking.")
     configurable = Configuration.from_runnable_config(config)
@@ -864,16 +864,15 @@ def coordinator_node(
                         code_task = tool_args.get("code_task", research_topic)
                         clarity = tool_args.get("clarity", "clear")
                         
-                        # For code tasks, we route through planner to create a proper code execution plan
-                        # The planner will create PROCESSING-type steps that route to coder
+                        # Route based on clarity - NEW: Route directly to coder, not through planner
                         if clarity == "unclear":
                             logger.info("Code task is unclear, routing to human_feedback first")
                             goto = "human_feedback"
                         else:
-                            logger.info("Code task is clear, routing to planner for code execution plan")
-                            goto = "planner"
+                            logger.info("Code task is clear, routing directly to coder")
+                            goto = "coder"
                         
-                        # Update research topic with code task and mark as code-related
+                        # Mark research topic with [CODE] prefix to help coder detect direct call
                         research_topic = f"[CODE] {code_task}"
                         break
                     elif tool_name == "direct_response":
@@ -1091,15 +1090,15 @@ def coordinator_node(
                     code_task = tool_args.get("code_task", clarified_topic or research_topic)
                     clarity = tool_args.get("clarity", "clear")
                     
-                    # For code tasks, we route through planner to create a proper code execution plan
+                    # Route based on clarity - NEW: Route directly to coder, not through planner
                     if clarity == "unclear":
                         logger.info("Code task is unclear, routing to human_feedback first")
                         goto = "human_feedback"
                     else:
-                        logger.info("Code task is clear, routing to planner for code execution plan")
-                        goto = "planner"
+                        logger.info("Code task is clear, routing directly to coder")
+                        goto = "coder"
                     
-                    # Update research topic with code task and mark as code-related
+                    # Mark research topic with [CODE] prefix to help coder detect direct call
                     research_topic = f"[CODE] {code_task}"
                     if enable_clarification:
                         clarified_topic = f"[CODE] {code_task}"
@@ -1787,8 +1786,13 @@ async def researcher_node(
 
 async def coder_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["research_team"]]:
-    """Coder node that do code analysis and execution with extended tools."""
+) -> Command[Literal["research_team", "__end__"]]:
+    """Coder node that handles code analysis and execution with extended tools.
+    
+    Can be called in two ways:
+    1. Directly from coordinator for simple code questions -> responds directly (goto __end__)
+    2. From research_team as part of a plan -> returns to research_team for continued execution
+    """
     logger.info("Coder node is coding.")
     logger.debug(f"[coder_node] Starting coder agent with extended code tools")
     
@@ -1802,12 +1806,32 @@ async def coder_node(
     
     logger.info(f"Coder node using {len(tools)} tools: {[t.name for t in tools]}")
     
-    return await _setup_and_execute_agent_step(
+    # Check if this is a direct call from coordinator (code-specific question)
+    # vs being called as part of research_team workflow
+    current_plan = state.get("current_plan")
+    called_directly = current_plan is None or (
+        isinstance(state.get("research_topic", ""), str) and 
+        state.get("research_topic", "").startswith("[CODE]")
+    )
+    
+    result = await _setup_and_execute_agent_step(
         state,
         config,
         "coder",
         tools,
     )
+    
+    # If called directly from coordinator, respond directly to user
+    if called_directly:
+        logger.info("Coder was called directly from coordinator, responding to user (__end__)")
+        return Command(
+            update=result.update,
+            goto="__end__"
+        )
+    
+    # Otherwise, return to research_team for continued workflow
+    logger.info("Coder was called from research_team, returning to research_team")
+    return result
 
 
 async def analyst_node(

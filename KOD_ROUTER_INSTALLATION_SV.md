@@ -22,20 +22,18 @@ Coordinator (upptäcker kodfrågor)
     ↓
 handoff_to_coder verktyg kallas
     ↓
-├─ [clarity="clear"] → Planner (skapar kodexekveringsplan)
+├─ [clarity="clear"] → Coder Node (kör med utökade verktyg)
 │                          ↓
-│                      Research Team
-│                          ↓
-│                      Coder Node (kör med utökade verktyg)
-│                          ↓
-│                      Reporter
+│                      Direkt Svar (__end__)
 │
 └─ [clarity="unclear"] → Human Feedback
                              ↓
-                         Planner (efter förtydligande)
+                         Coder Node
                              ↓
-                         ... (fortsätter som ovan)
+                         Direkt Svar (__end__)
 ```
+
+**Viktig förbättring**: Kodfrågor routas nu direkt från Coordinator till Coder och svarar omedelbart, vilket undviker Planner och Reporter-noder som har andra syften.
 
 ### Koddetektion
 

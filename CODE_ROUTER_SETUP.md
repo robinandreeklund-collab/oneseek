@@ -23,20 +23,18 @@ Coordinator (detects code questions)
     ↓
 handoff_to_coder tool called
     ↓
-├─ [clarity="clear"] → Planner (creates code execution plan)
+├─ [clarity="clear"] → Coder Node (executes with extended tools)
 │                          ↓
-│                      Research Team
-│                          ↓
-│                      Coder Node (executes with extended tools)
-│                          ↓
-│                      Reporter
+│                      Direct Response (__end__)
 │
 └─ [clarity="unclear"] → Human Feedback
                              ↓
-                         Planner (after clarification)
+                         Coder Node
                              ↓
-                         ... (continues as above)
+                         Direct Response (__end__)
 ```
+
+**Key Improvement**: Code questions now route directly from Coordinator to Coder and respond immediately, bypassing Planner and Reporter nodes which serve different purposes.
 
 ### Code Detection
 
