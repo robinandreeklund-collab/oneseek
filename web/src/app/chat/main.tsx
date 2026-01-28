@@ -32,8 +32,7 @@ export default function Main() {
       <MessagesBlock
         className={cn(
           "shrink-0 transition-all duration-300 ease-out",
-          !doubleColumnMode &&
-            `w-[768px] translate-x-[min(max(calc((100vw-538px)*0.75),575px)/2,960px/2)]`,
+          !doubleColumnMode && `w-[768px]`,
           doubleColumnMode && `w-[538px]`,
         )}
       />
