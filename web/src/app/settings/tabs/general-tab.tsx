@@ -42,6 +42,8 @@ const generalFormSchema = z.object({
   // Others
   enableBackgroundInvestigation: z.boolean(),
   enableDeepThinking: z.boolean(),
+  enableAiComparison: z.boolean(),
+  enableDebateMode: z.boolean(),
   enableWebSearch: z.boolean(),
   reportStyle: z.enum(["academic", "popular_science", "news", "social_media","strategic_investment"]),
 });

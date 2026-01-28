@@ -51,6 +51,8 @@ import {
 import { parseJSON } from "~/core/utils";
 import { cn } from "~/lib/utils";
 
+import { CoderCard } from "./coder-card";
+
 export function MessageListView({
   className,
   onFeedback,
@@ -139,17 +141,21 @@ function MessageListItem({
 }) {
   const message = useMessage(messageId);
   const researchIds = useStore((state) => state.researchIds);
+  const coderSessionIds = useStore((state) => state.coderSessionIds);
   const startOfResearch = useMemo(() => {
     return researchIds.includes(messageId);
   }, [researchIds, messageId]);
+  const startOfCoderSession = useMemo(() => {
+    return coderSessionIds.includes(messageId);
+  }, [coderSessionIds, messageId]);
   if (message) {
     if (
       message.role === "user" ||
       message.agent === "coordinator" ||
       isPlannerAgent(message.agent) ||
       message.agent === "podcast" ||
-      message.agent === "coder" ||
-      startOfResearch
+      startOfResearch ||
+      startOfCoderSession
     ) {
       let content: React.ReactNode;
       if (isPlannerAgent(message.agent)) {
@@ -176,6 +182,15 @@ function MessageListItem({
             <ResearchCard
               researchId={message.id}
               onToggleResearch={onToggleResearch}
+            />
+          </div>
+        );
+      } else if (startOfCoderSession) {
+        content = (
+          <div className="w-full px-4">
+            <CoderCard
+              sessionId={message.id}
+              onToggleCoder={onToggleResearch}
             />
           </div>
         );

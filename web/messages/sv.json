@@ -177,6 +177,23 @@
       "startResearch": "Starta forskning",
       "startDebate": "Start Debatt"
     },
+    "coder": {
+      "codeExecution": "Kodkörning",
+      "runningCode": "Kör kod...",
+      "codeExecutionComplete": "Kodkörning slutförd",
+      "open": "Öppna",
+      "close": "Stäng",
+      "activities": "Aktiviteter",
+      "preview": "Förhandsvisning",
+      "files": "Filer",
+      "runningPython": "Kör Python-kod",
+      "fileOperation": "Filåtgärd",
+      "reactSandbox": "React Sandbox",
+      "error": "Fel",
+      "output": "Utdata",
+      "noPreview": "Ingen förhandsvisning tillgänglig. Skapa en React-app för att se förhandsvisning.",
+      "noFiles": "Inga filer skapade än."
+    },
     "evaluation": {
       "title": "Utvärdering av rapportkvalitet",
       "description": "Utvärdera din rapport med hjälp av automatiserade mått och AI-analys.",

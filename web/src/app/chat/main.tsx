@@ -8,15 +8,20 @@ import { useMemo } from "react";
 import { useStore } from "~/core/store";
 import { cn } from "~/lib/utils";
 
+import { CoderSidebar } from "./components/coder-sidebar";
 import { MessagesBlock } from "./components/messages-block";
 import { ResearchBlock } from "./components/research-block";
 
 export default function Main() {
   const openResearchId = useStore((state) => state.openResearchId);
+  const openCoderSessionId = useStore((state) => state.openCoderSessionId);
   const doubleColumnMode = useMemo(
-    () => openResearchId !== null,
-    [openResearchId],
+    () => openResearchId !== null || openCoderSessionId !== null,
+    [openResearchId, openCoderSessionId],
   );
+  const showResearch = openResearchId !== null;
+  const showCoder = openCoderSessionId !== null;
+  
   return (
     <div
       className={cn(
@@ -35,10 +40,18 @@ export default function Main() {
       <ResearchBlock
         className={cn(
           "w-[min(max(calc((100vw-538px)*0.75),575px),960px)] pb-4 transition-all duration-300 ease-out",
-          !doubleColumnMode && "scale-0",
-          doubleColumnMode && "",
+          !showResearch && "scale-0",
+          showResearch && "",
         )}
         researchId={openResearchId}
+      />
+      <CoderSidebar
+        className={cn(
+          "w-[min(max(calc((100vw-538px)*0.75),575px),960px)] pb-4 transition-all duration-300 ease-out",
+          !showCoder && "scale-0",
+          showCoder && "",
+        )}
+        sessionId={openCoderSessionId}
       />
     </div>
   );
