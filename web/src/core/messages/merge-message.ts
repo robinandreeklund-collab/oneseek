@@ -13,7 +13,7 @@ import type {
 } from "../api";
 import { deepClone } from "../utils/deep-clone";
 
-import type { Message } from "./types";
+import type { Message, ToolCallRuntime } from "./types";
 
 /**
  * Safely parse JSON from streamed tool call argument chunks.

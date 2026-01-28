@@ -819,7 +819,7 @@ ${htmlContent}
             useStore.getState().messages.get(reportId)?.content ?? ""
           }
           query={getResearchQuery(researchId)}
-          reportStyle={useSettingsStore.getState().general.reportStyle.toLowerCase()}
+          reportStyle={useSettingsStore.getState().general.reportStyle?.toLowerCase() ?? "comprehensive"}
         />
       )}
     </div>

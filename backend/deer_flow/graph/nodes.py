@@ -148,6 +148,56 @@ def direct_response(
     return
 
 
+@tool
+def handoff_to_coder(
+    code_task: Annotated[str, "The specific code-related task or question to be handled."],
+    locale: Annotated[str, "The user's detected language locale (e.g., en-US, zh-CN)."],
+    clarity: Annotated[str, "Whether the code task is 'clear' or 'unclear'. Use 'unclear' if the task needs human clarification."],
+):
+    """Handoff to coder agent for code-related questions, development, or debugging tasks. 
+    Use this for questions about programming, code execution, building applications, or technical development.
+    Set clarity='unclear' if the task requires human clarification before proceeding."""
+    return
+
+
+def is_code_related_question(question: str) -> bool:
+    """
+    Detect if a question is code-related using keyword matching and patterns.
+    
+    Args:
+        question: The user's question or research topic
+        
+    Returns:
+        True if the question appears to be code-related
+    """
+    if not question:
+        return False
+    
+    question_lower = question.lower()
+    
+    # Code-related keywords
+    code_keywords = [
+        # Programming languages
+        'python', 'javascript', 'java', 'typescript', 'c++', 'c#', 'ruby', 'go', 'rust',
+        'php', 'swift', 'kotlin', 'scala', 'dart', 'r', 'matlab',
+        # Code-related terms
+        'code', 'coding', 'program', 'programming', 'script', 'function', 'method', 'class',
+        'algorithm', 'debug', 'compile', 'execute', 'syntax', 'error', 'exception',
+        'implement', 'development', 'software', 'application', 'api', 'library', 'framework',
+        # Web development
+        'react', 'vue', 'angular', 'next.js', 'node.js', 'express', 'django', 'flask',
+        'html', 'css', 'frontend', 'backend', 'fullstack', 'web app',
+        # Tools and technologies
+        'docker', 'kubernetes', 'git', 'github', 'sql', 'database', 'mongodb',
+        'linux', 'bash', 'shell', 'terminal', 'command line', 'cli',
+        # Code actions
+        'write code', 'create app', 'build', 'deploy', 'test', 'unit test', 'integration',
+        'refactor', 'optimize', 'fix bug', 'review code',
+    ]
+    
+    return any(keyword in question_lower for keyword in code_keywords)
+
+
 def needs_clarification(state: dict) -> bool:
     """
     Check if clarification is needed based on current state.
@@ -745,7 +795,7 @@ def human_feedback_node(
 
 def coordinator_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["planner", "background_investigator", "ai_comparison", "debate_planner", "coordinator", "__end__"]]:
+) -> Command[Literal["planner", "background_investigator", "ai_comparison", "debate_planner", "coordinator", "coder", "human_feedback", "__end__"]]:
     """Coordinator node that communicate with customers and handle clarification."""
     logger.info("Coordinator talking.")
     configurable = Configuration.from_runnable_config(config)
@@ -768,8 +818,8 @@ def coordinator_node(
             }
         )
 
-        # Bind both handoff_to_planner and direct_response tools
-        tools = [handoff_to_planner, direct_response]
+        # Bind handoff_to_planner, direct_response, and handoff_to_coder tools
+        tools = [handoff_to_planner, direct_response, handoff_to_coder]
         response = (
             get_llm_by_type(AGENT_LLM_MAP["coordinator"])
             .bind_tools(tools)
@@ -806,6 +856,24 @@ def coordinator_node(
                         # Extract research_topic if provided
                         if tool_args.get("research_topic"):
                             research_topic = tool_args.get("research_topic")
+                        break
+                    elif tool_name == "handoff_to_coder":
+                        logger.info("Handing off to coder for code-related task")
+                        
+                        # Extract code task and clarity
+                        code_task = tool_args.get("code_task", research_topic)
+                        clarity = tool_args.get("clarity", "clear")
+                        
+                        # Route based on clarity - NEW: Route directly to coder, not through planner
+                        if clarity == "unclear":
+                            logger.info("Code task is unclear, routing to human_feedback first")
+                            goto = "human_feedback"
+                        else:
+                            logger.info("Code task is clear, routing directly to coder")
+                            goto = "coder"
+                        
+                        # Mark research topic with [CODE] prefix to help coder detect direct call
+                        research_topic = f"[CODE] {code_task}"
                         break
                     elif tool_name == "direct_response":
                         logger.info("Direct response to user (greeting/small talk)")
@@ -877,8 +945,8 @@ def coordinator_node(
 
         messages.append({"role": "system", "content": clarification_context})
 
-        # Bind both clarification tools - let LLM choose the appropriate one
-        tools = [handoff_to_planner, handoff_after_clarification]
+        # Bind clarification tools and handoff_to_coder - let LLM choose the appropriate one
+        tools = [handoff_to_planner, handoff_after_clarification, handoff_to_coder]
 
         # Check if we've already reached max rounds
         if clarification_rounds >= max_clarification_rounds:
@@ -1014,6 +1082,26 @@ def coordinator_node(
                         logger.info(
                             "Using research topic for handoff: %s", research_topic
                         )
+                    break
+                elif tool_name == "handoff_to_coder":
+                    logger.info("Handing off to coder for code-related task")
+                    
+                    # Extract code task and clarity
+                    code_task = tool_args.get("code_task", clarified_topic or research_topic)
+                    clarity = tool_args.get("clarity", "clear")
+                    
+                    # Route based on clarity - NEW: Route directly to coder, not through planner
+                    if clarity == "unclear":
+                        logger.info("Code task is unclear, routing to human_feedback first")
+                        goto = "human_feedback"
+                    else:
+                        logger.info("Code task is clear, routing directly to coder")
+                        goto = "coder"
+                    
+                    # Mark research topic with [CODE] prefix to help coder detect direct call
+                    research_topic = f"[CODE] {code_task}"
+                    if enable_clarification:
+                        clarified_topic = f"[CODE] {code_task}"
                     break
 
         except Exception as e:
@@ -1338,6 +1426,37 @@ async def _execute_agent_step(
                 goto="research_team"
             )
     
+    # Handle case where current_plan is None (direct call from coordinator for code questions)
+    if current_plan is None:
+        logger.info(f"[_execute_agent_step] current_plan is None, creating synthetic plan for direct {agent_name} call")
+        from backend.deer_flow.prompts.planner_model import Plan, Step, StepType
+        
+        # Get research topic from state (should have [CODE] prefix for direct code calls)
+        research_topic = state.get("research_topic", "Code Task")
+        
+        # Remove [CODE] prefix if present
+        if research_topic.startswith("[CODE]"):
+            research_topic = research_topic[6:].strip()
+        
+        # Create a simple synthetic plan with one step
+        step_type = StepType.PROCESSING if agent_name == "coder" else StepType.RESEARCH
+        current_plan = Plan(
+            locale=state.get("locale", "en-US"),
+            has_enough_context=False,
+            thought=f"Direct {agent_name} execution for: {research_topic}",
+            title=research_topic,
+            steps=[
+                Step(
+                    need_search=False,
+                    step_type=step_type,
+                    title=research_topic,
+                    description=f"Execute {agent_name} task: {research_topic}",
+                    execution_res=None
+                )
+            ]
+        )
+        logger.info(f"[_execute_agent_step] Created synthetic plan for direct call: {current_plan.title}")
+    
     plan_title = current_plan.title
     observations = state.get("observations", [])
     logger.debug(f"[_execute_agent_step] Plan title: {plan_title}, observations count: {len(observations)}")
@@ -1542,6 +1661,54 @@ async def _execute_agent_step(
             f"{agent_name.capitalize()} agent made {tool_message_count} tool calls. "
             f"All tool results will be preserved and streamed to frontend."
         )
+    
+    # For direct agent calls (especially coder), ensure there's a meaningful final message
+    # If the last AIMessage has empty/minimal content, create a summary message
+    logger.info(f"[{agent_name}] Checking if message enhancement needed: agent_messages={len(agent_messages) if agent_messages else 0}, current_plan={'exists' if current_plan else 'None'}, steps={len(current_plan.steps) if current_plan else 'N/A'}")
+    if agent_messages and current_plan and len(current_plan.steps) == 1 and tool_message_count > 0:  # Synthetic plan (direct call) with tools
+        last_msg = agent_messages[-1]
+        logger.info(f"[{agent_name}] Last message type: {type(last_msg).__name__}, isinstance(AIMessage)={isinstance(last_msg, AIMessage)}")
+        
+        if isinstance(last_msg, AIMessage):
+            content_to_check = str(last_msg.content).strip()
+            logger.info(f"[{agent_name}] Last message content length: {len(content_to_check)}, tool_message_count: {tool_message_count}")
+            
+            # For direct coder calls with tools, ALWAYS enhance the message to ensure visibility
+            # This fixes the issue where frontend receives messages but doesn't render them
+            logger.info(f"[{agent_name}] Direct call with tools detected - enhancing message for frontend visibility")
+            
+            # Build summary from tool messages
+            tool_summaries = []
+            for msg in agent_messages:
+                if isinstance(msg, ToolMessage):
+                    tool_name = getattr(msg, 'name', 'unknown_tool')
+                    tool_content = str(msg.content)[:200]  # First 200 chars
+                    tool_summaries.append(f"**{tool_name}**: {tool_content}")
+            
+            # Always include tool results, even if there was some content
+            if tool_summaries:
+                if content_to_check and len(content_to_check) > 10:
+                    # There's already meaningful content, just append tool results
+                    summary_content = f"{content_to_check}\n\n## Tool Results\n\n" + "\n\n".join(tool_summaries)
+                else:
+                    # Little/no content, use response_content (task description) + tool results
+                    summary_content = f"{response_content}\n\n## Tool Results\n\n" + "\n\n".join(tool_summaries)
+                
+                logger.info(f"[{agent_name}] Created enhanced content with {len(tool_summaries)} tool results, total length: {len(summary_content)}")
+                
+                # Create a new AIMessage with the summary
+                enhanced_message = AIMessage(
+                    content=summary_content,
+                    name=agent_name,
+                    id=last_msg.id
+                )
+                
+                # Replace the last message with the enhanced one
+                agent_messages[-1] = enhanced_message
+                logger.info(f"[{agent_name}] Enhanced final message with tool results summary")
+                logger.info(f"[{agent_name}] FINAL ENHANCED MESSAGE CONTENT: {summary_content[:500]}...")  # Log first 500 chars
+            else:
+                logger.warning(f"[{agent_name}] No tool summaries found despite tool_message_count > 0")
 
     # Extract citations from tool call results (web_search, crawl)
     existing_citations = state.get("citations", [])
@@ -1698,17 +1865,58 @@ async def researcher_node(
 
 async def coder_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["research_team"]]:
-    """Coder node that do code analysis."""
-    logger.info("Coder node is coding.")
-    logger.debug(f"[coder_node] Starting coder agent with python_repl_tool")
+) -> Command[Literal["research_team", "__end__"]]:
+    """Coder node that handles code analysis and execution with extended tools.
     
-    return await _setup_and_execute_agent_step(
+    Can be called in two ways:
+    1. Directly from coordinator for simple code questions -> responds directly (goto __end__)
+    2. From research_team as part of a plan -> returns to research_team for continued execution
+    """
+    logger.info("Coder node is coding.")
+    logger.debug(f"[coder_node] Starting coder agent with extended code tools")
+    
+    # Import code tools
+    from backend.deer_flow.tools.code_tools import get_code_tools
+    
+    # Build tool list: always include python_repl_tool, plus any enabled code tools
+    tools = [python_repl_tool]
+    code_tools = get_code_tools()
+    tools.extend(code_tools)
+    
+    logger.info(f"Coder node using {len(tools)} tools: {[t.name for t in tools]}")
+    
+    # Check if this is a direct call from coordinator (code-specific question)
+    # vs being called as part of research_team workflow
+    current_plan = state.get("current_plan")
+    called_directly = current_plan is None or (
+        isinstance(state.get("research_topic", ""), str) and 
+        state.get("research_topic", "").startswith("[CODE]")
+    )
+    
+    result = await _setup_and_execute_agent_step(
         state,
         config,
         "coder",
-        [python_repl_tool],
+        tools,
     )
+    
+    # If called directly from coordinator, respond directly to user
+    if called_directly:
+        logger.info("Coder was called directly from coordinator, responding to user (__end__)")
+        # Log the messages being sent to verify content
+        messages_to_send = result.update.get("messages", [])
+        if messages_to_send:
+            last_msg_content = messages_to_send[-1].content if hasattr(messages_to_send[-1], 'content') else "NO CONTENT ATTR"
+            logger.info(f"[coder_node] Sending {len(messages_to_send)} messages to frontend, last message content length: {len(last_msg_content) if isinstance(last_msg_content, str) else 0}")
+            logger.info(f"[coder_node] Last message content preview: {str(last_msg_content)[:200]}...")
+        return Command(
+            update=result.update,
+            goto="__end__"
+        )
+    
+    # Otherwise, return to research_team for continued workflow
+    logger.info("Coder was called from research_team, returning to research_team")
+    return result
 
 
 async def analyst_node(

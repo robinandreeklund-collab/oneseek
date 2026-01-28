@@ -95,7 +95,12 @@ export function ResearchActivitiesBlock({
 const ActivityMessage = React.memo(({ messageId }: { messageId: string }) => {
   const message = useMessage(messageId);
   
-  if (message?.agent) {
+  // Guard against undefined message (can happen during streaming/race conditions)
+  if (!message) {
+    return null;
+  }
+  
+  if (message.agent) {
     // Show planner messages as plan cards (even if content is empty/streaming)
     if (isPlannerAgent(message.agent)) {
       return <PlanCard message={message} />;

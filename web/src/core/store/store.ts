@@ -37,13 +37,13 @@ function getPodcastPromptTranslation(): string {
     "sv": "Vänligen generera en podcast för ovanstående forskning.",
     "zh": "请为以上研究生成播客。"
   };
-  return translations[locale] || translations["en"];
+  return translations[locale] ?? translations["en"]!;
 }
 
 
 export const useStore = create<{
   responding: boolean;
-  threadId: string | undefined;
+  threadId: string;
   messageIds: string[];
   messages: Map<string, Message>;
   researchIds: string[];
@@ -54,6 +54,10 @@ export const useStore = create<{
   researchCitations: Map<string, Citation[]>;
   ongoingResearchId: string | null;
   openResearchId: string | null;
+  coderSessionIds: string[];
+  coderActivityIds: Map<string, string[]>;
+  ongoingCoderSessionId: string | null;
+  openCoderSessionId: string | null;
 
   appendMessage: (message: Message) => void;
   updateMessage: (message: Message) => void;
@@ -62,6 +66,9 @@ export const useStore = create<{
   closeResearch: () => void;
   setOngoingResearch: (researchId: string | null) => void;
   setCitations: (researchId: string, citations: Citation[]) => void;
+  openCoder: (sessionId: string | null) => void;
+  closeCoder: () => void;
+  setOngoingCoderSession: (sessionId: string | null) => void;
 }>((set) => ({
   responding: false,
   threadId: THREAD_ID,
@@ -75,6 +82,10 @@ export const useStore = create<{
   researchCitations: new Map<string, Citation[]>(),
   ongoingResearchId: null,
   openResearchId: null,
+  coderSessionIds: [],
+  coderActivityIds: new Map<string, string[]>(),
+  ongoingCoderSessionId: null,
+  openCoderSessionId: null,
 
   appendMessage(message: Message) {
     set((state) => {
@@ -113,6 +124,15 @@ export const useStore = create<{
     set((state) => ({
       researchCitations: new Map(state.researchCitations).set(researchId, citations),
     }));
+  },
+  openCoder(sessionId: string | null) {
+    set({ openCoderSessionId: sessionId });
+  },
+  closeCoder() {
+    set({ openCoderSessionId: null });
+  },
+  setOngoingCoderSession(sessionId: string | null) {
+    set({ ongoingCoderSessionId: sessionId });
   },
 }));
 
@@ -165,6 +185,8 @@ export async function sendMessage(
 
   setResponding(true);
   let messageId: string | undefined;
+  let lastEvent: any;
+  let lastMessage: Message | undefined;
   const pendingUpdates = new Map<string, Message>();
   let updateTimer: NodeJS.Timeout | undefined;
 
@@ -181,6 +203,7 @@ export async function sendMessage(
 
   try {
     for await (const event of stream) {
+      lastEvent = event;
       const { type, data } = event;
       let message: Message | undefined;
       
@@ -230,12 +253,17 @@ export async function sendMessage(
       message ??= getMessage(messageId);
       if (message) {
         message = mergeMessage(message, event);
+        lastMessage = message;
         // Collect pending messages for update, instead of updating immediately.
         pendingUpdates.set(message.id, message);
         scheduleUpdate();
       }
     }
-  } catch {
+  } catch (error) {
+    console.error("[Store] Error processing chat event:", error);
+    console.error("[Store] Event that caused error:", lastEvent);
+    console.error("[Store] Current message:", lastMessage);
+    console.error("[Store] Message ID:", messageId);
     toast("An error occurred while generating the response. Please try again.");
     // Update message status.
     // TODO: const isAborted = (error as Error).name === "AbortError";
@@ -247,6 +275,7 @@ export async function sendMessage(
       }
     }
     useStore.getState().setOngoingResearch(null);
+    useStore.getState().setOngoingCoderSession(null);
   } finally {
     setResponding(false);
     // Ensure all pending updates are processed.
@@ -283,7 +312,6 @@ function findMessageByToolCallId(toolCallId: string) {
 
 function appendMessage(message: Message) {
   if (
-    message.agent === "coder" ||
     message.agent === "reporter" ||
     message.agent === "researcher" ||
     message.agent === "analyst" ||
@@ -295,6 +323,13 @@ function appendMessage(message: Message) {
       openResearch(id);
     }
     appendResearchActivity(message);
+  } else if (message.agent === "coder") {
+    if (!getOngoingCoderSessionId()) {
+      const id = message.id;
+      appendCoderSession(id);
+      openCoder(id);
+    }
+    appendCoderActivity(message);
   }
   useStore.getState().appendMessage(message);
 }
@@ -307,11 +342,50 @@ function updateMessage(message: Message) {
   ) {
     useStore.getState().setOngoingResearch(null);
   }
+  if (
+    getOngoingCoderSessionId() &&
+    message.agent === "coder" &&
+    !message.isStreaming
+  ) {
+    useStore.getState().setOngoingCoderSession(null);
+  }
   useStore.getState().updateMessage(message);
 }
 
 function getOngoingResearchId() {
   return useStore.getState().ongoingResearchId;
+}
+
+function getOngoingCoderSessionId() {
+  return useStore.getState().ongoingCoderSessionId;
+}
+
+function appendCoderSession(sessionId: string) {
+  const messageIds = [sessionId];
+  useStore.setState({
+    ongoingCoderSessionId: sessionId,
+    coderSessionIds: [...useStore.getState().coderSessionIds, sessionId],
+    coderActivityIds: new Map(useStore.getState().coderActivityIds).set(
+      sessionId,
+      messageIds,
+    ),
+  });
+}
+
+function appendCoderActivity(message: Message) {
+  const sessionId = getOngoingCoderSessionId();
+  if (sessionId) {
+    const coderActivityIds = useStore.getState().coderActivityIds;
+    const current = coderActivityIds.get(sessionId);
+    if (current && !current.includes(message.id)) {
+      useStore.setState({
+        coderActivityIds: new Map(coderActivityIds).set(sessionId, [
+          ...current,
+          message.id,
+        ]),
+      });
+    }
+  }
 }
 
 function appendResearch(researchId: string) {
@@ -331,13 +405,16 @@ function appendResearch(researchId: string) {
     }
   }
   const messageIds = [researchId];
-  messageIds.unshift(planMessage!.id);
+  // Only add planMessage.id if it exists (direct coder calls have no plan message)
+  if (planMessage?.id) {
+    messageIds.unshift(planMessage.id);
+  }
   useStore.setState({
     ongoingResearchId: researchId,
     researchIds: [...useStore.getState().researchIds, researchId],
     researchPlanIds: new Map(useStore.getState().researchPlanIds).set(
       researchId,
-      planMessage!.id,
+      planMessage?.id ?? "",
     ),
     researchActivityIds: new Map(useStore.getState().researchActivityIds).set(
       researchId,
@@ -380,6 +457,14 @@ export function openResearch(researchId: string | null) {
 
 export function closeResearch() {
   useStore.getState().closeResearch();
+}
+
+export function openCoder(sessionId: string | null) {
+  useStore.getState().openCoder(sessionId);
+}
+
+export function closeCoder() {
+  useStore.getState().closeCoder();
 }
 
 export async function listenToPodcast(researchId: string) {
@@ -486,9 +571,10 @@ export function useRenderableMessageIds() {
         const isPlanner = isPlannerAgent(message.agent);
         const isPodcast = message.agent === "podcast";
         const isStartOfResearch = state.researchIds.includes(messageId);
+        const isStartOfCoderSession = state.coderSessionIds.includes(messageId);
 
-        // Planner, podcast, and research cards always render (they have their own content)
-        let isRenderable = isPlanner || isPodcast || isStartOfResearch;
+        // Planner, podcast, research cards, and coder cards always render (they have their own content)
+        let isRenderable = isPlanner || isPodcast || isStartOfResearch || isStartOfCoderSession;
 
         // For user and coordinator messages, only include if they have content
         // This prevents empty dividers from appearing in the UI

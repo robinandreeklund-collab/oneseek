@@ -88,6 +88,10 @@ def _build_base_graph():
     #
     # Debate mode follows the standard research workflow:
     # coordinator → debate_planner → human_feedback → research_team → researcher (with debate tools) → reporter
+    #
+    # Code router: coordinator can route directly to coder for simple code questions
+    # coordinator → coder → __end__ (direct response)
+    # The coder node determines whether to go to __end__ or research_team based on context
     builder.add_conditional_edges(
         "research_team",
         continue_to_running_research_team,

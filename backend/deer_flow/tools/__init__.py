@@ -7,6 +7,7 @@ from .retriever import get_retriever_tool
 from .search import get_web_search_tool
 from .tts import OpenAITTS
 from .debate_tools import get_debate_tools
+from .code_tools import get_code_tools, linux_sandbox_tool, file_system_tool, react_sandbox_tool
 
 __all__ = [
     "crawl_tool",
@@ -15,4 +16,8 @@ __all__ = [
     "get_retriever_tool",
     "OpenAITTS",
     "get_debate_tools",
+    "get_code_tools",
+    "linux_sandbox_tool",
+    "file_system_tool",
+    "react_sandbox_tool",
 ]

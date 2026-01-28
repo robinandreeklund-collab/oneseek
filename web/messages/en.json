@@ -177,6 +177,23 @@
       "startResearch": "Start research",
       "startDebate": "Start debate"
     },
+    "coder": {
+      "codeExecution": "Code Execution",
+      "runningCode": "Running code...",
+      "codeExecutionComplete": "Code execution complete",
+      "open": "Open",
+      "close": "Close",
+      "activities": "Activities",
+      "preview": "Preview",
+      "files": "Files",
+      "runningPython": "Running Python code",
+      "fileOperation": "File operation",
+      "reactSandbox": "React Sandbox",
+      "error": "Error",
+      "output": "Output",
+      "noPreview": "No preview available. Create a React app to see preview.",
+      "noFiles": "No files created yet."
+    },
     "evaluation": {
       "title": "Report Quality Evaluation",
       "description": "Evaluate your report using automated metrics and AI analysis.",

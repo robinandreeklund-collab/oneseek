@@ -51,6 +51,8 @@ import {
 import { parseJSON } from "~/core/utils";
 import { cn } from "~/lib/utils";
 
+import { CoderCard } from "./coder-card";
+
 export function MessageListView({
   className,
   onFeedback,
@@ -76,9 +78,9 @@ export function MessageListView({
     (state) => state.ongoingResearchId === state.openResearchId,
   );
 
-  const handleToggleResearch = useCallback(() => {
+  const handleToggleSidebar = useCallback(() => {
     // Fix the issue where auto-scrolling to the bottom
-    // occasionally fails when toggling research.
+    // occasionally fails when toggling research or coder sidebar.
     const timer = setTimeout(() => {
       if (scrollContainerRef.current) {
         scrollContainerRef.current.scrollToBottom();
@@ -105,7 +107,7 @@ export function MessageListView({
             interruptMessage={interruptMessage}
             onFeedback={onFeedback}
             onSendMessage={onSendMessage}
-            onToggleResearch={handleToggleResearch}
+            onToggleSidebar={handleToggleSidebar}
           />
         ))}
         <div className="flex h-8 w-full shrink-0"></div>
@@ -124,7 +126,7 @@ function MessageListItem({
   interruptMessage,
   onFeedback,
   onSendMessage,
-  onToggleResearch,
+  onToggleSidebar,
 }: {
   className?: string;
   messageId: string;
@@ -135,20 +137,25 @@ function MessageListItem({
     message: string,
     options?: { interruptFeedback?: string },
   ) => void;
-  onToggleResearch?: () => void;
+  onToggleSidebar?: () => void;
 }) {
   const message = useMessage(messageId);
   const researchIds = useStore((state) => state.researchIds);
+  const coderSessionIds = useStore((state) => state.coderSessionIds);
   const startOfResearch = useMemo(() => {
     return researchIds.includes(messageId);
   }, [researchIds, messageId]);
+  const startOfCoderSession = useMemo(() => {
+    return coderSessionIds.includes(messageId);
+  }, [coderSessionIds, messageId]);
   if (message) {
     if (
       message.role === "user" ||
       message.agent === "coordinator" ||
       isPlannerAgent(message.agent) ||
       message.agent === "podcast" ||
-      startOfResearch
+      startOfResearch ||
+      startOfCoderSession
     ) {
       let content: React.ReactNode;
       if (isPlannerAgent(message.agent)) {
@@ -174,7 +181,16 @@ function MessageListItem({
           <div className="w-full px-4">
             <ResearchCard
               researchId={message.id}
-              onToggleResearch={onToggleResearch}
+              onToggleResearch={onToggleSidebar}
+            />
+          </div>
+        );
+      } else if (startOfCoderSession) {
+        content = (
+          <div className="w-full px-4">
+            <CoderCard
+              sessionId={message.id}
+              onToggleCoder={onToggleSidebar}
             />
           </div>
         );
