@@ -109,7 +109,7 @@ export function InputBox({
     try {
       const enhancedPrompt = await enhancePrompt({
         prompt: currentPrompt,
-        report_style: reportStyle.toUpperCase(),
+        report_style: reportStyle?.toUpperCase() ?? "COMPREHENSIVE",
       });
 
       // Add a small delay for better UX
