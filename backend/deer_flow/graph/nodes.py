@@ -829,10 +829,13 @@ def extract_plan_content(plan_data: str | dict | Any) -> str:
 def human_feedback_node(
     state: State, config: RunnableConfig
 ) -> Command[Literal["planner", "research_team", "reporter", "__end__"]]:
-    logger.info(f"[human_feedback_node] ENTERED - coder_just_completed={state.get('coder_just_completed', False)}")
+    coder_flag = state.get('coder_just_completed', False)
+    logger.info(f"[human_feedback_node] ENTERED - coder_just_completed={coder_flag}")
+    logger.info(f"[human_feedback_node] State keys: {list(state.keys())}")
+    logger.info(f"[human_feedback_node] 'coder_just_completed' in state: {'coder_just_completed' in state}")
     
     # Check if coder just completed - if so, ask about testing
-    if state.get("coder_just_completed", False):
+    if coder_flag:
         logger.info("[human_feedback_node] Coder just completed. Asking user about testing.")
         locale = state.get("locale", "en-US")
         
@@ -2149,9 +2152,14 @@ async def coder_node(
     # When called from research_team, route to human_feedback to ask about testing
     logger.info("Coder completed, routing to human_feedback to ask about testing")
     # Set flag to indicate coder just completed (for human_feedback_node to know what to ask)
-    result.update["coder_just_completed"] = True
+    # Create new update dict to ensure the flag is properly set
+    updated_state = {
+        **result.update,
+        "coder_just_completed": True
+    }
+    logger.info(f"[coder_node] Setting coder_just_completed=True in update dict")
     return Command(
-        update=result.update,
+        update=updated_state,
         goto="human_feedback"
     )
 
