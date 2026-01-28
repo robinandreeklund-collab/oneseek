@@ -22,54 +22,85 @@ from .decorators import log_io
 
 logger = logging.getLogger(__name__)
 
-# Thread-local storage for tracking workspace files
-_workspace_context = threading.local()
+# Run-scoped storage for tracking workspace files
+# Using a simple global dict with automatic run_id generation
+_workspace_files_by_run: Dict[str, List[Dict[str, Any]]] = {}
+_workspace_files_lock = threading.Lock()
+_current_run_id: Dict[int, str] = {}  # Maps thread_id to run_id
 
 
-def get_workspace_files() -> List[Dict[str, Any]]:
-    """Get the list of workspace files tracked in the current context."""
-    if not hasattr(_workspace_context, 'files'):
-        _workspace_context.files = []
-    logger.info(f"Retrieved {len(_workspace_context.files)} workspace files")
-    return _workspace_context.files
+def set_current_run_id(run_id: str):
+    """Set the current run_id for this thread."""
+    thread_id = threading.get_ident()
+    _current_run_id[thread_id] = run_id
+    logger.info(f"Set run_id={run_id} for thread={thread_id}")
 
 
-def clear_workspace_files():
-    """Clear the workspace files context."""
-    _workspace_context.files = []
+def get_current_run_id() -> str:
+    """Get the current run_id for this thread, or 'default' if not set."""
+    thread_id = threading.get_ident()
+    return _current_run_id.get(thread_id, "default")
 
 
-def track_workspace_file(path: str, operation: str, size: int = 0, content: Optional[str] = None):
-    """Track a file operation in the workspace context."""
-    if not hasattr(_workspace_context, 'files'):
-        _workspace_context.files = []
+def get_workspace_files(run_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Get the list of workspace files tracked for the given run."""
+    if run_id is None:
+        run_id = get_current_run_id()
     
-    # Find existing entry for this path
-    existing = next((f for f in _workspace_context.files if f['path'] == path), None)
+    with _workspace_files_lock:
+        files = _workspace_files_by_run.get(run_id, [])
+        logger.info(f"Retrieved {len(files)} workspace files for run_id={run_id}")
+        return files.copy()  # Return copy to avoid external modifications
+
+
+def clear_workspace_files(run_id: Optional[str] = None):
+    """Clear the workspace files for the given run."""
+    if run_id is None:
+        run_id = get_current_run_id()
     
-    file_info = {
-        'path': path,
-        'name': os.path.basename(path),
-        'size': size,
-        'operation': operation,
-        'modified': datetime.now().isoformat()
-    }
+    with _workspace_files_lock:
+        if run_id in _workspace_files_by_run:
+            del _workspace_files_by_run[run_id]
+        logger.info(f"Cleared workspace files for run_id={run_id}")
+
+
+def track_workspace_file(path: str, operation: str, size: int = 0, content: Optional[str] = None, run_id: Optional[str] = None):
+    """Track a file operation in the workspace context for the given run."""
+    if run_id is None:
+        run_id = get_current_run_id()
     
-    # Only include first 1000 chars of content to avoid huge payloads
-    if content and operation == 'write':
-        file_info['content'] = content[:1000] if len(content) > 1000 else content
-        file_info['truncated'] = len(content) > 1000
-    
-    if existing:
-        # Update existing entry
-        existing.update(file_info)
-        logger.info(f"Updated workspace file: {path}, operation: {operation}")
-    else:
-        # Add new entry
-        _workspace_context.files.append(file_info)
-        logger.info(f"Tracking workspace file: {path}, operation: {operation}")
-    
-    logger.info(f"Current workspace files count: {len(_workspace_context.files)}")
+    with _workspace_files_lock:
+        if run_id not in _workspace_files_by_run:
+            _workspace_files_by_run[run_id] = []
+        
+        files = _workspace_files_by_run[run_id]
+        
+        # Find existing entry for this path
+        existing = next((f for f in files if f['path'] == path), None)
+        
+        file_info = {
+            'path': path,
+            'name': os.path.basename(path),
+            'size': size,
+            'operation': operation,
+            'modified': datetime.now().isoformat()
+        }
+        
+        # Only include first 1000 chars of content to avoid huge payloads
+        if content and operation == 'write':
+            file_info['content'] = content[:1000] if len(content) > 1000 else content
+            file_info['truncated'] = len(content) > 1000
+        
+        if existing:
+            # Update existing entry
+            existing.update(file_info)
+            logger.info(f"[run_id={run_id}] Updated workspace file: {path}, operation: {operation}")
+        else:
+            # Add new entry
+            files.append(file_info)
+            logger.info(f"[run_id={run_id}] Tracking workspace file: {path}, operation: {operation}")
+        
+        logger.info(f"[run_id={run_id}] Current workspace files count: {len(files)}")
 
 
 def _is_linux_sandbox_enabled() -> bool:

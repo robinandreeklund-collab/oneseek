@@ -14,6 +14,7 @@ from .code_tools import (
     react_sandbox_tool,
     get_workspace_files,
     clear_workspace_files,
+    set_current_run_id,
 )
 from .test_tools import get_test_tools, python_test_tool, javascript_test_tool
 
@@ -30,6 +31,7 @@ __all__ = [
     "react_sandbox_tool",
     "get_workspace_files",
     "clear_workspace_files",
+    "set_current_run_id",
     "get_test_tools",
     "python_test_tool",
     "javascript_test_tool",
