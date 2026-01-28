@@ -249,12 +249,41 @@ function PythonToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
 
 function FileSystemToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
   const t = useTranslations("chat.coder");
+  
+  // Parse args - handle both parsed object and unparsed argsChunks
   const operation = useMemo<string | undefined>(() => {
-    return (toolCall.args as { operation?: string }).operation;
-  }, [toolCall.args]);
+    // If args is already parsed
+    if (toolCall.args && typeof toolCall.args === 'object') {
+      return (toolCall.args as { operation?: string }).operation;
+    }
+    // If still in argsChunks, try to parse
+    if (toolCall.argsChunks) {
+      try {
+        const parsed = JSON.parse(toolCall.argsChunks.join(''));
+        return parsed.operation;
+      } catch {
+        return undefined;
+      }
+    }
+    return undefined;
+  }, [toolCall.args, toolCall.argsChunks]);
+  
   const path = useMemo<string | undefined>(() => {
-    return (toolCall.args as { path?: string }).path;
-  }, [toolCall.args]);
+    // If args is already parsed
+    if (toolCall.args && typeof toolCall.args === 'object') {
+      return (toolCall.args as { path?: string }).path;
+    }
+    // If still in argsChunks, try to parse
+    if (toolCall.argsChunks) {
+      try {
+        const parsed = JSON.parse(toolCall.argsChunks.join(''));
+        return parsed.path;
+      } catch {
+        return undefined;
+      }
+    }
+    return undefined;
+  }, [toolCall.args, toolCall.argsChunks]);
 
   return (
     <section className="mt-4 pl-4">
@@ -265,13 +294,9 @@ function FileSystemToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
           animated={toolCall.result === undefined}
         >
           {t("fileOperation")}: {operation ?? "unknown"}
+          {path && ` → ${path}`}
         </RainbowText>
       </div>
-      {path && (
-        <div className="bg-accent mt-2 rounded-md p-2 text-sm font-mono">
-          {path}
-        </div>
-      )}
       {toolCall.result && <ToolCallResult result={toolCall.result} />}
     </section>
   );
