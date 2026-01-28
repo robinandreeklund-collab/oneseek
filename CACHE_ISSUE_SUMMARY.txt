@@ -1,0 +1,69 @@
+================================================================
+SAMMANFATTNING: Cache-Problem med Frontend
+================================================================
+
+PROBLEM:
+--------
+Du ser fortfarande samma TypeError-fel trots att fixarna är committade.
+
+ORSAK:
+------
+Webbläsarens cache serverar GAMMAL JavaScript-kod.
+Fixarna finns i koden men laddas inte av webbläsaren.
+
+BEVIS ATT FIXARNA FINNS:
+-------------------------
+Commit: 51a6254 Fix two TypeError crashes...
+- research-block.tsx: reportStyle?.toLowerCase() ✅
+- research-activities-block.tsx: if (!message) return null; ✅
+
+LÖSNING (3 ENKLA STEG):
+------------------------
+
+1. UPPDATERA KOD:
+   git pull origin copilot/integrera-ny-router-kodfror
+
+2. RENSA OCH STARTA OM:
+   cd web
+   rm -rf .next
+   npm run dev
+
+3. HÅRD OMLADDNING I WEBBLÄSARE:
+   Tryck: Ctrl + Shift + R
+   (håll Ctrl, tryck Shift, tryck R)
+
+EFTER DETTA:
+------------
+✅ Inga fel i Console
+✅ Coder fungerar
+✅ Output visas i chatten
+
+GUIDER:
+-------
+📘 FIXA_CACHE_PROBLEM.md - Svensk snabbguide
+📘 DEBUGGING_PERSISTENT_ERRORS.md - Detaljerad engelsk guide
+
+OM PROBLEM KVARSTÅR:
+--------------------
+1. Öppna F12 → Network → Kryssa "Disable cache"
+2. ELLER prova inkognito-läge (Ctrl+Shift+N)
+3. ELLER prova annan webbläsare
+
+VARFÖR HÄNDER DETTA:
+--------------------
+Next.js cachar kompilerad kod i .next/
+Webbläsaren cachar JavaScript-filer lokalt
+Båda måste rensas för att få nya fixar
+
+VERIFIERING:
+-----------
+Kör dessa för att se att fixarna finns:
+
+grep "reportStyle?" web/src/app/chat/components/research-block.tsx
+grep "if (!message)" web/src/app/chat/components/research-activities-block.tsx
+
+Om dessa INTE visar fixade rader, kör git pull igen.
+
+================================================================
+STATUS: Fixar finns i kod, väntar på att cache rensas
+================================================================
