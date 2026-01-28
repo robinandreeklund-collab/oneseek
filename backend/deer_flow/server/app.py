@@ -446,10 +446,6 @@ def _get_agent_name(agent, message_metadata):
     # Keep debate planner output compatible with planner UI rendering.
     if agent_name == "debate_planner":
         return "planner"
-    # Map coder to researcher for frontend UI compatibility
-    # Coder is part of the research team and its output should render like researcher messages
-    if agent_name == "coder":
-        return "researcher"
     return agent_name
 
 
