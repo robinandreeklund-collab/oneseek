@@ -1706,6 +1706,7 @@ async def _execute_agent_step(
                 # Replace the last message with the enhanced one
                 agent_messages[-1] = enhanced_message
                 logger.info(f"[{agent_name}] Enhanced final message with tool results summary")
+                logger.info(f"[{agent_name}] FINAL ENHANCED MESSAGE CONTENT: {summary_content[:500]}...")  # Log first 500 chars
             else:
                 logger.warning(f"[{agent_name}] No tool summaries found despite tool_message_count > 0")
 
