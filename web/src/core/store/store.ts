@@ -335,7 +335,10 @@ function appendResearch(researchId: string) {
     }
   }
   const messageIds = [researchId];
-  messageIds.unshift(planMessage!.id);
+  // Only add planMessage.id if it exists (direct coder calls have no plan message)
+  if (planMessage?.id) {
+    messageIds.unshift(planMessage.id);
+  }
   useStore.setState({
     ongoingResearchId: researchId,
     researchIds: [...useStore.getState().researchIds, researchId],
