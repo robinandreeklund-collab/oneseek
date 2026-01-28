@@ -148,6 +148,56 @@ def direct_response(
     return
 
 
+@tool
+def handoff_to_coder(
+    code_task: Annotated[str, "The specific code-related task or question to be handled."],
+    locale: Annotated[str, "The user's detected language locale (e.g., en-US, zh-CN)."],
+    clarity: Annotated[str, "Whether the code task is 'clear' or 'unclear'. Use 'unclear' if the task needs human clarification."],
+):
+    """Handoff to coder agent for code-related questions, development, or debugging tasks. 
+    Use this for questions about programming, code execution, building applications, or technical development.
+    Set clarity='unclear' if the task requires human clarification before proceeding."""
+    return
+
+
+def is_code_related_question(question: str) -> bool:
+    """
+    Detect if a question is code-related using keyword matching and patterns.
+    
+    Args:
+        question: The user's question or research topic
+        
+    Returns:
+        True if the question appears to be code-related
+    """
+    if not question:
+        return False
+    
+    question_lower = question.lower()
+    
+    # Code-related keywords
+    code_keywords = [
+        # Programming languages
+        'python', 'javascript', 'java', 'typescript', 'c++', 'c#', 'ruby', 'go', 'rust',
+        'php', 'swift', 'kotlin', 'scala', 'dart', 'r', 'matlab',
+        # Code-related terms
+        'code', 'coding', 'program', 'programming', 'script', 'function', 'method', 'class',
+        'algorithm', 'debug', 'compile', 'execute', 'syntax', 'error', 'exception',
+        'implement', 'development', 'software', 'application', 'api', 'library', 'framework',
+        # Web development
+        'react', 'vue', 'angular', 'next.js', 'node.js', 'express', 'django', 'flask',
+        'html', 'css', 'frontend', 'backend', 'fullstack', 'web app',
+        # Tools and technologies
+        'docker', 'kubernetes', 'git', 'github', 'sql', 'database', 'mongodb',
+        'linux', 'bash', 'shell', 'terminal', 'command line', 'cli',
+        # Code actions
+        'write code', 'create app', 'build', 'deploy', 'test', 'unit test', 'integration',
+        'refactor', 'optimize', 'fix bug', 'review code',
+    ]
+    
+    return any(keyword in question_lower for keyword in code_keywords)
+
+
 def needs_clarification(state: dict) -> bool:
     """
     Check if clarification is needed based on current state.
@@ -745,7 +795,7 @@ def human_feedback_node(
 
 def coordinator_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["planner", "background_investigator", "ai_comparison", "debate_planner", "coordinator", "__end__"]]:
+) -> Command[Literal["planner", "background_investigator", "ai_comparison", "debate_planner", "coordinator", "human_feedback", "__end__"]]:
     """Coordinator node that communicate with customers and handle clarification."""
     logger.info("Coordinator talking.")
     configurable = Configuration.from_runnable_config(config)
@@ -768,8 +818,8 @@ def coordinator_node(
             }
         )
 
-        # Bind both handoff_to_planner and direct_response tools
-        tools = [handoff_to_planner, direct_response]
+        # Bind handoff_to_planner, direct_response, and handoff_to_coder tools
+        tools = [handoff_to_planner, direct_response, handoff_to_coder]
         response = (
             get_llm_by_type(AGENT_LLM_MAP["coordinator"])
             .bind_tools(tools)
@@ -806,6 +856,25 @@ def coordinator_node(
                         # Extract research_topic if provided
                         if tool_args.get("research_topic"):
                             research_topic = tool_args.get("research_topic")
+                        break
+                    elif tool_name == "handoff_to_coder":
+                        logger.info("Handing off to coder for code-related task")
+                        
+                        # Extract code task and clarity
+                        code_task = tool_args.get("code_task", research_topic)
+                        clarity = tool_args.get("clarity", "clear")
+                        
+                        # For code tasks, we route through planner to create a proper code execution plan
+                        # The planner will create PROCESSING-type steps that route to coder
+                        if clarity == "unclear":
+                            logger.info("Code task is unclear, routing to human_feedback first")
+                            goto = "human_feedback"
+                        else:
+                            logger.info("Code task is clear, routing to planner for code execution plan")
+                            goto = "planner"
+                        
+                        # Update research topic with code task and mark as code-related
+                        research_topic = f"[CODE] {code_task}"
                         break
                     elif tool_name == "direct_response":
                         logger.info("Direct response to user (greeting/small talk)")
@@ -877,8 +946,8 @@ def coordinator_node(
 
         messages.append({"role": "system", "content": clarification_context})
 
-        # Bind both clarification tools - let LLM choose the appropriate one
-        tools = [handoff_to_planner, handoff_after_clarification]
+        # Bind clarification tools and handoff_to_coder - let LLM choose the appropriate one
+        tools = [handoff_to_planner, handoff_after_clarification, handoff_to_coder]
 
         # Check if we've already reached max rounds
         if clarification_rounds >= max_clarification_rounds:
@@ -1014,6 +1083,26 @@ def coordinator_node(
                         logger.info(
                             "Using research topic for handoff: %s", research_topic
                         )
+                    break
+                elif tool_name == "handoff_to_coder":
+                    logger.info("Handing off to coder for code-related task")
+                    
+                    # Extract code task and clarity
+                    code_task = tool_args.get("code_task", clarified_topic or research_topic)
+                    clarity = tool_args.get("clarity", "clear")
+                    
+                    # For code tasks, we route through planner to create a proper code execution plan
+                    if clarity == "unclear":
+                        logger.info("Code task is unclear, routing to human_feedback first")
+                        goto = "human_feedback"
+                    else:
+                        logger.info("Code task is clear, routing to planner for code execution plan")
+                        goto = "planner"
+                    
+                    # Update research topic with code task and mark as code-related
+                    research_topic = f"[CODE] {code_task}"
+                    if enable_clarification:
+                        clarified_topic = f"[CODE] {code_task}"
                     break
 
         except Exception as e:
@@ -1699,15 +1788,25 @@ async def researcher_node(
 async def coder_node(
     state: State, config: RunnableConfig
 ) -> Command[Literal["research_team"]]:
-    """Coder node that do code analysis."""
+    """Coder node that do code analysis and execution with extended tools."""
     logger.info("Coder node is coding.")
-    logger.debug(f"[coder_node] Starting coder agent with python_repl_tool")
+    logger.debug(f"[coder_node] Starting coder agent with extended code tools")
+    
+    # Import code tools
+    from backend.deer_flow.tools.code_tools import get_code_tools
+    
+    # Build tool list: always include python_repl_tool, plus any enabled code tools
+    tools = [python_repl_tool]
+    code_tools = get_code_tools()
+    tools.extend(code_tools)
+    
+    logger.info(f"Coder node using {len(tools)} tools: {[t.name for t in tools]}")
     
     return await _setup_and_execute_agent_step(
         state,
         config,
         "coder",
-        [python_repl_tool],
+        tools,
     )
 
 
