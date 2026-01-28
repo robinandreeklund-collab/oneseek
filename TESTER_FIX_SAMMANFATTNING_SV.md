@@ -1,5 +1,35 @@
 # Lösning: Tester Installerar Automatiskt Nödvändiga Paket
 
+## ⚠️ OBLIGATORISKT: Aktivera Testverktyg Först!
+
+**KRITISKT**: Innan Tester-agenten kan fungera MÅSTE du aktivera testverktygen via miljövariabler.
+
+Lägg till dessa i din `backend/.env` fil:
+
+```bash
+# Aktivera Python-testverktyg (pytest, pylint, mypy)
+ENABLE_PYTHON_TEST_TOOL=true
+
+# Aktivera JavaScript-testverktyg (jest, vitest, eslint, tsc)
+ENABLE_JAVASCRIPT_TEST_TOOL=true
+```
+
+**Snabb Installation:**
+```bash
+# Kopiera exempelkonfigurationen
+cp backend/.env.code_tools_example backend/.env
+
+# Eller lägg till manuellt
+echo "ENABLE_PYTHON_TEST_TOOL=true" >> backend/.env
+echo "ENABLE_JAVASCRIPT_TEST_TOOL=true" >> backend/.env
+
+# Starta om backend-servern
+```
+
+Utan dessa miljövariabler inställda på `true` kommer testverktygen att vara inaktiverade och Tester-agenten kan inte fungera!
+
+---
+
 ## Problem
 
 När tester-agenten försökte köra tester fick den fel eftersom nödvändiga testverktyg (pytest, pylint, mypy för Python; jest, eslint, tsc för JavaScript) inte var installerade i utvecklingsmiljön.

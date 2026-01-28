@@ -2,6 +2,37 @@
 
 This document describes how to configure and use the Code Planner and Tester agents.
 
+## ⚠️ REQUIRED: Enable Test Tools
+
+**CRITICAL**: You MUST enable the test tools for the Tester agent to function properly.
+
+Add these environment variables to your `backend/.env` file:
+
+```bash
+# Enable Python test tools (pytest, pylint, mypy)
+ENABLE_PYTHON_TEST_TOOL=true
+
+# Enable JavaScript test tools (jest, vitest, eslint, tsc)
+ENABLE_JAVASCRIPT_TEST_TOOL=true
+```
+
+### Quick Setup
+
+1. Copy the example configuration:
+   ```bash
+   cp backend/.env.code_tools_example backend/.env
+   ```
+
+2. Or manually add to your existing `backend/.env`:
+   ```bash
+   echo "ENABLE_PYTHON_TEST_TOOL=true" >> backend/.env
+   echo "ENABLE_JAVASCRIPT_TEST_TOOL=true" >> backend/.env
+   ```
+
+3. Restart the backend server for changes to take effect
+
+**Without these variables set to `true`, the test tools will be disabled and the Tester agent cannot run tests!**
+
 ## Environment Variables
 
 ### Test Tools Configuration

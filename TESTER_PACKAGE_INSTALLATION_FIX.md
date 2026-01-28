@@ -1,5 +1,35 @@
 # Tester Package Installation Fix - Summary
 
+## ⚠️ REQUIRED: Enable Test Tools First!
+
+**CRITICAL**: Before the Tester agent can work, you MUST enable the test tools via environment variables.
+
+Add these to your `backend/.env` file:
+
+```bash
+# Enable Python test tools (pytest, pylint, mypy)
+ENABLE_PYTHON_TEST_TOOL=true
+
+# Enable JavaScript test tools (jest, vitest, eslint, tsc)
+ENABLE_JAVASCRIPT_TEST_TOOL=true
+```
+
+**Quick Setup:**
+```bash
+# Copy the example configuration
+cp backend/.env.code_tools_example backend/.env
+
+# Or add manually
+echo "ENABLE_PYTHON_TEST_TOOL=true" >> backend/.env
+echo "ENABLE_JAVASCRIPT_TEST_TOOL=true" >> backend/.env
+
+# Restart backend server
+```
+
+Without these environment variables set to `true`, the test tools will be disabled and the Tester agent cannot function!
+
+---
+
 ## Problem
 
 When the tester agent tried to run tests, it encountered errors because required testing tools (pytest, pylint, mypy for Python; jest, eslint, tsc for JavaScript) were not installed in the development environment.
