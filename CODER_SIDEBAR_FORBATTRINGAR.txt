@@ -1,0 +1,69 @@
+FÖRTYDLIGANDE: CODER SIDEBAR FÖRBÄTTRINGAR
+===========================================
+
+FRÅGA
+-----
+Användaren såg commit 0ba1d1c men hittade inte commiten med CoderSidebar 
+förbättringar (FileSystemToolCall och CoderFilesBlock).
+
+SVAR
+----
+Förbättringarna finns REDAN i commit bb2ace1!
+
+VERI commit bb2ace1
+------------------
+Commit: bb2ace1
+Titel: "Fix coder sidebar positioning - same position as research sidebar"
+
+Detta commit innehåller BÅDE:
+1. Sidebar positioning fix
+2. FileSystemToolCall förbättringar  
+3. CoderFilesBlock fil-extraktion
+
+FÖRBÄTTRINGAR I bb2ace1
+-----------------------
+
+1. FileSystemToolCall (rad 250-278)
+   ✅ Extraherar operation från toolCall.args
+   ✅ Visar "Filåtgärd: write" istället för "unknown"
+   ✅ Visar filnamn under operation
+
+2. CoderFilesBlock (rad 459-517)
+   ✅ Extraherar filer från file_system_tool
+   ✅ Lägger till filer med operation "write" eller "create"
+   ✅ Visar alla skapade filer i Filer tab
+
+VAD ANVÄNDAREN SKA SE
+----------------------
+
+Efter pull av bb2ace1 + 0ba1d1c:
+
+Aktiviteter Tab:
+- "Filåtgärd: write" (INTE "unknown")
+- Filnamn visas tydligt
+- Operation type synlig
+
+Filer Tab:
+- simple_game.py (om det var filen som skapades)
+- Alla filer från write/create operations
+- INTE tom
+
+FELSÖKNING
+-----------
+
+Om användaren fortfarande ser "unknown":
+
+1. Hard refresh i webbläsare (Ctrl + Shift + R)
+2. Starta om frontend: npm run dev
+3. Verifiera commits:
+   git log --oneline -2
+   # Ska visa: 0ba1d1c och bb2ace1
+
+SLUTSATS
+--------
+✅ Inga nya commits behöver pullas
+✅ Koden finns redan i bb2ace1
+✅ Förbättringarna är implementerade
+✅ Om det inte fungerar = cache problem
+
+Användaren har rätt kod, men kanske behöver restarta frontend/browser!
