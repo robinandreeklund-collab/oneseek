@@ -829,6 +829,72 @@ def extract_plan_content(plan_data: str | dict | Any) -> str:
 def human_feedback_node(
     state: State, config: RunnableConfig
 ) -> Command[Literal["planner", "research_team", "reporter", "__end__"]]:
+    # Check if coder just completed - if so, ask about testing
+    if state.get("coder_just_completed", False):
+        logger.info("Coder just completed. Asking user about testing.")
+        locale = state.get("locale", "en-US")
+        
+        # Ask in appropriate language
+        if locale.startswith("sv"):
+            prompt = "Kodningen är klar! Vill du att jag testar koden?\n\nSvara '[TEST]' för att köra tester (pytest, pylint, mypy), eller '[SKIP]' för att hoppa över testning."
+        else:
+            prompt = "Coding is complete! Would you like me to test the code?\n\nReply '[TEST]' to run tests (pytest, pylint, mypy), or '[SKIP]' to skip testing."
+        
+        feedback = interrupt(prompt)
+        
+        # Handle feedback
+        if not feedback:
+            logger.warning("No feedback received for testing decision. Skipping testing.")
+            return Command(
+                update={
+                    "coder_just_completed": False,  # Clear flag
+                    **preserve_state_meta_fields(state),
+                },
+                goto="reporter"
+            )
+        
+        feedback_normalized = str(feedback).strip().upper()
+        
+        if feedback_normalized.startswith("[TEST]"):
+            logger.info("User requested testing. Creating TESTING step and routing to research_team.")
+            # Add a TESTING step to the current plan
+            current_plan = state.get("current_plan")
+            if current_plan and hasattr(current_plan, 'steps'):
+                from backend.deer_flow.prompts.planner_model import Step, StepType
+                
+                # Create testing step
+                test_step = Step(
+                    title="Test and Validate Code" if not locale.startswith("sv") else "Testa och Validera Kod",
+                    description="Run pytest for unit tests, pylint for code quality, and mypy for type checking." if not locale.startswith("sv") else "Kör pytest för enhetstester, pylint för kodkvalitet och mypy för typkontroll.",
+                    step_type=StepType.TESTING,
+                    need_search=False,
+                    execution_res=None
+                )
+                
+                # Add testing step to plan
+                current_plan.steps.append(test_step)
+                logger.info(f"Added TESTING step to plan. Total steps: {len(current_plan.steps)}")
+                
+                return Command(
+                    update={
+                        "current_plan": current_plan,
+                        "coder_just_completed": False,  # Clear flag
+                        **preserve_state_meta_fields(state),
+                    },
+                    goto="research_team"
+                )
+        
+        # If [SKIP] or any other response, skip testing and go to reporter
+        logger.info("User declined testing or provided invalid response. Skipping testing, going to reporter.")
+        return Command(
+            update={
+                "coder_just_completed": False,  # Clear flag
+                **preserve_state_meta_fields(state),
+            },
+            goto="reporter"
+        )
+    
+    # Original human_feedback_node logic for plan approval
     current_plan = state.get("current_plan", "")
     # check if the plan is auto accepted
     auto_accepted_plan = state.get("auto_accepted_plan", False)
@@ -2020,12 +2086,13 @@ async def researcher_node(
 
 async def coder_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["research_team", "__end__"]]:
+) -> Command[Literal["research_team", "human_feedback", "__end__"]]:
     """Coder node that handles code analysis and execution with extended tools.
     
-    Can be called in two ways:
+    Can be called in three ways:
     1. Directly from coordinator for simple code questions -> responds directly (goto __end__)
-    2. From research_team as part of a plan -> returns to research_team for continued execution
+    2. From research_team as part of a plan -> routes to human_feedback to ask about testing
+    3. Legacy: Can still return to research_team if needed
     """
     logger.info("Coder node is coding.")
     logger.debug(f"[coder_node] Starting coder agent with extended code tools")
@@ -2069,9 +2136,14 @@ async def coder_node(
             goto="__end__"
         )
     
-    # Otherwise, return to research_team for continued workflow
-    logger.info("Coder was called from research_team, returning to research_team")
-    return result
+    # When called from research_team, route to human_feedback to ask about testing
+    logger.info("Coder completed, routing to human_feedback to ask about testing")
+    # Set flag to indicate coder just completed (for human_feedback_node to know what to ask)
+    result.update["coder_just_completed"] = True
+    return Command(
+        update=result.update,
+        goto="human_feedback"
+    )
 
 
 async def tester_node(
