@@ -227,8 +227,8 @@ class DebateFlow:
         """
         Summarize a round's responses to reduce context size.
         
-        Takes first 150 chars (~40 tokens) from each response to create
-        a compact summary instead of including full responses.
+        Takes first 300 chars (~75 tokens) from each response to create
+        a summary. With 95K token context, we can be less aggressive.
         
         Args:
             responses: List of response dicts from a round
@@ -239,9 +239,9 @@ class DebateFlow:
         summary_parts = []
         for resp in responses:
             if not resp.get("error"):
-                # Take first 150 chars of response
-                snippet = resp['response'][:150]
-                if len(resp['response']) > 150:
+                # Take first 300 chars (increased from 150 for better quality with 95K context)
+                snippet = resp['response'][:300]
+                if len(resp['response']) > 300:
                     snippet += "..."
                 summary_parts.append(f"- **{resp['display_name']}**: {snippet}")
         
@@ -349,13 +349,13 @@ class DebateFlow:
                 context_parts.append(f"Svara på {language} och håll ditt svar under 500 tokens.")
                 context_parts.append(f"Ge ett genomtänkt och välunderbyggt svar på frågan.")
             else:
-                # FIXED: Limit to last 3 responses instead of all
-                recent = self.chain_so_far[-3:]
+                # FIXED: Limit to last 5 responses (increased from 3 for 95K context)
+                recent = self.chain_so_far[-5:]
                 context_parts.append(f"\nDetta är runda 1. Senaste {len(recent)} svar:\n")
                 for resp in recent:
-                    # Truncate each response to 300 chars
-                    snippet = resp['response'][:300]
-                    if len(resp['response']) > 300:
+                    # Truncate to 500 chars (increased from 300 for better quality)
+                    snippet = resp['response'][:500]
+                    if len(resp['response']) > 500:
                         snippet += "..."
                     context_parts.append(f"\n{resp['display_name']}: {snippet}\n")
                 context_parts.append(f"\nDitt svar (på {language}, max 500 tokens):")
@@ -370,14 +370,14 @@ class DebateFlow:
                 context_parts.append(summary)
                 context_parts.append("\n")
             
-            # FIXED: Limit chain_so_far to last 3 responses
+            # FIXED: Limit chain_so_far to last 5 responses (increased from 3)
             if self.chain_so_far:
-                recent = self.chain_so_far[-3:]
+                recent = self.chain_so_far[-5:]
                 context_parts.append(f"\nRunda {self.current_round}, senaste {len(recent)} svar:\n")
                 for resp in recent:
-                    # Truncate to 300 chars
-                    snippet = resp['response'][:300]
-                    if len(resp['response']) > 300:
+                    # Truncate to 500 chars (increased from 300)
+                    snippet = resp['response'][:500]
+                    if len(resp['response']) > 500:
                         snippet += "..."
                     context_parts.append(f"\n{resp['display_name']}: {snippet}\n")
             
@@ -395,11 +395,11 @@ class DebateFlow:
         token_count = self._count_tokens(context)
         logger.info(f"Context for {model_key} round {self.current_round}: {token_count} tokens")
         
-        # Warnings for large contexts
-        if token_count > 10000:
-            logger.error(f"⚠️ CRITICAL: Context {token_count} tokens exceeds 10K! Risk of VLLM crash!")
-        elif token_count > 5000:
-            logger.warning(f"⚠️ WARNING: Context {token_count} tokens exceeds 5K")
+        # Warnings for large contexts (adjusted for 95K token model)
+        if token_count > 50000:
+            logger.error(f"⚠️ CRITICAL: Context {token_count} tokens exceeds 50K! Approaching limit!")
+        elif token_count > 30000:
+            logger.warning(f"⚠️ WARNING: Context {token_count} tokens exceeds 30K")
         
         return context
 
@@ -432,13 +432,14 @@ class DebateFlow:
             context = self.build_context_for_model(model_key, user_query, locale)
             token_count = self._count_tokens(context)
             
-            # NEW: Hard limit to prevent VLLM crashes
-            if token_count > 15000:
+            # Hard limit to prevent VLLM crashes (adjusted for 95K token model)
+            # Keep safety margin: max 60K tokens (leaving 35K for response)
+            if token_count > 60000:
                 logger.error(f"Context too large ({token_count} tokens) for {model_key}, skipping")
                 return {
                     "model": model_key,
                     "display_name": display_name,
-                    "response": f"❌ Hoppades över: Kontexten ({token_count} tokens) överskrider gränsen på 15K tokens. Detta skulle ha kraschat VLLM.",
+                    "response": f"❌ Hoppades över: Kontexten ({token_count} tokens) överskrider gränsen på 60K tokens. Säkerhetsmarginal för 95K modell.",
                     "error": True,
                     "context_used": f"Context too large: {token_count} tokens"
                 }
@@ -581,15 +582,15 @@ class DebateFlow:
         votes = {}
         vote_details = []
         
-        # Build MINIMAL voting context to prevent VLLM crashes
+        # Build MINIMAL voting context (adjusted for 95K token model)
         voting_context = f"Fråga: {user_query}\n\nRunda 3 svar (sammanfattade):\n"
         
         for idx, resp in enumerate(round_3_responses):
             if not resp.get("error"):
-                # CRITICAL FIX: Reduce from 1000 to 300 chars (~75 tokens instead of ~250)
+                # Increased from 300 to 500 chars for better voting quality with 95K context
                 response_text = resp['response']
-                if len(response_text) > 300:
-                    response_text = response_text[:300] + "... [fortsätter]"
+                if len(response_text) > 500:
+                    response_text = response_text[:500] + "... [fortsätter]"
                 voting_context += f"\n[{idx}] {resp['display_name']}: {response_text}\n"
         
         voting_context += "\n\nRösta på det bästa svaret genom att ange numret [0-" + str(len(round_3_responses)-1) + "]. "
@@ -597,10 +598,10 @@ class DebateFlow:
         
         # Log voting context size for monitoring
         token_count = self._count_tokens(voting_context)
-        logger.info(f"Voting context: {token_count} tokens (reduced from ~5,300)")
+        logger.info(f"Voting context: {token_count} tokens (adjusted for 95K model)")
         
-        if token_count > 3000:
-            logger.warning(f"⚠️ Voting context still large: {token_count} tokens")
+        if token_count > 10000:
+            logger.warning(f"⚠️ Voting context large: {token_count} tokens")
         
         # Ask each model to vote (including OneSeek, per user request)
         available_models = list(self.models.keys())
