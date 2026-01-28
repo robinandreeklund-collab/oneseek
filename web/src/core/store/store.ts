@@ -235,7 +235,11 @@ export async function sendMessage(
         scheduleUpdate();
       }
     }
-  } catch {
+  } catch (error) {
+    console.error("[Store] Error processing chat event:", error);
+    console.error("[Store] Event that caused error:", event);
+    console.error("[Store] Current message:", message);
+    console.error("[Store] Message ID:", messageId);
     toast("An error occurred while generating the response. Please try again.");
     // Update message status.
     // TODO: const isAborted = (error as Error).name === "AbortError";
