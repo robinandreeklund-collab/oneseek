@@ -1666,7 +1666,6 @@ async def _execute_agent_step(
     # If the last AIMessage has empty/minimal content, create a summary message
     if agent_messages and current_plan and len(current_plan.steps) == 1:  # Synthetic plan (direct call)
         last_msg = agent_messages[-1]
-        from langchain_core.messages import AIMessage, ToolMessage
         
         if isinstance(last_msg, AIMessage):
             content_to_check = str(last_msg.content).strip()
