@@ -290,16 +290,13 @@ function appendMessage(message: Message) {
     message.agent === "reporter" ||
     message.agent === "researcher" ||
     message.agent === "analyst" ||
-    message.agent === "ai_comparison" ||
-    message.agent === "coder"  // Added back - needed for message storage
+    message.agent === "ai_comparison"
+    // Note: "coder" removed - displays directly in chat like coordinator (no ResearchCard)
   ) {
     if (!getOngoingResearchId()) {
       const id = message.id;
       appendResearch(id);
-      // Don't auto-open research sidebar for coder (displays in main chat)
-      if (message.agent !== "coder") {
-        openResearch(id);
-      }
+      openResearch(id);
     }
     appendResearchActivity(message);
   }
