@@ -84,6 +84,14 @@ export default function ChatList({ messages, isLoading, messageSources, messageT
     console.log("ChatList messageToolActions:", messageToolActions);
   }, [messageSources, messageToolActions]);
 
+  // Auto-minimize sources sidebar when tool detail sidebar opens
+  // This ensures when coder sidebar opens, research sidebar automatically closes
+  useEffect(() => {
+    if (toolDetailSidebarOpen) {
+      setSidebarOpen(false);
+    }
+  }, [toolDetailSidebarOpen]);
+
   const handleToolClick = (toolAction: ToolAction) => {
     setSelectedToolAction(toolAction);
     setToolDetailSidebarOpen(true);
