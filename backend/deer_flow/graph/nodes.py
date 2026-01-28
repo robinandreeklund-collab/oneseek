@@ -1664,11 +1664,14 @@ async def _execute_agent_step(
     
     # For direct agent calls (especially coder), ensure there's a meaningful final message
     # If the last AIMessage has empty/minimal content, create a summary message
+    logger.info(f"[{agent_name}] Checking if message enhancement needed: agent_messages={len(agent_messages) if agent_messages else 0}, current_plan={'exists' if current_plan else 'None'}, steps={len(current_plan.steps) if current_plan else 'N/A'}")
     if agent_messages and current_plan and len(current_plan.steps) == 1:  # Synthetic plan (direct call)
         last_msg = agent_messages[-1]
+        logger.info(f"[{agent_name}] Last message type: {type(last_msg).__name__}, isinstance(AIMessage)={isinstance(last_msg, AIMessage)}")
         
         if isinstance(last_msg, AIMessage):
             content_to_check = str(last_msg.content).strip()
+            logger.info(f"[{agent_name}] Last message content length: {len(content_to_check)}, tool_message_count: {tool_message_count}")
             # If final message is empty or very short and there were tool calls, create summary
             if (not content_to_check or len(content_to_check) < 10) and tool_message_count > 0:
                 logger.info(f"[{agent_name}] Final AIMessage has minimal content, creating summary from tool results")
@@ -1682,6 +1685,7 @@ async def _execute_agent_step(
                         tool_summaries.append(f"**{tool_name}**: {tool_content}")
                 
                 summary_content = f"{response_content}\n\n## Tool Results\n\n" + "\n\n".join(tool_summaries)
+                logger.info(f"[{agent_name}] Created summary content with {len(tool_summaries)} tool results, total length: {len(summary_content)}")
                 
                 # Create a new AIMessage with the summary
                 enhanced_message = AIMessage(
@@ -1693,6 +1697,8 @@ async def _execute_agent_step(
                 # Replace the last message with the enhanced one
                 agent_messages[-1] = enhanced_message
                 logger.info(f"[{agent_name}] Enhanced final message with tool results summary")
+            else:
+                logger.info(f"[{agent_name}] Message enhancement not needed - content already sufficient or no tool calls")
 
     # Extract citations from tool call results (web_search, crawl)
     existing_citations = state.get("citations", [])
