@@ -110,6 +110,38 @@ else:
     return result  # Goes back to research_team
 ```
 
+### Handling Direct Calls Without a Plan
+
+When coder_node is called directly from coordinator, there's no `current_plan` in the state. The `_execute_agent_step` function handles this by creating a synthetic plan:
+
+```python
+# In _execute_agent_step
+if current_plan is None:
+    logger.info(f"Creating synthetic plan for direct {agent_name} call")
+    
+    # Get research topic (with [CODE] prefix stripped)
+    research_topic = state.get("research_topic", "Code Task")
+    if research_topic.startswith("[CODE]"):
+        research_topic = research_topic[6:].strip()
+    
+    # Create synthetic plan with one step
+    current_plan = Plan(
+        locale=state.get("locale", "en-US"),
+        has_enough_context=False,
+        thought=f"Direct {agent_name} execution for: {research_topic}",
+        title=research_topic,
+        steps=[Step(
+            need_search=False,
+            step_type=StepType.PROCESSING,  # or RESEARCH
+            title=research_topic,
+            description=f"Execute {agent_name} task: {research_topic}",
+            execution_res=None
+        )]
+    )
+```
+
+This ensures that the execution functions work correctly whether called directly or as part of a research workflow.
+
 ## Code Detection
 
 The Coordinator uses keyword matching to identify code questions:

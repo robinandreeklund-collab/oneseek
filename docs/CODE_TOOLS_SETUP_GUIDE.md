@@ -525,6 +525,51 @@ Detta kan bero på att frågan inte innehåller kodrelaterade nyckelord.
 
 ---
 
+### Problem 6: AttributeError 'NoneType' object has no attribute 'title'
+
+**Symptom**: Backend kraschar med traceback som innehåller:
+```
+AttributeError: 'NoneType' object has no attribute 'title'
+  File "backend/deer_flow/graph/nodes.py", line 1429, in _execute_agent_step
+    plan_title = current_plan.title
+```
+
+**Lösning**:
+Detta problem har åtgärdats i den senaste versionen (commit e983323).
+
+**Om du fortfarande får felet**:
+1. **Uppdatera koden**: Hämta senaste versionen
+   ```bash
+   git pull origin copilot/integrera-ny-router-kodfror
+   ```
+
+2. **Verifiera fix finns**: Kontrollera att `backend/deer_flow/graph/nodes.py` innehåller null-check (rad ~1429-1458)
+
+3. **Starta om backend**: 
+   ```bash
+   cd backend
+   uvicorn app:app --reload --port 8001
+   ```
+
+**Teknisk förklaring**: 
+När coder_node anropas direkt från coordinator (ny direkt routing), finns ingen `current_plan` i state. Den uppdaterade koden detekterar detta automatiskt och skapar en syntetisk plan:
+- Använder research_topic som plantitel
+- Skapar ett enda steg med typ PROCESSING
+- Tar bort [CODE]-prefix om det finns
+- Resten av exekveringen fortsätter normalt
+
+**Bekräfta fix fungerar**:
+```bash
+# Testa en kodfråga
+curl -X POST http://localhost:8001/chat \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"Skriv Python-kod för att beräkna 2+2"}]}'
+
+# Förväntat: Inget AttributeError, kod körs normalt
+```
+
+---
+
 ## Avancerad användning
 
 ### Anpassa Docker-bild

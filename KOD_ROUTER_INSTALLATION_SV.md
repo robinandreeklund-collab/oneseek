@@ -254,6 +254,19 @@ sudo apt install nodejs npm
 brew install node
 ```
 
+### Problem: AttributeError 'NoneType' object has no attribute 'title'
+
+**Symptom**: Backend kraschar med `AttributeError` när coder anropas direkt.
+
+**Lösning**: Detta har åtgärdats i senaste versionen. Coder-noden hanterar nu direkt anrop utan plan genom att skapa en syntetisk plan automatiskt.
+
+**Om du fortfarande får felet**:
+1. Uppdatera till senaste version av koden
+2. Verifiera att ändringen finns i `backend/deer_flow/graph/nodes.py` (rad ~1429)
+3. Starta om backend
+
+**Teknisk förklaring**: När coder anropas direkt från coordinator finns ingen `current_plan` i state. Den nya koden detekterar detta och skapar automatiskt en syntetisk plan med ett steg baserat på research_topic.
+
 ## Säkerhetsöverväganden
 
 ### Sandlådehantering
