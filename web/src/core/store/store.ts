@@ -275,6 +275,7 @@ export async function sendMessage(
       }
     }
     useStore.getState().setOngoingResearch(null);
+    useStore.getState().setOngoingCoderSession(null);
   } finally {
     setResponding(false);
     // Ensure all pending updates are processed.
@@ -375,8 +376,8 @@ function appendCoderActivity(message: Message) {
   const sessionId = getOngoingCoderSessionId();
   if (sessionId) {
     const coderActivityIds = useStore.getState().coderActivityIds;
-    const current = coderActivityIds.get(sessionId)!;
-    if (!current.includes(message.id)) {
+    const current = coderActivityIds.get(sessionId);
+    if (current && !current.includes(message.id)) {
       useStore.setState({
         coderActivityIds: new Map(coderActivityIds).set(sessionId, [
           ...current,

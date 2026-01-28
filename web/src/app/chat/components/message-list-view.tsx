@@ -78,9 +78,9 @@ export function MessageListView({
     (state) => state.ongoingResearchId === state.openResearchId,
   );
 
-  const handleToggleResearch = useCallback(() => {
+  const handleToggleSidebar = useCallback(() => {
     // Fix the issue where auto-scrolling to the bottom
-    // occasionally fails when toggling research.
+    // occasionally fails when toggling research or coder sidebar.
     const timer = setTimeout(() => {
       if (scrollContainerRef.current) {
         scrollContainerRef.current.scrollToBottom();
@@ -107,7 +107,7 @@ export function MessageListView({
             interruptMessage={interruptMessage}
             onFeedback={onFeedback}
             onSendMessage={onSendMessage}
-            onToggleResearch={handleToggleResearch}
+            onToggleSidebar={handleToggleSidebar}
           />
         ))}
         <div className="flex h-8 w-full shrink-0"></div>
@@ -126,7 +126,7 @@ function MessageListItem({
   interruptMessage,
   onFeedback,
   onSendMessage,
-  onToggleResearch,
+  onToggleSidebar,
 }: {
   className?: string;
   messageId: string;
@@ -137,7 +137,7 @@ function MessageListItem({
     message: string,
     options?: { interruptFeedback?: string },
   ) => void;
-  onToggleResearch?: () => void;
+  onToggleSidebar?: () => void;
 }) {
   const message = useMessage(messageId);
   const researchIds = useStore((state) => state.researchIds);
@@ -181,7 +181,7 @@ function MessageListItem({
           <div className="w-full px-4">
             <ResearchCard
               researchId={message.id}
-              onToggleResearch={onToggleResearch}
+              onToggleResearch={onToggleSidebar}
             />
           </div>
         );
@@ -190,7 +190,7 @@ function MessageListItem({
           <div className="w-full px-4">
             <CoderCard
               sessionId={message.id}
-              onToggleCoder={onToggleResearch}
+              onToggleCoder={onToggleSidebar}
             />
           </div>
         );

@@ -182,7 +182,8 @@ function CoderActivityItem({ messageId }: { messageId: string }) {
         (toolCall) =>
           !(
             typeof toolCall.result === "string" &&
-            toolCall.result?.startsWith("Error")
+            (toolCall.result.trim().startsWith("Error:") || 
+             toolCall.result.trim().startsWith("ERROR:"))
           ),
       )
       .map((toolCall) => {
@@ -355,7 +356,7 @@ function ToolCallResult({ result }: { result: string }) {
   const t = useTranslations("chat.coder");
   const { resolvedTheme } = useTheme();
   const hasError = useMemo(
-    () => result.includes("Error") || result.includes("error"),
+    () => result.trim().startsWith("Error:") || result.trim().startsWith("ERROR:"),
     [result],
   );
 
@@ -401,15 +402,31 @@ function CoderPreviewBlock({ sessionId }: { sessionId: string }) {
           try {
             const result = JSON.parse(toolCall.result);
             if (result.preview_url) {
-              return result.preview_url;
+              // Validate URL format and protocol
+              try {
+                const url = new URL(result.preview_url);
+                if (url.protocol === "http:" || url.protocol === "https:") {
+                  return result.preview_url;
+                }
+              } catch {
+                // Invalid URL format
+                return null;
+              }
             }
           } catch (e) {
-            // Not JSON, try to extract URL
+            // Not JSON, try to extract URL with more robust pattern
             const urlMatch = toolCall.result.match(
-              /preview_url['":\s]+([^\s'"]+)/,
+              /preview_url["':\s]+["']?(https?:\/\/[^\s'"]+)["']?/,
             );
             if (urlMatch?.[1]) {
-              return urlMatch[1];
+              try {
+                const url = new URL(urlMatch[1]);
+                if (url.protocol === "http:" || url.protocol === "https:") {
+                  return urlMatch[1];
+                }
+              } catch {
+                return null;
+              }
             }
           }
         }
@@ -425,7 +442,7 @@ function CoderPreviewBlock({ sessionId }: { sessionId: string }) {
           src={previewUrl}
           className="h-full w-full rounded-lg border"
           title="React App Preview"
-          sandbox="allow-scripts allow-same-origin"
+          sandbox="allow-scripts"
         />
       ) : (
         <div className="flex h-full w-full items-center justify-center">
@@ -455,13 +472,14 @@ function CoderFilesBlock({ sessionId }: { sessionId: string }) {
       if (!message?.toolCalls) continue;
 
       for (const toolCall of message.toolCalls) {
-        if (
-          toolCall.name === "file_system_tool" &&
-          toolCall.args.path &&
-          (toolCall.args.operation === "write" ||
-            toolCall.args.operation === "create")
-        ) {
-          fileSet.add(toolCall.args.path as string);
+        if (toolCall.name === "file_system_tool") {
+          const args = toolCall.args as { path?: string; operation?: string };
+          if (
+            args.path &&
+            (args.operation === "write" || args.operation === "create")
+          ) {
+            fileSet.add(args.path);
+          }
         }
       }
     }
