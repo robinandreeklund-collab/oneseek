@@ -1903,6 +1903,12 @@ async def coder_node(
     # If called directly from coordinator, respond directly to user
     if called_directly:
         logger.info("Coder was called directly from coordinator, responding to user (__end__)")
+        # Log the messages being sent to verify content
+        messages_to_send = result.update.get("messages", [])
+        if messages_to_send:
+            last_msg_content = messages_to_send[-1].content if hasattr(messages_to_send[-1], 'content') else "NO CONTENT ATTR"
+            logger.info(f"[coder_node] Sending {len(messages_to_send)} messages to frontend, last message content length: {len(last_msg_content) if isinstance(last_msg_content, str) else 0}")
+            logger.info(f"[coder_node] Last message content preview: {str(last_msg_content)[:200]}...")
         return Command(
             update=result.update,
             goto="__end__"
