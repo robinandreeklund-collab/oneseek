@@ -37,22 +37,18 @@ export default function Main() {
           doubleColumnMode && `w-[538px]`,
         )}
       />
-      <ResearchBlock
-        className={cn(
-          "w-[min(max(calc((100vw-538px)*0.75),575px),960px)] pb-4 transition-all duration-300 ease-out",
-          !showResearch && "scale-0",
-          showResearch && "",
-        )}
-        researchId={openResearchId}
-      />
-      <CoderSidebar
-        className={cn(
-          "w-[min(max(calc((100vw-538px)*0.75),575px),960px)] pb-4 transition-all duration-300 ease-out",
-          !showCoder && "scale-0",
-          showCoder && "",
-        )}
-        sessionId={openCoderSessionId}
-      />
+      {showResearch && (
+        <ResearchBlock
+          className="w-[min(max(calc((100vw-538px)*0.75),575px),960px)] pb-4 transition-all duration-300 ease-out"
+          researchId={openResearchId}
+        />
+      )}
+      {showCoder && (
+        <CoderSidebar
+          className="w-[min(max(calc((100vw-538px)*0.75),575px),960px)] pb-4 transition-all duration-300 ease-out"
+          sessionId={openCoderSessionId}
+        />
+      )}
     </div>
   );
 }
