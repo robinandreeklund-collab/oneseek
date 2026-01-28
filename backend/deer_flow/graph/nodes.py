@@ -160,6 +160,22 @@ def handoff_to_coder(
     return
 
 
+@tool
+def handoff_to_code_planner(
+    code_task: Annotated[str, "The specific code development task requiring structured planning."],
+    locale: Annotated[str, "The user's detected language locale (e.g., en-US, zh-CN)."],
+):
+    """Handoff to code planner for structured code development with planning, implementation, and testing phases.
+    Use this for complex code tasks that benefit from:
+    - Structured planning before implementation
+    - Research/documentation gathering
+    - Multiple implementation steps
+    - Testing and validation requirements
+    
+    For simple, quick code questions, use handoff_to_coder instead."""
+    return
+
+
 def is_code_related_question(question: str) -> bool:
     """
     Detect if a question is code-related using keyword matching and patterns.
@@ -660,6 +676,116 @@ def debate_planner_node(
     )
 
 
+def code_planner_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["human_feedback"]]:
+    """
+    Code planner node - creates a structured plan for code development tasks.
+    Follows the same workflow as debate planning:
+    code_planner → human_feedback → research_team → coder/tester (with code tools) → reporter
+    
+    This node generates a detailed plan for code implementation, testing, and validation.
+    """
+    logger.info("Code planner generating code development plan with locale: %s", state.get("locale", "en-US"))
+    configurable = Configuration.from_runnable_config(config)
+    
+    # Use the code_planner prompt template
+    messages = apply_prompt_template("code_planner", state, configurable, state.get("locale", "en-US"))
+    
+    # Get LLM for code planner
+    if AGENT_LLM_MAP.get("code_planner") == "basic":
+        llm = get_llm_by_type("basic")
+        llm = configure_llm_with_thinking(llm, enable_thinking=False)
+    else:
+        llm = get_llm_by_type(AGENT_LLM_MAP.get("code_planner", "basic"))
+        llm = configure_llm_with_thinking(llm, enable_thinking=False)
+    
+    # Invoke/stream LLM to get code plan (EXACT match to planner_node logic)
+    full_response = ""
+    if AGENT_LLM_MAP.get("code_planner") == "basic" and not configurable.enable_deep_thinking:
+        response = llm.invoke(messages)
+        full_response = get_message_content(response) or ""
+    else:
+        response = llm.stream(messages)
+        for chunk in response:
+            full_response += chunk.content
+    
+    logger.info(f"Code planner response: {full_response}")
+    
+    # Strip <think> tags if present (matching planner_node behavior)
+    original_response = full_response
+    full_response = strip_think_tags(full_response, expect_json=True)
+    if '<think>' in original_response and '<think>' not in full_response:
+        logger.debug(f"Stripped think tags from code planner response")
+    
+    # Strip markdown code fences if present (LLM sometimes wraps JSON in ```json ... ```)
+    full_response = full_response.strip()
+    if full_response.startswith("```"):
+        # Remove opening fence (e.g., ```json or just ```)
+        lines = full_response.split('\n')
+        if len(lines) > 0:
+            lines = lines[1:]  # Remove first line with ```
+        # Remove closing fence
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        full_response = '\n'.join(lines).strip()
+        logger.debug(f"Stripped markdown code fences from code planner response")
+    
+    # Validate explicitly that response content is valid JSON before proceeding
+    if not is_json_like(full_response):
+        logger.warning("Code planner response does not appear to be valid JSON")
+        return Command(
+            update=preserve_state_meta_fields(state),
+            goto="__end__"
+        )
+    
+    # Parse and repair JSON (matching planner_node behavior)
+    try:
+        curr_plan = json.loads(repair_json_output(full_response))
+        # Need to extract the plan from the full_response
+        curr_plan_content = extract_plan_content(curr_plan)
+        # load the current_plan
+        curr_plan = json.loads(repair_json_output(curr_plan_content))
+    except json.JSONDecodeError as e:
+        logger.warning(f"Code planner response is not valid JSON: {e}")
+        return Command(
+            update=preserve_state_meta_fields(state),
+            goto="__end__"
+        )
+    
+    # Validate and fix plan to ensure web search requirements are met (matching planner_node)
+    if isinstance(curr_plan, dict):
+        curr_plan = validate_and_fix_plan(curr_plan, configurable.enforce_web_search, configurable.enable_web_search)
+    
+    # Check if plan has enough context (matching planner_node)
+    if isinstance(curr_plan, dict) and curr_plan.get("has_enough_context"):
+        logger.info("Code planner response has enough context.")
+        new_plan = Plan.model_validate(curr_plan)
+        return Command(
+            update={
+                "messages": [AIMessage(content=json.dumps(curr_plan, ensure_ascii=False, indent=2), name="planner")],
+                "current_plan": new_plan,
+                **preserve_state_meta_fields(state),
+            },
+            goto="reporter",
+        )
+    
+    # Convert plan to JSON string for human_feedback (matching planner_node)
+    full_response = json.dumps(curr_plan, ensure_ascii=False, indent=2)
+    logger.debug(f"Successfully parsed and prepared code plan for human_feedback")
+    
+    # Return the plan to human_feedback (same as planner_node)
+    # IMPORTANT: Use name="planner" so frontend recognizes it and displays the plan card
+    return Command(
+        update={
+            "messages": [AIMessage(content=full_response, name="planner")],
+            "current_plan": full_response,  # Pass as JSON string like planner does
+            **preserve_state_meta_fields(state),
+        },
+        goto="human_feedback",
+    )
+
+
 def extract_plan_content(plan_data: str | dict | Any) -> str:
     """
     Safely extract plan content from different types of plan data.
@@ -795,7 +921,7 @@ def human_feedback_node(
 
 def coordinator_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["planner", "background_investigator", "ai_comparison", "debate_planner", "coordinator", "coder", "human_feedback", "__end__"]]:
+) -> Command[Literal["planner", "background_investigator", "ai_comparison", "debate_planner", "code_planner", "coordinator", "coder", "human_feedback", "__end__"]]:
     """Coordinator node that communicate with customers and handle clarification."""
     logger.info("Coordinator talking.")
     configurable = Configuration.from_runnable_config(config)
@@ -818,8 +944,8 @@ def coordinator_node(
             }
         )
 
-        # Bind handoff_to_planner, direct_response, and handoff_to_coder tools
-        tools = [handoff_to_planner, direct_response, handoff_to_coder]
+        # Bind handoff_to_planner, direct_response, handoff_to_coder, and handoff_to_code_planner tools
+        tools = [handoff_to_planner, direct_response, handoff_to_coder, handoff_to_code_planner]
         response = (
             get_llm_by_type(AGENT_LLM_MAP["coordinator"])
             .bind_tools(tools)
@@ -874,6 +1000,20 @@ def coordinator_node(
                         
                         # Mark research topic with [CODE] prefix to help coder detect direct call
                         research_topic = f"[CODE] {code_task}"
+                        break
+                    elif tool_name == "handoff_to_code_planner":
+                        logger.info("Handing off to code_planner for structured code development")
+                        
+                        # Extract code task
+                        code_task = tool_args.get("code_task", research_topic)
+                        
+                        # Check if code planner mode is enabled (similar to debate mode check)
+                        # If not explicitly enabled, default to using it when the tool is called
+                        logger.info("Code planner mode activated, routing to code_planner")
+                        goto = "code_planner"
+                        
+                        # Set research topic for code planner
+                        research_topic = code_task
                         break
                     elif tool_name == "direct_response":
                         logger.info("Direct response to user (greeting/small talk)")
@@ -945,8 +1085,8 @@ def coordinator_node(
 
         messages.append({"role": "system", "content": clarification_context})
 
-        # Bind clarification tools and handoff_to_coder - let LLM choose the appropriate one
-        tools = [handoff_to_planner, handoff_after_clarification, handoff_to_coder]
+        # Bind clarification tools, handoff_to_coder, and handoff_to_code_planner - let LLM choose the appropriate one
+        tools = [handoff_to_planner, handoff_after_clarification, handoff_to_coder, handoff_to_code_planner]
 
         # Check if we've already reached max rounds
         if clarification_rounds >= max_clarification_rounds:
@@ -1102,6 +1242,21 @@ def coordinator_node(
                     research_topic = f"[CODE] {code_task}"
                     if enable_clarification:
                         clarified_topic = f"[CODE] {code_task}"
+                    break
+                elif tool_name == "handoff_to_code_planner":
+                    logger.info("Handing off to code_planner for structured code development")
+                    
+                    # Extract code task
+                    code_task = tool_args.get("code_task", clarified_topic or research_topic)
+                    
+                    # Route to code planner
+                    logger.info("Code planner mode activated, routing to code_planner")
+                    goto = "code_planner"
+                    
+                    # Set research topic for code planner
+                    research_topic = code_task
+                    if enable_clarification:
+                        clarified_topic = code_task
                     break
 
         except Exception as e:
@@ -1917,6 +2072,44 @@ async def coder_node(
     # Otherwise, return to research_team for continued workflow
     logger.info("Coder was called from research_team, returning to research_team")
     return result
+
+
+async def tester_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["research_team"]]:
+    """Tester node that handles automated testing, linting, and code quality validation.
+    
+    This node executes test suites, runs linters, performs type checking, and validates
+    code quality standards. It uses specialized test tools for Python and JavaScript/TypeScript.
+    """
+    logger.info("Tester node is testing code.")
+    logger.debug(f"[tester_node] Starting tester agent with test tools")
+    
+    # Import test tools
+    from backend.deer_flow.tools.test_tools import get_test_tools
+    
+    # Build tool list: test tools + file system tool for reading test files + python_repl for debugging
+    tools = [python_repl_tool]
+    test_tools = get_test_tools()
+    tools.extend(test_tools)
+    
+    # Add file_system_tool if available for reading test files
+    from backend.deer_flow.tools.code_tools import file_system_tool
+    try:
+        # Only add if enabled
+        tools.append(file_system_tool)
+    except Exception as e:
+        logger.debug(f"File system tool not available: {e}")
+    
+    logger.info(f"Tester node using {len(tools)} tools: {[t.name for t in tools]}")
+    
+    # Execute tester agent
+    return await _setup_and_execute_agent_step(
+        state,
+        config,
+        "tester",
+        tools,
+    )
 
 
 async def analyst_node(
