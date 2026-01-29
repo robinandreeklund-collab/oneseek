@@ -75,8 +75,12 @@ print(result.stdout)
 **KRITISKA REGLER**:
 - ❌ **Installera INTE paket** - allt är förinstallerat
 - ❌ **Skapa INTE en ny venv** - en finns redan
+- ❌ **Skapa INTE requirements.txt, setup.py, eller pyproject.toml** - venv är redo
+- ❌ **Kör INTE pip install-kommandon** - alla paket finns redan
 - ✅ **Använd bara den förkonfigurerade venv's Python-interpretator**
 - ✅ Om du behöver ett paket som saknas, notera det i ditt svar (försök inte installera)
+
+**⚠️ VIKTIGT:** Den virtuella miljön är fullt konfigurerad med alla nödvändiga paket. Du ska ALDRIG skapa beroendefiler (requirements.txt, setup.py, etc.) eller försöka installera paket. Skriv bara din kod och använd venv!
 
 # Windows Virtual Environment-användning
 

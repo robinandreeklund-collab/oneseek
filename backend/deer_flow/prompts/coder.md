@@ -75,8 +75,12 @@ print(result.stdout)
 **CRITICAL RULES**:
 - ❌ **DO NOT install packages** - everything is pre-installed
 - ❌ **DO NOT create a new venv** - one already exists
+- ❌ **DO NOT create requirements.txt, setup.py, or pyproject.toml** - venv is ready
+- ❌ **DO NOT run pip install commands** - all packages already available
 - ✅ **Just use the pre-configured venv's Python interpreter**
 - ✅ If you need a package that's missing, note it in your response (don't try to install)
+
+**⚠️ IMPORTANT:** The virtual environment is fully configured with all necessary packages. You should NEVER create dependency files (requirements.txt, setup.py, etc.) or attempt package installation. Just write your code and use the venv!
 
 # Windows Virtual Environment Usage
 
