@@ -591,43 +591,74 @@ class DebateFlow:
                 "claim": claim
             } for claim in claims])
             
-            # 2. Verify top claims via web search if available
-            if self.search_tool and claims:
-                for claim in claims[:3]:  # Verify top 3 claims per model
-                    try:
-                        search_query = f"{claim} fact check verify"
-                        
-                        # Web search for verification
-                        search_results = await asyncio.wait_for(
-                            asyncio.to_thread(self.search_tool.invoke, search_query),
-                            timeout=5.0
-                        )
-                        
-                        verification = {
-                            "claim": claim,
-                            "search_query": search_query[:100],
-                            "results_count": len(search_results) if isinstance(search_results, list) else 1,
-                            "results_summary": self._summarize_search_results(search_results)
-                        }
-                        
-                        insight["verification_results"].append(verification)
-                        analysis["verified_facts"].append({
-                            "model": resp["display_name"],
-                            "claim": claim,
-                            "verification": verification["results_summary"]
-                        })
-                        
-                        insight["checks"].append({
-                            "type": "web_search_verification",
-                            "query": search_query[:100],
-                            "results_count": verification["results_count"]
-                        })
-                    except asyncio.TimeoutError:
-                        logger.warning(f"Web search timeout during claim verification: {claim[:50]}")
-                    except Exception as e:
-                        logger.warning(f"Web search error during claim verification: {e}")
-            
             analysis["insights"].append(insight)
+        
+        # 2. Verify only 2-3 TOTAL claims across all models (not per model)
+        # Prioritize claims from different models for diversity
+        if self.search_tool and analysis["claims_extracted"]:
+            # Select up to 3 claims, trying to get one from each model
+            claims_to_verify = []
+            models_covered = set()
+            
+            # First pass: get one claim per model (up to 3 models)
+            for claim_data in analysis["claims_extracted"]:
+                if len(claims_to_verify) >= 3:
+                    break
+                if claim_data["model"] not in models_covered:
+                    claims_to_verify.append(claim_data)
+                    models_covered.add(claim_data["model"])
+            
+            # Second pass: fill remaining slots if we have less than 3
+            if len(claims_to_verify) < 3:
+                for claim_data in analysis["claims_extracted"]:
+                    if len(claims_to_verify) >= 3:
+                        break
+                    if claim_data not in claims_to_verify:
+                        claims_to_verify.append(claim_data)
+            
+            logger.info(f"Verifying {len(claims_to_verify)} claims total (limit: 2-3 across all models)")
+            
+            # Verify the selected claims
+            for claim_data in claims_to_verify:
+                try:
+                    claim = claim_data["claim"]
+                    model_name = claim_data["model"]
+                    search_query = f"{claim} fact check verify"
+                    
+                    # Web search for verification
+                    search_results = await asyncio.wait_for(
+                        asyncio.to_thread(self.search_tool.invoke, search_query),
+                        timeout=5.0
+                    )
+                    
+                    verification = {
+                        "claim": claim,
+                        "search_query": search_query[:100],
+                        "results_count": len(search_results) if isinstance(search_results, list) else 1,
+                        "results_summary": self._summarize_search_results(search_results)
+                    }
+                    
+                    # Find the corresponding insight and add verification
+                    for insight in analysis["insights"]:
+                        if insight["model"] == model_name:
+                            insight["verification_results"].append(verification)
+                            insight["checks"].append({
+                                "type": "web_search_verification",
+                                "query": search_query[:100],
+                                "results_count": verification["results_count"]
+                            })
+                            break
+                    
+                    analysis["verified_facts"].append({
+                        "model": model_name,
+                        "claim": claim,
+                        "verification": verification["results_summary"]
+                    })
+                    
+                except asyncio.TimeoutError:
+                    logger.warning(f"Web search timeout during claim verification: {claim[:50]}")
+                except Exception as e:
+                    logger.warning(f"Web search error during claim verification: {e}")
         
         # 3. Analyze evolution across rounds (compare with previous rounds)
         if len(self.debate_history) > 0 and self.current_round > 1:

@@ -40,7 +40,8 @@ if model_key == "oneseek-local" and self.current_round == 1:
 - Total: alla påståenden sparas i `claims_extracted`
 
 ### 2.3 Verifiera data och påståenden via webbsökning ✅
-- Verifierar top 3 påståenden per modell
+- **UPPDATERAT**: Verifierar endast 2-3 påståenden TOTALT över alla modeller (inte per modell)
+- Prioriterar olika modeller för mångfald (en påstående per modell om möjligt)
 - Utför webbsökning: "påstående + fact check verify"
 - Sparar verifieringsresultat i `verified_facts`
 - Timeout på 5 sekunder per sökning
@@ -175,20 +176,29 @@ Runda 3:
 1. **`backend/debate_flow.py`** (+250 rader)
    - Nya metoder: `_extract_claims`, `_summarize_search_results`, `_analyze_response_evolution`, `_find_contradictions`, `_create_synthesis_points`
    - Uppdaterad: `run_oneseek_internal_analysis`, `query_model_in_debate`, `build_context_for_model`
+   - **UPPDATERING 2024-01-29**: Begränsat verifiering till 2-3 påståenden totalt (inte per modell)
 
-2. **`backend/deer_flow/tools/debate_tools.py`** (+50 rader)
+2. **`backend/deer_flow/graph/nodes.py`** (+90 rader)
+   - Ny metod: `_setup_and_execute_agent_step_with_custom_prompt` - möjliggör anpassad prompt-template
+   - Uppdaterad: `researcher_node` - använder nu "debate" prompt-template i debattläge istället för "researcher"
+   - **FIX**: I debattläge skapas inte längre forskningsrapport, utan debattens egen format används
+
+3. **`backend/deer_flow/tools/debate_tools.py`** (+50 rader)
    - Uppdaterad: `run_internal_analysis` tool med bättre formatering
 
-3. **`backend/deer_flow/prompts/debate.sv_SE.md`** (+100 rader)
+4. **`backend/deer_flow/prompts/debate.sv_SE.md`** (+100 rader)
    - Ny sektion: "OneSeeks Speciella Roll och Instruktioner"
    - Uppdaterad workflow-dokumentation
    - Tydliggjord isolation av interna analyser
 
-4. **`backend/test_debate_enhancements.py`** (NY)
+5. **`backend/test_debate_enhancements.py`** (NY)
    - Unit tests för alla nya metoder
 
-5. **`DEBATE_MODE_IMPROVEMENTS.md`** (NY)
+6. **`DEBATE_MODE_IMPROVEMENTS.md`** (NY)
    - Engelsk implementation summary
+
+7. **`DEBATTLAGET_IMPLEMENTERING_SV.md`** (UPPDATERAD)
+   - Svenska sammanfattning med senaste ändringar
 
 ## ✅ Checklista
 
@@ -204,6 +214,34 @@ Runda 3:
 - [x] Syntaxverifiering genomförd
 - [x] Unit tests skapade
 - [x] Dokumentation skapad
+- [x] **FIX 2024-01-29**: Debattläge använder korrekt debatt-prompt (inte forskningsrapport)
+- [x] **FIX 2024-01-29**: Begränsat verifiering till 2-3 påståenden totalt (inte per modell)
+
+## 🔧 Senaste Fixar (2024-01-29)
+
+### Problem 1: Forskningsrapport skapades i debattläge
+**Symptom**: Efter varje runda såg man "Researcher node is researching" och en forskningsrapport skapades med fel format för debatten.
+
+**Orsak**: Researcher-noden använde "researcher" prompt-template även i debattläge.
+
+**Lösning**: 
+- Skapade ny helper-funktion `_setup_and_execute_agent_step_with_custom_prompt` som tillåter att specificera annan prompt-template än agent-typen
+- Uppdaterade `researcher_node` att använda "debate" prompt-template när `enable_debate_mode=True`
+- Nu används debattens egen prompt istället för forskningsprompt
+
+**Resultat**: I debattläge skapas ingen forskningsrapport - debattens egen format används konsekvent.
+
+### Problem 2: För många påståenden verifierades (20+)
+**Symptom**: Modellen hittade och försökte verifiera 20+ påståenden, vilket tog för lång tid.
+
+**Orsak**: Systemet verifierade top 3 påståenden **per modell**. Med 5+ modeller blev det 15+ verifieringar.
+
+**Lösning**:
+- Ändrade logiken i `run_oneseek_internal_analysis` att verifiera endast 2-3 påståenden **TOTALT** över alla modeller
+- Prioriterar olika modeller för mångfald (försöker få ett påstående per modell)
+- Loggar tydligt: "Verifying {N} claims total (limit: 2-3 across all models)"
+
+**Resultat**: Maximalt 3 påståenden verifieras per runda, vilket ger snabbare och mer fokuserad analys.
 
 ## 🎯 Resultat
 

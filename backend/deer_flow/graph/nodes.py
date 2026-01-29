@@ -2036,12 +2036,88 @@ async def _setup_and_execute_agent_step(
     return await _execute_agent_step(state, agent, agent_type, config)
 
 
+async def _setup_and_execute_agent_step_with_custom_prompt(
+    state: State,
+    config: RunnableConfig,
+    agent_type: str,
+    prompt_template: str,
+    default_tools: list,
+) -> Command[Literal["research_team"]]:
+    """Helper function to set up an agent with a custom prompt template.
+    
+    Similar to _setup_and_execute_agent_step but allows specifying a different
+    prompt template than the agent type. Useful for debate mode where we want
+    to use the "researcher" LLM config but "debate" prompt template.
+
+    Args:
+        state: The current state
+        config: The runnable config
+        agent_type: The type of agent (for LLM selection, e.g., "researcher")
+        prompt_template: The prompt template to use (e.g., "debate")
+        default_tools: The default tools to add to the agent
+
+    Returns:
+        Command to update state and go to research_team
+    """
+    configurable = Configuration.from_runnable_config(config)
+    mcp_servers = {}
+    enabled_tools = {}
+    loaded_tools = default_tools[:]
+    
+    # Get locale from workflow state to pass to agent creation
+    locale = state.get("locale", "en-US")
+
+    # Extract MCP server configuration for this agent type
+    if configurable.mcp_settings:
+        for server_name, server_config in configurable.mcp_settings["servers"].items():
+            if (
+                server_config["enabled_tools"]
+                and agent_type in server_config["add_to_agents"]
+            ):
+                mcp_servers[server_name] = {
+                    k: v
+                    for k, v in server_config.items()
+                    if k in ("transport", "command", "args", "url", "env", "headers")
+                }
+                for tool_name in server_config["enabled_tools"]:
+                    enabled_tools[tool_name] = server_name
+
+    # Create and execute agent with MCP tools if available
+    if mcp_servers:
+        # Add MCP tools to loaded tools if MCP servers are configured
+        try:
+            from langchain_mcp_adapters.client import MultiServerMCPClient
+            client = MultiServerMCPClient(mcp_servers)
+            all_tools = await client.get_tools()
+            for tool in all_tools:
+                if tool.name in enabled_tools:
+                    tool.description = (
+                        f"Powered by '{enabled_tools[tool.name]}'.\n{tool.description}"
+                    )
+                    loaded_tools.append(tool)
+        except ImportError:
+            logger.warning("MCP servers configured but langchain_mcp_adapters not installed. Install with: pip install langchain-mcp-adapters")
+
+    llm_token_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP[agent_type])
+    pre_model_hook = partial(ContextManager(llm_token_limit, 3).compress_messages)
+    
+    # Create agent with custom prompt template
+    agent = create_agent(
+        agent_type,          # agent name (for logging)
+        agent_type,          # agent type (for LLM selection)
+        loaded_tools,
+        prompt_template,     # CUSTOM: use specified prompt template
+        pre_model_hook,
+        interrupt_before_tools=configurable.interrupt_before_tools,
+        locale=locale,
+    )
+    return await _execute_agent_step(state, agent, agent_type, config)
+
+
 async def researcher_node(
     state: State, config: RunnableConfig
 ) -> Command[Literal["research_team"]]:
     """Researcher node that do research or execute debate"""
-    logger.info("Researcher node is researching.")
-    logger.debug(f"[researcher_node] Starting researcher agent")
     
     configurable = Configuration.from_runnable_config(config)
     logger.debug(f"[researcher_node] Max search results: {configurable.max_search_results}")
@@ -2053,13 +2129,25 @@ async def researcher_node(
     tools = []
     
     if enable_debate_mode:
-        # In debate mode, use debate tools instead of research tools
-        logger.info("[researcher_node] Debate mode enabled - adding debate tools")
+        # In debate mode, use debate tools and debate prompt template
+        logger.info("[researcher_node] Debate mode enabled - using debate agent with debate tools")
         debate_tools = get_debate_tools()
         tools.extend(debate_tools)
         logger.info(f"[researcher_node] Debate tools count: {len(tools)}")
         logger.debug(f"[researcher_node] Debate tools: {[tool.name if hasattr(tool, 'name') else str(tool) for tool in tools]}")
+        
+        # Use debate-specific execution with debate prompt template
+        return await _setup_and_execute_agent_step_with_custom_prompt(
+            state,
+            config,
+            "researcher",  # agent_type for LLM selection
+            "debate",      # prompt_template to use debate prompt
+            tools,
+        )
     else:
+        logger.info("Researcher node is researching.")
+        logger.debug(f"[researcher_node] Starting researcher agent")
+        
         # Normal research mode
         # Add web search and crawl tools only if web search is enabled
         if configurable.enable_web_search:
@@ -2083,12 +2171,12 @@ async def researcher_node(
         logger.info(f"[researcher_node] enforce_researcher_search={configurable.enforce_researcher_search}, "
                     f"enable_web_search={configurable.enable_web_search}")
     
-    return await _setup_and_execute_agent_step(
-        state,
-        config,
-        "researcher",
-        tools,
-    )
+        return await _setup_and_execute_agent_step(
+            state,
+            config,
+            "researcher",
+            tools,
+        )
 
 
 async def coder_node(
