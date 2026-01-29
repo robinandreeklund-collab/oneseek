@@ -56,6 +56,7 @@ export default function Chat({
         chatId={chatId}
         setChatId={setChatId}
         messages={messages}
+        variant={messages.length === 0 ? "center" : "bottom"}
       />
 
       <ChatList
@@ -72,6 +73,7 @@ export default function Chat({
         handleSubmit={handleSubmit}
         isLoading={isLoading}
         stop={stop}
+        variant={messages.length === 0 ? "center" : "bottom"}
       />
     </div>
   );

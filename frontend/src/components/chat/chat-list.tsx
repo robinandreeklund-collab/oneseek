@@ -14,6 +14,8 @@ import { Source, SourcesSidebar } from "./sources-sidebar";
 import { ToolActionDetailSidebar } from "./tool-action-detail-sidebar";
 import { ToolAction, MessageToolActions } from "@/types/tool-action";
 
+const ONESEEK_LOGO_SRC = "/oneseek-logo.svg";
+
 interface ChatListProps {
   messages: Message[];
   isLoading: boolean;
@@ -111,17 +113,18 @@ export default function ChatList({ messages, isLoading, messageSources, messageT
 
   if (messages.length === 0) {
     return (
-      <div className="w-full h-full flex justify-center items-center">
-        <div className="flex flex-col gap-4 items-center">
+      <div className="w-full h-full flex justify-center items-center px-4">
+        <div className="flex flex-col gap-4 items-center max-w-2xl">
           <Image
-            src={OllamaLogo}
-            alt="AI"
-            width={60}
-            height={60}
-            className="h-20 w-14 object-contain dark:invert"
+            src={ONESEEK_LOGO_SRC}
+            alt="OneSeek"
+            width={200}
+            height={200}
+            className="h-40 w-40 object-contain"
+            priority
           />
           <p className="text-center text-xl text-muted-foreground">
-            How can I help you today?
+            Hur kan OneSeek hjälpa dig idag?
           </p>
         </div>
       </div>

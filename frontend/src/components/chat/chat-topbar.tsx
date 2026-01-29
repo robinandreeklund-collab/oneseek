@@ -31,6 +31,7 @@ interface ChatTopbarProps {
   chatId?: string;
   setChatId: React.Dispatch<React.SetStateAction<string>>;
   messages: Message[];
+  variant?: "center" | "bottom";
 }
 
 export default function ChatTopbar({
@@ -40,6 +41,7 @@ export default function ChatTopbar({
   chatId,
   setChatId,
   messages,
+  variant,
 }: ChatTopbarProps) {
   const hasMounted = useHasMounted();
 
