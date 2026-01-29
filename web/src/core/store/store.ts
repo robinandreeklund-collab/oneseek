@@ -58,6 +58,10 @@ export const useStore = create<{
   coderActivityIds: Map<string, string[]>;
   ongoingCoderSessionId: string | null;
   openCoderSessionId: string | null;
+  debateSessionIds: string[];
+  debateActivityIds: Map<string, string[]>;
+  ongoingDebateSessionId: string | null;
+  openDebateSessionId: string | null;
 
   appendMessage: (message: Message) => void;
   updateMessage: (message: Message) => void;
@@ -69,6 +73,9 @@ export const useStore = create<{
   openCoder: (sessionId: string | null) => void;
   closeCoder: () => void;
   setOngoingCoderSession: (sessionId: string | null) => void;
+  openDebate: (sessionId: string | null) => void;
+  closeDebate: () => void;
+  setOngoingDebateSession: (sessionId: string | null) => void;
 }>((set) => ({
   responding: false,
   threadId: THREAD_ID,
@@ -86,6 +93,10 @@ export const useStore = create<{
   coderActivityIds: new Map<string, string[]>(),
   ongoingCoderSessionId: null,
   openCoderSessionId: null,
+  debateSessionIds: [],
+  debateActivityIds: new Map<string, string[]>(),
+  ongoingDebateSessionId: null,
+  openDebateSessionId: null,
 
   appendMessage(message: Message) {
     set((state) => {
@@ -133,6 +144,15 @@ export const useStore = create<{
   },
   setOngoingCoderSession(sessionId: string | null) {
     set({ ongoingCoderSessionId: sessionId });
+  },
+  openDebate(sessionId: string | null) {
+    set({ openDebateSessionId: sessionId });
+  },
+  closeDebate() {
+    set({ openDebateSessionId: null });
+  },
+  setOngoingDebateSession(sessionId: string | null) {
+    set({ ongoingDebateSessionId: sessionId });
   },
 }));
 
@@ -330,6 +350,13 @@ function appendMessage(message: Message) {
       openCoder(id);
     }
     appendCoderActivity(message);
+  } else if (message.agent === "debate_orchestrator") {
+    if (!getOngoingDebateSessionId()) {
+      const id = message.id;
+      appendDebateSession(id);
+      openDebate(id);
+    }
+    appendDebateActivity(message);
   }
   useStore.getState().appendMessage(message);
 }
@@ -349,6 +376,13 @@ function updateMessage(message: Message) {
   ) {
     useStore.getState().setOngoingCoderSession(null);
   }
+  if (
+    getOngoingDebateSessionId() &&
+    message.agent === "debate_orchestrator" &&
+    !message.isStreaming
+  ) {
+    useStore.getState().setOngoingDebateSession(null);
+  }
   useStore.getState().updateMessage(message);
 }
 
@@ -358,6 +392,10 @@ function getOngoingResearchId() {
 
 function getOngoingCoderSessionId() {
   return useStore.getState().ongoingCoderSessionId;
+}
+
+function getOngoingDebateSessionId() {
+  return useStore.getState().ongoingDebateSessionId;
 }
 
 function appendCoderSession(sessionId: string) {
@@ -383,6 +421,32 @@ function appendCoderActivity(message: Message) {
           ...current,
           message.id,
         ]),
+      });
+    }
+  }
+}
+
+function appendDebateSession(sessionId: string) {
+  const messageIds = [sessionId];
+  useStore.setState({
+    ongoingDebateSessionId: sessionId,
+    debateSessionIds: [...useStore.getState().debateSessionIds, sessionId],
+    debateActivityIds: new Map(useStore.getState().debateActivityIds).set(
+      sessionId,
+      messageIds,
+    ),
+  });
+}
+
+function appendDebateActivity(message: Message) {
+  const sessionId = getOngoingDebateSessionId();
+  if (sessionId) {
+    const debateActivityIds = useStore.getState().debateActivityIds;
+    const current = debateActivityIds.get(sessionId);
+    if (current && !current.includes(message.id)) {
+      const updated = [...current, message.id];
+      useStore.setState({
+        debateActivityIds: new Map(debateActivityIds).set(sessionId, updated),
       });
     }
   }
@@ -465,6 +529,14 @@ export function openCoder(sessionId: string | null) {
 
 export function closeCoder() {
   useStore.getState().closeCoder();
+}
+
+export function openDebate(sessionId: string | null) {
+  useStore.getState().openDebate(sessionId);
+}
+
+export function closeDebate() {
+  useStore.getState().closeDebate();
 }
 
 export async function listenToPodcast(researchId: string) {
@@ -572,9 +644,10 @@ export function useRenderableMessageIds() {
         const isPodcast = message.agent === "podcast";
         const isStartOfResearch = state.researchIds.includes(messageId);
         const isStartOfCoderSession = state.coderSessionIds.includes(messageId);
+        const isStartOfDebateSession = state.debateSessionIds.includes(messageId);
 
-        // Planner, podcast, research cards, and coder cards always render (they have their own content)
-        let isRenderable = isPlanner || isPodcast || isStartOfResearch || isStartOfCoderSession;
+        // Planner, podcast, research cards, coder cards, and debate cards always render (they have their own content)
+        let isRenderable = isPlanner || isPodcast || isStartOfResearch || isStartOfCoderSession || isStartOfDebateSession;
 
         // For user and coordinator messages, only include if they have content
         // This prevents empty dividers from appearing in the UI
