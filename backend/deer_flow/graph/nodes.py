@@ -2716,12 +2716,12 @@ async def proponent_node(
     )
     
     # Execute agent
-    agent_messages = await agent.ainvoke(state, config)
+    result = await agent.ainvoke(state, config)
     
-    # Extract response
+    # Extract response - agent returns dict with "messages" key
     response_content = ""
-    if agent_messages and len(agent_messages) > 0:
-        last_msg = agent_messages[-1]
+    if result and "messages" in result and len(result["messages"]) > 0:
+        last_msg = result["messages"][-1]
         if hasattr(last_msg, 'content'):
             response_content = last_msg.content
     
@@ -2730,7 +2730,7 @@ async def proponent_node(
     return Command(
         update={
             **preserve_state_meta_fields(state),
-            "messages": agent_messages,
+            "messages": result.get("messages", []),
             "proponent_response": response_content,
         },
         goto="debate_orchestrator"
@@ -2765,12 +2765,12 @@ async def opponent_node(
     )
     
     # Execute agent
-    agent_messages = await agent.ainvoke(state, config)
+    result = await agent.ainvoke(state, config)
     
-    # Extract response
+    # Extract response - agent returns dict with "messages" key
     response_content = ""
-    if agent_messages and len(agent_messages) > 0:
-        last_msg = agent_messages[-1]
+    if result and "messages" in result and len(result["messages"]) > 0:
+        last_msg = result["messages"][-1]
         if hasattr(last_msg, 'content'):
             response_content = last_msg.content
     
@@ -2779,7 +2779,7 @@ async def opponent_node(
     return Command(
         update={
             **preserve_state_meta_fields(state),
-            "messages": agent_messages,
+            "messages": result.get("messages", []),
             "opponent_response": response_content,
         },
         goto="debate_orchestrator"
@@ -2814,12 +2814,12 @@ async def fact_checker_node(
     )
     
     # Execute agent
-    agent_messages = await agent.ainvoke(state, config)
+    result = await agent.ainvoke(state, config)
     
-    # Extract response
+    # Extract response - agent returns dict with "messages" key
     response_content = ""
-    if agent_messages and len(agent_messages) > 0:
-        last_msg = agent_messages[-1]
+    if result and "messages" in result and len(result["messages"]) > 0:
+        last_msg = result["messages"][-1]
         if hasattr(last_msg, 'content'):
             response_content = last_msg.content
     
@@ -2828,7 +2828,7 @@ async def fact_checker_node(
     return Command(
         update={
             **preserve_state_meta_fields(state),
-            "messages": agent_messages,
+            "messages": result.get("messages", []),
             "fact_checker_response": response_content,
         },
         goto="debate_orchestrator"
@@ -2863,12 +2863,12 @@ async def synthesizer_node(
     )
     
     # Execute agent
-    agent_messages = await agent.ainvoke(state, config)
+    result = await agent.ainvoke(state, config)
     
-    # Extract response
+    # Extract response - agent returns dict with "messages" key
     response_content = ""
-    if agent_messages and len(agent_messages) > 0:
-        last_msg = agent_messages[-1]
+    if result and "messages" in result and len(result["messages"]) > 0:
+        last_msg = result["messages"][-1]
         if hasattr(last_msg, 'content'):
             response_content = last_msg.content
     
@@ -2877,7 +2877,7 @@ async def synthesizer_node(
     return Command(
         update={
             **preserve_state_meta_fields(state),
-            "messages": agent_messages,
+            "messages": result.get("messages", []),
             "synthesizer_response": response_content,
         },
         goto="moderator"
