@@ -46,6 +46,7 @@ class State(MessagesState):
 
     # Workflow control
     goto: str = "planner"  # Default next node
+    coder_just_completed: bool = False  # Flag to indicate coder node just completed (for human feedback)
     
     # AI Comparison / Debate OS mode
     enable_ai_comparison: bool = False  # Enable AI comparison mode
