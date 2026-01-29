@@ -9,18 +9,21 @@ import { useStore } from "~/core/store";
 import { cn } from "~/lib/utils";
 
 import { CoderSidebar } from "./components/coder-sidebar";
+import { DebateSidebar } from "./components/debate-sidebar";
 import { MessagesBlock } from "./components/messages-block";
 import { ResearchBlock } from "./components/research-block";
 
 export default function Main() {
   const openResearchId = useStore((state) => state.openResearchId);
   const openCoderSessionId = useStore((state) => state.openCoderSessionId);
+  const openDebateSessionId = useStore((state) => state.openDebateSessionId);
   const doubleColumnMode = useMemo(
-    () => openResearchId !== null || openCoderSessionId !== null,
-    [openResearchId, openCoderSessionId],
+    () => openResearchId !== null || openCoderSessionId !== null || openDebateSessionId !== null,
+    [openResearchId, openCoderSessionId, openDebateSessionId],
   );
   const showResearch = openResearchId !== null;
   const showCoder = openCoderSessionId !== null;
+  const showDebate = openDebateSessionId !== null;
   
   return (
     <div
@@ -46,6 +49,12 @@ export default function Main() {
         <CoderSidebar
           className="w-[min(max(calc((100vw-538px)*0.75),575px),960px)] pb-4 transition-all duration-300 ease-out"
           sessionId={openCoderSessionId}
+        />
+      )}
+      {showDebate && (
+        <DebateSidebar
+          className="w-[min(max(calc((100vw-538px)*0.75),575px),960px)] pb-4 transition-all duration-300 ease-out"
+          sessionId={openDebateSessionId}
         />
       )}
     </div>

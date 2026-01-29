@@ -237,6 +237,18 @@
       "playPause": "Spela / Pausa",
       "moveToNext": "Gå till nästa steg",
       "toggleFullscreen": "Växla fullskärm"
+    },
+    "debate": {
+      "debateSession": "Debattsession",
+      "runningDebate": "Debatt pågår...",
+      "debateComplete": "Debatt slutförd",
+      "open": "Öppna",
+      "close": "Stäng",
+      "activities": "Aktiviteter",
+      "rounds": "Rundor",
+      "voting": "Omröstning",
+      "roundsComingSoon": "Rundor vy kommer snart",
+      "votingComingSoon": "Omröstningsresultat kommer snart"
     }
   },
   "landing": {

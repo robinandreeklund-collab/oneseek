@@ -52,6 +52,7 @@ import { parseJSON } from "~/core/utils";
 import { cn } from "~/lib/utils";
 
 import { CoderCard } from "./coder-card";
+import { DebateCard } from "./debate-card";
 
 export function MessageListView({
   className,
@@ -142,12 +143,16 @@ function MessageListItem({
   const message = useMessage(messageId);
   const researchIds = useStore((state) => state.researchIds);
   const coderSessionIds = useStore((state) => state.coderSessionIds);
+  const debateSessionIds = useStore((state) => state.debateSessionIds);
   const startOfResearch = useMemo(() => {
     return researchIds.includes(messageId);
   }, [researchIds, messageId]);
   const startOfCoderSession = useMemo(() => {
     return coderSessionIds.includes(messageId);
   }, [coderSessionIds, messageId]);
+  const startOfDebateSession = useMemo(() => {
+    return debateSessionIds.includes(messageId);
+  }, [debateSessionIds, messageId]);
   if (message) {
     if (
       message.role === "user" ||
@@ -155,7 +160,8 @@ function MessageListItem({
       isPlannerAgent(message.agent) ||
       message.agent === "podcast" ||
       startOfResearch ||
-      startOfCoderSession
+      startOfCoderSession ||
+      startOfDebateSession
     ) {
       let content: React.ReactNode;
       if (isPlannerAgent(message.agent)) {
@@ -191,6 +197,15 @@ function MessageListItem({
             <CoderCard
               sessionId={message.id}
               onToggleCoder={onToggleSidebar}
+            />
+          </div>
+        );
+      } else if (startOfDebateSession) {
+        content = (
+          <div className="w-full px-4">
+            <DebateCard
+              sessionId={message.id}
+              onToggleDebate={onToggleSidebar}
             />
           </div>
         );
