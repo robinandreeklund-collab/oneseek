@@ -1,0 +1,14 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">OneSeek Logo</title>
+  <desc id="desc">Abstract circular logo with gradient background and stylized OS initials</desc>
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#111827"/>
+      <stop offset="50%" stop-color="#1f2937"/>
+      <stop offset="100%" stop-color="#0ea5e9"/>
+    </linearGradient>
+  </defs>
+  <circle cx="100" cy="100" r="92" fill="url(#grad)" />
+  <path d="M70 70c0-16 14-30 30-30s30 14 30 30-14 30-30 30-30 14-30 30 14 30 30 30 30-14 30-30" stroke="#38bdf8" stroke-width="10" fill="none" stroke-linecap="round" />
+  <text x="100" y="108" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-weight="700" font-size="42" fill="#e5e7eb">OS</text>
+</svg>

@@ -3,6 +3,7 @@
 
 import { motion } from "framer-motion";
 import { FastForward, Play } from "lucide-react";
+import Image from "next/image";
 import { useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -89,6 +90,8 @@ export function MessagesBlock({ className }: { className?: string }) {
     setFastForwarding(!fastForwarding);
     fastForwardReplay(!fastForwarding);
   }, [fastForwarding]);
+
+  const heroPills = ["DeepSearch", "Skapa bild", "Senaste nytt", "Röstanalys"];
   
   // Handle initial query parameter from landing page
   useEffect(() => {
@@ -102,26 +105,67 @@ export function MessagesBlock({ className }: { className?: string }) {
   return (
     <div className={cn("flex h-full flex-col", className)}>
       {responding || messageCount !== 0 || isReplay ? (
-        <MessageListView
-          className="flex flex-grow"
-          onFeedback={handleFeedback}
-          onSendMessage={handleSend}
-        />
-      ) : (
-        <ConversationStarter />
-      )}
-      {!isReplay ? (
-        <div className="relative flex shrink-0 pb-4">
-          <InputBox
-            className="w-full"
-            responding={responding}
-            feedback={feedback}
-            onSend={handleSend}
-            onCancel={handleCancel}
-            onRemoveFeedback={handleRemoveFeedback}
+        <>
+          <MessageListView
+            className="flex flex-grow"
+            onFeedback={handleFeedback}
+            onSendMessage={handleSend}
           />
-        </div>
+          {!isReplay && (
+            <div className="relative flex shrink-0 pb-4">
+              <InputBox
+                className="w-full"
+                responding={responding}
+                feedback={feedback}
+                onSend={handleSend}
+                onCancel={handleCancel}
+                onRemoveFeedback={handleRemoveFeedback}
+              />
+            </div>
+          )}
+        </>
       ) : (
+        <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-10">
+          <div className="flex flex-col items-center gap-3">
+            <Image
+              src="/oneseek-logo.svg"
+              alt="OneSeek"
+              width={72}
+              height={72}
+              className="h-18 w-18 object-contain"
+              priority
+            />
+            <h3 className="text-center text-2xl font-semibold">OneSeek</h3>
+            <p className="text-muted-foreground text-center text-base">
+              Vad vill du att OneSeek ska veta?
+            </p>
+          </div>
+          <div className="w-full max-w-3xl">
+            <InputBox
+              className="w-full shadow-2xl"
+              responding={responding}
+              feedback={feedback}
+              onSend={handleSend}
+              onCancel={handleCancel}
+              onRemoveFeedback={handleRemoveFeedback}
+            />
+            <div className="mt-3 flex flex-wrap justify-center gap-2 text-sm text-muted-foreground">
+              {heroPills.map((pill) => (
+                <Button
+                  key={pill}
+                  type="button"
+                  variant="outline"
+                  className="rounded-full border-border/70 bg-background/60 px-3 py-1 text-xs hover:bg-background"
+                  onClick={() => handleSend(pill)}
+                >
+                  {pill}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {isReplay && (
         <>
           <div
             className={cn(
