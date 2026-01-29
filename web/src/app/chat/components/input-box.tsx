@@ -203,8 +203,48 @@ export function InputBox({
           onChange={setCurrentPrompt}
         />
       </div>
-      <div className="flex items-center px-4 py-2">
-        <div className="flex grow gap-2">
+      <div className="flex flex-col gap-2 px-4 pb-3 pt-2">
+        <div className="flex items-center justify-end">
+          <div className="flex shrink-0 items-center gap-2">
+            <Tooltip title={t("enhancePrompt")}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  "hover:bg-accent h-10 w-10",
+                  isEnhancing && "animate-pulse",
+                )}
+                onClick={handleEnhancePrompt}
+                disabled={isEnhancing || currentPrompt.trim() === ""}
+              >
+                {isEnhancing ? (
+                  <div className="flex h-10 w-10 items-center justify-center">
+                    <div className="bg-foreground h-3 w-3 animate-bounce rounded-full opacity-70" />
+                  </div>
+                ) : (
+                  <MagicWandIcon className="text-brand" />
+                )}
+              </Button>
+            </Tooltip>
+            <Tooltip title={responding ? tCommon("stop") : tCommon("send")}>
+              <Button
+                variant="outline"
+                size="icon"
+                className={cn("h-10 w-10 rounded-full")}
+                onClick={() => inputRef.current?.submit()}
+              >
+                {responding ? (
+                  <div className="flex h-10 w-10 items-center justify-center">
+                    <div className="bg-foreground h-4 w-4 rounded-sm opacity-70" />
+                  </div>
+                ) : (
+                  <ArrowUp />
+                )}
+              </Button>
+            </Tooltip>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           <ModesDropUp />
           <TrendingQuestionsDropUp
             onSelectQuestion={(question) => {
@@ -215,44 +255,6 @@ export function InputBox({
             }}
           />
           <ReportStyleDialog />
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <Tooltip title={t("enhancePrompt")}>
-            <Button
-              variant="ghost"
-              size="icon"
-              className={cn(
-                "hover:bg-accent h-10 w-10",
-                isEnhancing && "animate-pulse",
-              )}
-              onClick={handleEnhancePrompt}
-              disabled={isEnhancing || currentPrompt.trim() === ""}
-            >
-              {isEnhancing ? (
-                <div className="flex h-10 w-10 items-center justify-center">
-                  <div className="bg-foreground h-3 w-3 animate-bounce rounded-full opacity-70" />
-                </div>
-              ) : (
-                <MagicWandIcon className="text-brand" />
-              )}
-            </Button>
-          </Tooltip>
-          <Tooltip title={responding ? tCommon("stop") : tCommon("send")}>
-            <Button
-              variant="outline"
-              size="icon"
-              className={cn("h-10 w-10 rounded-full")}
-              onClick={() => inputRef.current?.submit()}
-            >
-              {responding ? (
-                <div className="flex h-10 w-10 items-center justify-center">
-                  <div className="bg-foreground h-4 w-4 rounded-sm opacity-70" />
-                </div>
-              ) : (
-                <ArrowUp />
-              )}
-            </Button>
-          </Tooltip>
         </div>
       </div>
       {isEnhancing && (

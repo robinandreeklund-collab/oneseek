@@ -109,25 +109,6 @@ export default function ChatList({ messages, isLoading, messageSources, messageT
     scrollToBottom();
   }, [messages, isLoading]);
 
-  if (messages.length === 0) {
-    return (
-      <div className="w-full h-full flex justify-center items-center">
-        <div className="flex flex-col gap-4 items-center">
-          <Image
-            src={OllamaLogo}
-            alt="AI"
-            width={60}
-            height={60}
-            className="h-20 w-14 object-contain dark:invert"
-          />
-          <p className="text-center text-xl text-muted-foreground">
-            How can I help you today?
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div
       id="scroller"

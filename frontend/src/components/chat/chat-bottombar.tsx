@@ -12,6 +12,7 @@ import { getTokenLimit } from "@/lib/token-counter";
 import { Button } from "../ui/button";
 
 interface ChatBottombarProps {
+  variant?: "center" | "bottom";
   selectedModel: string | undefined;
   input: string;
   handleInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
@@ -30,6 +31,7 @@ export default function ChatBottombar({
   handleSubmit,
   isLoading,
   stop,
+  variant = "bottom",
 }: ChatBottombarProps) {
   const hasMounted = useHasMounted();
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
@@ -52,9 +54,14 @@ export default function ChatBottombar({
     [input]
   );
 
+  const containerClasses =
+    variant === "center"
+      ? "flex flex-row gap-3 w-full mx-auto max-w-3xl"
+      : "stretch flex flex-row gap-3 last:mb-2 md:last:mb-6 mx-2 md:mx-4 md:mx-auto md:max-w-2xl xl:max-w-3xl";
+
   return (
-    <div>
-      <div className="stretch flex flex-row gap-3 last:mb-2 md:last:mb-6 mx-2 md:mx-4 md:mx-auto md:max-w-2xl xl:max-w-3xl">
+    <div className={variant === "center" ? "w-full" : undefined}>
+      <div className={containerClasses}>
         {/* <div className="p-2 pb-1 flex justify-between w-full items-center "> */}
         <div key="input" className="w-full relative mb-1 items-center">
           <form
