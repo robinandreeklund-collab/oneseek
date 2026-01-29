@@ -525,7 +525,7 @@ def _process_initial_messages(message, thread_id):
     )
 
 
-async def _process_message_chunk(message_chunk, message_metadata, thread_id, agent):
+async def _process_message_chunk(message_chunk, message_metadata, thread_id, agent, tool_tracker=None):
     """Process a single message chunk and yield appropriate events."""
 
     agent_name = _get_agent_name(agent, message_metadata)
@@ -549,6 +549,10 @@ async def _process_message_chunk(message_chunk, message_metadata, thread_id, age
         if tool_call_id:
             safe_tool_id = sanitize_log_input(tool_call_id, max_length=100)
             logger.debug(f"[{safe_thread_id}] ToolMessage with tool_call_id: {safe_tool_id}")
+            
+            # Track tool result for sidebar
+            if tool_tracker:
+                tool_tracker.add_tool_result(tool_call_id, message_chunk.content)
         else:
             logger.warning(f"[{safe_thread_id}] ToolMessage received without tool_call_id")
         
@@ -563,6 +567,16 @@ async def _process_message_chunk(message_chunk, message_metadata, thread_id, age
         if message_chunk.tool_calls:
             event_stream_message["tool_calls"] = message_chunk.tool_calls
             event_stream_message["tool_call_chunks"] = []
+            
+            # Track tool calls for sidebar
+            if tool_tracker:
+                for tc in message_chunk.tool_calls:
+                    tool_tracker.add_tool_call(
+                        tc.get("id", ""),
+                        tc.get("name", "unknown"),
+                        tc.get("args", {})
+                    )
+            
             logger.debug(
                 f"[{safe_thread_id}] AIMessage has tool_calls, yielding tool_calls event"
             )
@@ -580,6 +594,15 @@ async def _process_message_chunk(message_chunk, message_metadata, thread_id, age
             safe_tool_names = [sanitize_tool_name(tc.get('name', 'unknown')) for tc in message_chunk.tool_calls]
             logger.debug(f"[{safe_thread_id}] AIMessageChunk has complete tool_calls: {safe_tool_names}")
             event_stream_message["tool_calls"] = message_chunk.tool_calls
+            
+            # Track tool calls for sidebar
+            if tool_tracker:
+                for tc in message_chunk.tool_calls:
+                    tool_tracker.add_tool_call(
+                        tc.get("id", ""),
+                        tc.get("name", "unknown"),
+                        tc.get("args", {})
+                    )
             
             # Process tool_call_chunks with proper index-based grouping
             processed_chunks = _process_tool_call_chunks(
@@ -687,6 +710,49 @@ def extract_citations_from_event(event: Any, safe_thread_id: str = "unknown") ->
     return citations
 
 
+class ToolActionTracker:
+    """Tracks tool calls and results to emit tool_actions in frontend format."""
+    
+    def __init__(self, thread_id: str):
+        self.thread_id = thread_id
+        self.tool_calls = {}  # tool_call_id -> {tool_name, tool_input, timestamp}
+        self.tool_actions = []  # List of completed tool actions
+        self.pending_calls = set()  # Set of tool_call_ids waiting for results
+        
+    def add_tool_call(self, tool_call_id: str, tool_name: str, tool_input: Any):
+        """Record a new tool call."""
+        if tool_call_id not in self.tool_calls:
+            self.tool_calls[tool_call_id] = {
+                "tool_call_id": tool_call_id,
+                "tool_name": tool_name,
+                "tool_input": json.dumps(tool_input) if isinstance(tool_input, dict) else str(tool_input),
+                "tool_output": None,
+                "status": "running"
+            }
+            self.pending_calls.add(tool_call_id)
+            logger.debug(f"[{self.thread_id}] ToolActionTracker: Added tool call {tool_call_id} ({tool_name})")
+    
+    def add_tool_result(self, tool_call_id: str, tool_output: Any):
+        """Record the result for a tool call."""
+        if tool_call_id in self.tool_calls:
+            self.tool_calls[tool_call_id]["tool_output"] = str(tool_output) if tool_output else ""
+            self.tool_calls[tool_call_id]["status"] = "complete"
+            if tool_call_id in self.pending_calls:
+                self.pending_calls.remove(tool_call_id)
+            
+            # Add to completed actions
+            self.tool_actions.append(self.tool_calls[tool_call_id])
+            logger.debug(f"[{self.thread_id}] ToolActionTracker: Completed tool call {tool_call_id}")
+            return True
+        else:
+            logger.warning(f"[{self.thread_id}] ToolActionTracker: Received result for unknown tool_call_id: {tool_call_id}")
+            return False
+    
+    def get_tool_actions(self) -> List[dict]:
+        """Get all tool actions in frontend format."""
+        return self.tool_actions.copy()
+
+
 async def _stream_graph_events(
     graph_instance, workflow_input, workflow_config, thread_id
 ):
@@ -696,6 +762,9 @@ async def _stream_graph_events(
     
     # Track citations collected during research
     collected_citations = []
+    
+    # Track tool actions for real-time sidebar
+    tool_tracker = ToolActionTracker(safe_thread_id)
     
     try:
         event_count = 0
@@ -761,10 +830,22 @@ async def _stream_graph_events(
                 f"step={safe_step}"
             )
 
+            prev_action_count = 0
             async for event in _process_message_chunk(
-                message_chunk, message_metadata, thread_id, agent
+                message_chunk, message_metadata, thread_id, agent, tool_tracker
             ):
                 yield event
+                
+                # After each event, check if we have new tool actions to emit
+                current_actions = tool_tracker.get_tool_actions()
+                if len(current_actions) > prev_action_count:
+                    # Emit tool_actions event for frontend (only new actions)
+                    logger.debug(f"[{safe_thread_id}] Emitting {len(current_actions)} tool_actions to frontend")
+                    yield _make_event("data", {
+                        "tool_actions": current_actions,
+                        "live_update": True
+                    })
+                    prev_action_count = len(current_actions)
         
         # After streaming completes, try to get citations
         # First check if we collected any during streaming
@@ -799,6 +880,15 @@ async def _stream_graph_events(
             })
         else:
             logger.debug(f"[{safe_thread_id}] No citations to send")
+        
+        # Send final tool_actions summary
+        final_actions = tool_tracker.get_tool_actions()
+        if final_actions:
+            logger.info(f"[{safe_thread_id}] Sending final {len(final_actions)} tool_actions to client")
+            yield _make_event("data", {
+                "tool_actions": final_actions,
+                "live_update": False
+            })
         
         logger.debug(f"[{safe_thread_id}] Graph event stream completed. Total events: {event_count}")
     except asyncio.CancelledError:
