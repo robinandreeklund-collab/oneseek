@@ -456,9 +456,9 @@ class DebateFlow:
                     )
                     
                     # Store search knowledge internally for OneSeek (NOT in self.facts - that's shared)
-                    # Instead, add to context directly below
-                    search_summary = self._summarize_search_results(search_results)
-                    logger.info(f"OneSeek built internal knowledge from web search: {search_summary[:100]}...")
+                    # CRITICAL: Aggressively limit to prevent context explosion (max ~500 chars = ~125 tokens)
+                    search_summary = self._summarize_search_results(search_results, max_chars=500)
+                    logger.info(f"OneSeek built internal knowledge from web search ({len(search_summary)} chars): {search_summary[:100]}...")
                     
                     # We'll add this to the context below
                     oneseek_internal_knowledge = search_summary
@@ -475,7 +475,18 @@ class DebateFlow:
             context = self.build_context_for_model(model_key, user_query, locale)
             
             # Add OneSeek's internal knowledge if available (Round 1 only)
+            # SAFETY: Double-check size before adding to prevent context explosion
             if oneseek_internal_knowledge and model_key == "oneseek-local":
+                # Count tokens in internal knowledge
+                knowledge_tokens = self._count_tokens(oneseek_internal_knowledge)
+                if knowledge_tokens > 200:
+                    # Still too large, truncate further
+                    logger.warning(f"Internal knowledge still large ({knowledge_tokens} tokens), truncating further")
+                    # Aggressively truncate to max 150 tokens (~600 chars)
+                    oneseek_internal_knowledge = oneseek_internal_knowledge[:600]
+                    knowledge_tokens = self._count_tokens(oneseek_internal_knowledge)
+                
+                logger.info(f"Adding internal knowledge to context ({knowledge_tokens} tokens)")
                 context += f"\n\n**Din Interna Kunskapsbyggande (endast för dig, delas EJ):**\n{oneseek_internal_knowledge}\n"
             
             token_count = self._count_tokens(context)
@@ -635,7 +646,7 @@ class DebateFlow:
                         "claim": claim,
                         "search_query": search_query[:100],
                         "results_count": len(search_results) if isinstance(search_results, list) else 1,
-                        "results_summary": self._summarize_search_results(search_results)
+                        "results_summary": self._summarize_search_results(search_results, max_chars=300)
                     }
                     
                     # Find the corresponding insight and add verification
@@ -710,26 +721,90 @@ class DebateFlow:
         
         return claims
     
-    def _summarize_search_results(self, search_results: Any) -> str:
+    def _summarize_search_results(self, search_results: Any, max_chars: int = 500) -> str:
         """
         Summarize search results into a brief verification note.
         
+        CRITICAL: Aggressively limits output size to prevent context explosion.
+        
         Args:
             search_results: Results from web search
+            max_chars: Maximum characters to return (default: 500)
             
         Returns:
-            Summary string
+            Summary string (guaranteed to be <= max_chars)
         """
         if isinstance(search_results, list):
             if len(search_results) > 0:
-                # Take first result's snippet
-                first = search_results[0]
-                if isinstance(first, dict):
-                    content = first.get('content', str(first))[:200]
-                    return f"Verifierat: {content}..."
-                return f"Hittade {len(search_results)} källor"
-            return "Inga resultat"
-        return str(search_results)[:200]
+                # Build summary from multiple results, limited to max_chars total
+                summary_parts = []
+                remaining_chars = max_chars - 50  # Reserve space for prefix
+                
+                for idx, result in enumerate(search_results[:3]):  # Max 3 results
+                    if remaining_chars <= 0:
+                        break
+                        
+                    if isinstance(result, dict):
+                        # Try to get title and content, but limit each
+                        title = result.get('title', '')[:100]
+                        content = result.get('content', '')[:200]
+                        
+                        if title and content:
+                            part = f"{idx+1}. {title}: {content}"
+                        elif title:
+                            part = f"{idx+1}. {title}"
+                        elif content:
+                            part = f"{idx+1}. {content}"
+                        else:
+                            # Fallback: take first value that's a string
+                            for v in result.values():
+                                if isinstance(v, str) and len(v) > 10:
+                                    part = f"{idx+1}. {v[:150]}"
+                                    break
+                            else:
+                                continue
+                        
+                        if len(part) > remaining_chars:
+                            part = part[:remaining_chars] + "..."
+                        
+                        summary_parts.append(part)
+                        remaining_chars -= len(part) + 2  # +2 for newline
+                
+                if summary_parts:
+                    result = "Sökresultat:\n" + "\n".join(summary_parts)
+                else:
+                    result = f"Hittade {len(search_results)} källor"
+            else:
+                result = "Inga resultat"
+        else:
+            # For non-list results, extract key info carefully
+            # NEVER convert entire object to string - too dangerous
+            if isinstance(search_results, dict):
+                # Try to extract useful fields
+                summary_text = ""
+                for key in ['answer', 'content', 'text', 'results']:
+                    if key in search_results:
+                        val = search_results[key]
+                        if isinstance(val, str):
+                            summary_text = val[:max_chars]
+                            break
+                        elif isinstance(val, list) and len(val) > 0:
+                            # Recursively summarize
+                            return self._summarize_search_results(val, max_chars)
+                
+                if summary_text:
+                    result = summary_text
+                else:
+                    result = f"Sökresultat tillgängligt ({len(search_results)} fält)"
+            else:
+                # Last resort: convert to string but with strict limit
+                result = str(search_results)[:max_chars]
+        
+        # Final safety check: ensure we never exceed max_chars
+        if len(result) > max_chars:
+            result = result[:max_chars] + "..."
+        
+        return result
     
     def _analyze_response_evolution(self, current_responses: List[Dict[str, Any]]) -> List[str]:
         """
