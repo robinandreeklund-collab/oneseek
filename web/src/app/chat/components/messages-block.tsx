@@ -111,9 +111,9 @@ export function MessagesBlock({ className }: { className?: string }) {
         <ConversationStarter onSend={handleSend} />
       )}
       {!isReplay ? (
-        <div className="relative flex h-42 shrink-0 pb-4">
+        <div className="relative flex shrink-0 pb-4">
           <InputBox
-            className="h-full w-full"
+            className="w-full"
             responding={responding}
             feedback={feedback}
             onSend={handleSend}

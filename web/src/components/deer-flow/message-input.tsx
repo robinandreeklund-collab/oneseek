@@ -23,6 +23,7 @@ import React, { forwardRef, useEffect, useMemo, useRef } from "react";
 import type { Resource } from "~/core/messages";
 import { LoadingOutlined } from "@ant-design/icons";
 import type { DeerFlowConfig } from "~/core/config";
+import { cn } from "~/lib/utils";
 
 export interface MessageInputRef {
   focus: () => void;
@@ -179,12 +180,12 @@ const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     }
 
     return (
-      <div className={className}>
+      <div className={cn("flex min-h-24 max-h-40 flex-col", className)}>
         <EditorRoot>
           <EditorContent
             immediatelyRender={false}
             extensions={extensions}
-            className="border-muted h-full w-full overflow-auto break-words"
+            className="border-muted w-full flex-1 overflow-auto break-words"
             editorProps={{
               attributes: {
                 class:

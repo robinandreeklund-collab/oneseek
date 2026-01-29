@@ -123,7 +123,7 @@ export function InputBox({
       )}
       ref={containerRef}
     >
-      <div className="w-full">
+      <div className="flex w-full flex-col">
         <AnimatePresence>
           {feedback && (
             <motion.div
@@ -192,7 +192,7 @@ export function InputBox({
         </AnimatePresence>
         <MessageInput
           className={cn(
-            "min-h-24 max-h-40 px-4 pt-5",
+            "flex-1 px-4 pt-5",
             feedback && "pt-9",
             isEnhanceAnimating && "transition-all duration-500",
           )}
