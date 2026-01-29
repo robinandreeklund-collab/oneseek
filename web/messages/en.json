@@ -19,9 +19,9 @@
     "title": "Oneseek"
   },
   "hero": {
-    "title": "Knowledge Without Fluff.",
-    "subtitle": "Insight Without Limits.",
-    "description": "Meet OneSeek, your hyperintelligent research engine from the future. It combines powerful search technology with an advanced debate and comparison mode where multiple AI models duel to give you the most robust insights. All activity is secured in a blockchain ledger and you remain completely anonymous. AI with insight, decision with responsibility — delivered as lightning-fast answers, in-depth analyses and visionary podcasts."
+    "title": "We are the world's first anonymous AI meta-search engine – gathering, comparing, and objectively evaluating answers from all major AI models.",
+    "subtitle": "",
+    "description": "Anonymous meta-search + verification + bias-analysis + model comparison"
   },
   "settings": {
     "title": "Oneseek Settings",
@@ -279,27 +279,39 @@
     },
     "coreFeatures": {
       "title": "Core Features",
-      "description": "Find out what makes Oneseek effective.",
+      "description": "The Heart of OneSeek",
       "features": [
         {
           "name": "Dive Deeper and Reach Wider",
-          "description": "Unlock deeper insights with advanced tools. Our powerful search + crawling and Python tools gathers comprehensive data, delivering in-depth reports to enhance your study."
+          "description": "Unlock deeper insights with advanced tools. Our powerful search + crawling and tools gather comprehensive data, delivering in-depth reports to enhance your answer to get closer to the truth."
         },
         {
-          "name": "Human-in-the-loop",
-          "description": "Refine your research plan, or adjust focus areas all through simple natural language."
+          "name": "OneSeek Search™ - Compare – The Heart of OneSeek",
+          "description": "Ask one question. Get answers from multiple AI models such as:\nGPT, Grok, Gemini, DeepSeek, OneSeek"
         },
         {
-          "name": "Lang Stack",
-          "description": "Build with confidence using the LangChain and LangGraph frameworks."
+          "name": "OneSeek Debate Mode™",
+          "description": "Debate Mode – Structured AI Conflict\nA real-time AI debate arena:\nMultiple AI models debate a question over 3 rounds\nRandomized speaking order (Chain-of-Agents)\nOneSeek participates as both debater and synthesizer"
         },
         {
-          "name": "MCP Integrations",
-          "description": "Supercharge your research workflow and expand your toolkit with seamless MCP integrations."
+          "name": "OneSeek Podcast Mode™",
+          "description": "Turn Any Question Into a Multi-Perspective Podcast\n-Write a topic or ask one or multiple questions\n-OneSeek generates a listen-ready podcast episode\n-Result: Not one AI voice – but a reasoned, audible consensus."
         },
         {
-          "name": "Podcast Generation",
-          "description": "Instantly generate podcasts from reports. Perfect for on-the-go learning or sharing findings effortlessly."
+          "name": "The Radical Transparency",
+          "description": "Radical Transparency by Design.\nOneSeek exposes its full reasoning process:\n-Through Chain / Reasoning Tree\n-Clickable steps from:\n-User input\n-API calls\n-Analysis\n-Final Answer\n-Raw payloads and intermediate data visible"
+        },
+        {
+          "name": "The Blockchain Verification",
+          "description": "Immutable AI History\n-All interactions are logged on a blockchain ledger:\n-Prompts\n-Model responses\n-Debate outcomes\n-Syntheses"
+        },
+        {
+          "name": "The Zero Tracking",
+          "description": "Privacy Is the Foundation\n-No user tracking\n-No IP logging \n-No personal data storage\n-No profiling\n-Fully anonymized & encrypted"
+        },
+        {
+          "name": "The Real-Time Data",
+          "description": "Always Current, Always Verifiable\nOneSeek dynamically selects relevant real-time APIs:\n-Government data\n-Climate & weather \n-Research databases\n-Statistics authorities"
         }
       ]
     },

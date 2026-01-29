@@ -17,9 +17,9 @@ export default function HomePage() {
       <SiteHeader />
       <main className="container flex flex-col items-center justify-center gap-56">
         <Jumbotron />
+        <CoreFeatureSection />
         <CaseStudySection />
         <MultiAgentSection />
-        <CoreFeatureSection />
       </main>
       <Footer />
       <Ray />

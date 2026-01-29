@@ -19,9 +19,9 @@
     "title": "Oneseek"
   },
   "hero": {
-    "title": "AI med insyn, beslut med ansvar.",
+    "title": "Vi är världens första anonyma AI-meta-sökmotor – som samlar, jämför och objektivt granskar svar från alla stora AI-modeller.",
     "subtitle": "",
-    "description": "Möt OneSeek, din hyperintelligenta forskningsmotor från framtiden. Den kombinerar kraftfull sökteknik med ett avancerat debatt‑ och jämförelseläge där flera AI‑modeller duellerar för att ge dig de mest robusta insikterna. All aktivitet säkras i en blockchain‑ledger och du förblir helt anonym. AI med insyn, beslut med ansvar — levererat som blixtsnabba svar, djupgående analyser och visionära podcasts."
+    "description": "Anonym metasökning + verifiering + bias-analys + modelljämförelse"
   },
   "settings": {
     "title": "Oneseek Inställningar",
@@ -279,27 +279,39 @@
     },
     "coreFeatures": {
       "title": "Kärnfunktioner",
-      "description": "Ta reda på vad som gör Oneseek effektiv.",
+      "description": "The Heart of OneSeek",
       "features": [
         {
           "name": "Dyk djupare och nå längre",
-          "description": "Lås upp djupare insikter med avancerade verktyg. Våra kraftfulla sök- och skrapverktyg samt Python-verktyg samlar omfattande data och levererar djupgående rapporter för att förbättra dina studier."
+          "description": "Lås upp djupare insikter med avancerade verktyg. Våra kraftfulla sök- och skrapverktyg samlar omfattande data och levererar djupgående rapporter för att förbättra ditt svar och komma närmare sanningen."
         },
         {
-          "name": "Människa-i-loopen",
-          "description": "Förfina din forskningsplan eller justera fokusområden, allt genom enkelt naturligt språk."
+          "name": "OneSeek Search™ - Jämför – The Heart of OneSeek",
+          "description": "Ställ en fråga. Få svar från flera AI-modeller såsom:\nGPT, Grok, Gemini, DeepSeek, OneSeek"
         },
         {
-          "name": "Lang Stack",
-          "description": "Bygg med förtroende med hjälp av LangChain- och LangGraph-ramverken."
+          "name": "OneSeek Debate Mode™",
+          "description": "Debattläge – Strukturerad AI-konflikt\nEn realtidsarena för AI-debatt:\nFlera AI-modeller debatterar en fråga över 3 rundor\nSlumpad talordning (Chain-of-Agents)\nOneSeek deltar som både debattör och syntetiserare"
         },
         {
-          "name": "MCP-integrationer",
-          "description": "Superladda ditt forskningsarbetsflöde och utöka din verktygslåda med sömlösa MCP-integrationer."
+          "name": "OneSeek Podcast Mode™",
+          "description": "Förvandla vilken fråga som helst till en podcast med flera perspektiv\n-Skriv ett ämne eller ställ en eller flera frågor\n-OneSeek genererar ett lyssningsklart podcast-avsnitt\n-Resultat: Inte en AI-röst – utan en resonerad, hörbar konsensus."
         },
         {
-          "name": "Podcast-generering",
-          "description": "Generera omedelbart podcasts från rapporter. Perfekt för lärande på språng eller för att enkelt dela fynd."
+          "name": "Den radikala transparensen",
+          "description": "Radikal transparens genom design.\nOneSeek exponerar sin fullständiga resoneringsprocess:\n-Genom kedja / resoneringsträd\n-Klickbara steg från:\n-Användarinput\n-API-anrop\n-Analys\n-Slutligt svar\n-Rådata och mellanliggande data synlig"
+        },
+        {
+          "name": "Blockchain-verifieringen",
+          "description": "Oföränderlig AI-historik\n-Alla interaktioner loggas på en blockchain-ledger:\n-Prompts\n-Modellsvar\n-Debattresultat\n-Synteser"
+        },
+        {
+          "name": "Noll-spårning",
+          "description": "Integritet är grunden\n-Ingen användarspårning\n-Ingen IP-loggning\n-Ingen lagring av personuppgifter\n-Ingen profilering\n-Helt anonymiserad & krypterad"
+        },
+        {
+          "name": "Realtidsdata",
+          "description": "Alltid aktuell, alltid verifierbar\nOneSeek väljer dynamiskt relevanta realtids-API:er:\n-Regeringsdata\n-Klimat & väder\n-Forskningsdatabaser\n-Statistikmyndigheter"
         }
       ]
     },
