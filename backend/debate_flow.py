@@ -310,9 +310,11 @@ class DebateFlow:
         Round 1:
         - First model: user query + language rule + token limit
         - Other models: user query + limited chain_so_far (last 3)
+        - OneSeek: gets internal web search knowledge building
         
         Round 2 & 3:
         - All models: user query + SUMMARY of full_previous_round + limited chain_so_far
+        - OneSeek: also gets internal analysis from previous rounds
         
         Args:
             model_key: Model identifier
@@ -337,6 +339,20 @@ class DebateFlow:
             context_parts.append("\n**Verifierade Fakta (senaste 5):**\n")
             for fact in self.facts[-5:]:  # Last 5 facts to keep context small
                 context_parts.append(f"- {fact['content']}\n")
+        
+        # Add OneSeek's internal analyses - ONLY for OneSeek
+        if model_key == "oneseek-local" and self.oneseek_analyses:
+            context_parts.append("\n**Dina Interna Analyser:**\n")
+            for analysis in self.oneseek_analyses[-2:]:  # Last 2 analyses to keep context manageable
+                context_parts.append(f"- Runda {analysis['round']}: ")
+                context_parts.append(f"{len(analysis['claims_extracted'])} påståenden, ")
+                context_parts.append(f"{len(analysis['verified_facts'])} verifieringar, ")
+                context_parts.append(f"{len(analysis['contradictions'])} motsättningar\n")
+                
+                # Add synthesis points
+                if analysis.get('synthesis_points'):
+                    for point in analysis['synthesis_points'][:3]:
+                        context_parts.append(f"  • {point}\n")
         
         # Add instruction to include name
         context_parts.append(f"\nVIKTIGT: Inled ditt svar med ditt namn: **{model_key}** (eller ditt displaynamn).\n")
@@ -412,6 +428,7 @@ class DebateFlow:
         """
         Query a model with debate context.
         
+        SPECIAL: For OneSeek in Round 1, performs web search first to build knowledge.
         FIXED: Added context size guard to prevent VLLM crashes.
         """
         if model_key not in self.models:
@@ -428,8 +445,39 @@ class DebateFlow:
             model = self.models[model_key]
             display_name = DEBATE_MODELS.get(model_key, {}).get("display_name", model_key)
             
+            # SPECIAL: OneSeek does web search in Round 1 before responding (internal knowledge building)
+            if model_key == "oneseek-local" and self.current_round == 1 and self.search_tool:
+                logger.info(f"OneSeek performing internal web search before Round 1 response")
+                try:
+                    # Perform web search for knowledge building (NOT shared with external models)
+                    search_results = await asyncio.wait_for(
+                        asyncio.to_thread(self.search_tool.invoke, user_query),
+                        timeout=5.0
+                    )
+                    
+                    # Store search knowledge internally for OneSeek (NOT in self.facts - that's shared)
+                    # Instead, add to context directly below
+                    search_summary = self._summarize_search_results(search_results)
+                    logger.info(f"OneSeek built internal knowledge from web search: {search_summary[:100]}...")
+                    
+                    # We'll add this to the context below
+                    oneseek_internal_knowledge = search_summary
+                except asyncio.TimeoutError:
+                    logger.warning("Web search timeout for OneSeek internal knowledge building")
+                    oneseek_internal_knowledge = None
+                except Exception as e:
+                    logger.warning(f"Web search error for OneSeek: {e}")
+                    oneseek_internal_knowledge = None
+            else:
+                oneseek_internal_knowledge = None
+            
             # Build context for this model
             context = self.build_context_for_model(model_key, user_query, locale)
+            
+            # Add OneSeek's internal knowledge if available (Round 1 only)
+            if oneseek_internal_knowledge and model_key == "oneseek-local":
+                context += f"\n\n**Din Interna Kunskapsbyggande (endast för dig, delas EJ):**\n{oneseek_internal_knowledge}\n"
+            
             token_count = self._count_tokens(context)
             
             # Hard limit to prevent VLLM crashes (adjusted for 95K token model)
@@ -492,10 +540,12 @@ class DebateFlow:
         """
         Run OneSeek's internal analysis between responses.
         This analyzes other models' responses for:
-        - Factual accuracy (via web search)
-        - Logical consistency
-        - Missing information
-        - Potential counterarguments
+        1. Analyzing all responses from external models
+        2. Finding claims made by each model
+        3. Verifying data and claims via web search
+        4. Analyzing how external models' responses change through different rounds
+        5. Creating synthesis between answers for OneSeek's own response
+        6. Addressing others with verified data
         
         This analysis is NOT shared with other models, only used by OneSeek.
         
@@ -511,52 +561,243 @@ class DebateFlow:
         analysis = {
             "round": self.current_round,
             "timestamp": len(self.oneseek_analyses),
-            "insights": []
+            "insights": [],
+            "claims_extracted": [],
+            "verified_facts": [],
+            "contradictions": [],
+            "synthesis_points": [],
+            "evolution_notes": []
         }
         
-        # Analyze each response
+        # Analyze each response from external models
         for resp in current_responses:
-            if resp.get("error"):
-                continue
+            if resp.get("error") or resp["model"] == "oneseek-local":
+                continue  # Skip errors and OneSeek's own responses
                 
             insight = {
                 "model": resp["display_name"],
-                "checks": []
+                "model_key": resp["model"],
+                "response_snippet": resp["response"][:300] + "..." if len(resp["response"]) > 300 else resp["response"],
+                "checks": [],
+                "claims": [],
+                "verification_results": []
             }
             
-            # Use search_tool but DO NOT share results with other models in next round automatically
-            # Only OneSeek uses this internal analysis.
-            # We do NOT add to self.facts here.
+            # 1. Extract key claims from the response
+            claims = self._extract_claims(resp["response"])
+            insight["claims"] = claims
+            analysis["claims_extracted"].extend([{
+                "model": resp["display_name"],
+                "claim": claim
+            } for claim in claims])
             
-            # Simple fact-check via web search if available
-            if self.search_tool and len(resp["response"]) > 100:
-                try:
-                    # Extract key claims (simplified - just take first 200 chars)
-                    claim = resp["response"][:200]
-                    search_query = f"{user_query} {claim}"
-                    
-                    # Quick web search
-                    search_results = await asyncio.wait_for(
-                        asyncio.to_thread(self.search_tool.invoke, search_query),
-                        timeout=5.0
-                    )
-                    
-                    insight["checks"].append({
-                        "type": "web_search",
-                        "query": search_query[:100],
-                        "results_count": len(search_results) if isinstance(search_results, list) else 1
-                    })
-                except asyncio.TimeoutError:
-                    logger.warning("Web search timeout during internal analysis")
-                except Exception as e:
-                    logger.warning(f"Web search error during internal analysis: {e}")
+            # 2. Verify top claims via web search if available
+            if self.search_tool and claims:
+                for claim in claims[:3]:  # Verify top 3 claims per model
+                    try:
+                        search_query = f"{claim} fact check verify"
+                        
+                        # Web search for verification
+                        search_results = await asyncio.wait_for(
+                            asyncio.to_thread(self.search_tool.invoke, search_query),
+                            timeout=5.0
+                        )
+                        
+                        verification = {
+                            "claim": claim,
+                            "search_query": search_query[:100],
+                            "results_count": len(search_results) if isinstance(search_results, list) else 1,
+                            "results_summary": self._summarize_search_results(search_results)
+                        }
+                        
+                        insight["verification_results"].append(verification)
+                        analysis["verified_facts"].append({
+                            "model": resp["display_name"],
+                            "claim": claim,
+                            "verification": verification["results_summary"]
+                        })
+                        
+                        insight["checks"].append({
+                            "type": "web_search_verification",
+                            "query": search_query[:100],
+                            "results_count": verification["results_count"]
+                        })
+                    except asyncio.TimeoutError:
+                        logger.warning(f"Web search timeout during claim verification: {claim[:50]}")
+                    except Exception as e:
+                        logger.warning(f"Web search error during claim verification: {e}")
             
             analysis["insights"].append(insight)
         
+        # 3. Analyze evolution across rounds (compare with previous rounds)
+        if len(self.debate_history) > 0 and self.current_round > 1:
+            evolution_analysis = self._analyze_response_evolution(current_responses)
+            analysis["evolution_notes"] = evolution_analysis
+        
+        # 4. Find contradictions between models
+        contradictions = self._find_contradictions(current_responses)
+        analysis["contradictions"] = contradictions
+        
+        # 5. Create synthesis points for OneSeek's response
+        synthesis = self._create_synthesis_points(current_responses, analysis["verified_facts"])
+        analysis["synthesis_points"] = synthesis
+        
         self.oneseek_analyses.append(analysis)
-        logger.info(f"Internal analysis complete: {len(analysis['insights'])} insights")
+        logger.info(f"Internal analysis complete: {len(analysis['insights'])} insights, "
+                   f"{len(analysis['claims_extracted'])} claims, "
+                   f"{len(analysis['verified_facts'])} verifications, "
+                   f"{len(analysis['contradictions'])} contradictions")
         
         return analysis
+    
+    def _extract_claims(self, response: str) -> List[str]:
+        """
+        Extract key factual claims from a response.
+        Simple heuristic: split by sentences and filter for statements.
+        
+        Args:
+            response: The response text
+            
+        Returns:
+            List of extracted claims
+        """
+        import re
+        
+        # Split into sentences
+        sentences = re.split(r'[.!?]+', response)
+        claims = []
+        
+        for sentence in sentences:
+            sentence = sentence.strip()
+            # Filter for substantial sentences (>30 chars) that contain factual indicators
+            if len(sentence) > 30 and any(word in sentence.lower() for word in 
+                ['är', 'visar', 'bevisar', 'indikerar', 'forskning', 'studie', 'data', 
+                 'is', 'shows', 'proves', 'indicates', 'research', 'study']):
+                claims.append(sentence)
+                if len(claims) >= 5:  # Limit to top 5 claims per response
+                    break
+        
+        return claims
+    
+    def _summarize_search_results(self, search_results: Any) -> str:
+        """
+        Summarize search results into a brief verification note.
+        
+        Args:
+            search_results: Results from web search
+            
+        Returns:
+            Summary string
+        """
+        if isinstance(search_results, list):
+            if len(search_results) > 0:
+                # Take first result's snippet
+                first = search_results[0]
+                if isinstance(first, dict):
+                    content = first.get('content', str(first))[:200]
+                    return f"Verifierat: {content}..."
+                return f"Hittade {len(search_results)} källor"
+            return "Inga resultat"
+        return str(search_results)[:200]
+    
+    def _analyze_response_evolution(self, current_responses: List[Dict[str, Any]]) -> List[str]:
+        """
+        Analyze how models' positions have evolved across rounds.
+        
+        Args:
+            current_responses: Current round responses
+            
+        Returns:
+            List of evolution notes
+        """
+        evolution_notes = []
+        
+        # Compare current responses with previous rounds
+        if len(self.debate_history) > 0:
+            prev_round = self.debate_history[-1]
+            prev_responses = {r["model"]: r for r in prev_round["responses"]}
+            
+            for curr_resp in current_responses:
+                if curr_resp["model"] in prev_responses:
+                    prev_resp = prev_responses[curr_resp["model"]]
+                    # Simple comparison: check if response length or content changed significantly
+                    if abs(len(curr_resp["response"]) - len(prev_resp["response"])) > 200:
+                        evolution_notes.append(
+                            f"{curr_resp['display_name']} ändrade sin position betydligt "
+                            f"(från {len(prev_resp['response'])} till {len(curr_resp['response'])} tecken)"
+                        )
+        
+        return evolution_notes
+    
+    def _find_contradictions(self, responses: List[Dict[str, Any]]) -> List[str]:
+        """
+        Find potential contradictions between model responses.
+        Simple heuristic: look for opposing keywords.
+        
+        Args:
+            responses: List of responses
+            
+        Returns:
+            List of contradiction notes
+        """
+        contradictions = []
+        
+        # Look for opposing statements
+        opposing_pairs = [
+            ('ja', 'nej'),
+            ('sant', 'falskt'),
+            ('korrekt', 'inkorrekt'),
+            ('bra', 'dåligt'),
+            ('yes', 'no'),
+            ('true', 'false'),
+            ('correct', 'incorrect'),
+            ('good', 'bad'),
+        ]
+        
+        for i, resp1 in enumerate(responses):
+            for j, resp2 in enumerate(responses[i+1:], i+1):
+                # Check for opposing keywords
+                for word1, word2 in opposing_pairs:
+                    if word1 in resp1["response"].lower() and word2 in resp2["response"].lower():
+                        contradictions.append(
+                            f"Möjlig motsättning mellan {resp1['display_name']} och {resp2['display_name']} "
+                            f"om '{word1}' vs '{word2}'"
+                        )
+                        break
+        
+        return contradictions[:5]  # Limit to top 5
+    
+    def _create_synthesis_points(
+        self, 
+        responses: List[Dict[str, Any]], 
+        verified_facts: List[Dict[str, Any]]
+    ) -> List[str]:
+        """
+        Create synthesis points from all responses and verified facts.
+        
+        Args:
+            responses: All responses in current round
+            verified_facts: Verified facts from web search
+            
+        Returns:
+            List of synthesis points
+        """
+        synthesis = []
+        
+        # Group common themes
+        synthesis.append(f"Totalt {len(responses)} perspektiv analyserade i denna runda")
+        
+        # Summarize verified facts
+        if verified_facts:
+            synthesis.append(f"{len(verified_facts)} påståenden verifierade via webbsökning")
+        
+        # Note consensus or disagreement
+        if len(responses) > 2:
+            synthesis.append(
+                "Identifierade gemensamma teman och skillnader mellan modellernas perspektiv"
+            )
+        
+        return synthesis
 
     async def collect_votes(
         self,

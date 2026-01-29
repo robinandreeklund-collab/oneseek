@@ -107,8 +107,15 @@ async def query_model_in_round(model_key: str, user_query: str, locale: str = "s
 async def run_internal_analysis(user_query: str) -> str:
     """
     Run OneSeek's internal analysis of responses so far.
-    This performs fact-checking and identifies counterarguments.
-    The analysis is NOT shared with other models.
+    This performs:
+    1. Analyzing all responses from external models
+    2. Finding claims made by each model
+    3. Verifying data and claims via web search
+    4. Analyzing how external models' responses change through rounds
+    5. Creating synthesis for OneSeek's own response
+    6. Addressing others with verified data
+    
+    The analysis is NOT shared with other models - only for OneSeek's internal use.
     
     Args:
         user_query: The user's original question
@@ -127,13 +134,57 @@ async def run_internal_analysis(user_query: str) -> str:
             debate_flow.chain_so_far
         )
         
-        return f"""🔍 **OneSeek Intern Analys** (Runda {analysis['round']}):
+        # Format analysis results
+        result_text = f"""🔍 **OneSeek Intern Analys** (Runda {analysis['round']})
 
-Analyserade {len(analysis['insights'])} svar
-Faktakontroller genomförda: {sum(len(i.get('checks', [])) for i in analysis['insights'])}
+**Analyserade modeller:** {len(analysis['insights'])}
+**Extraherade påståenden:** {len(analysis['claims_extracted'])}
+**Verifierade fakta:** {len(analysis['verified_facts'])}
+**Identifierade motsättningar:** {len(analysis['contradictions'])}
 
-Detta används internt av OneSeek för att förbättra sitt syntetiserade svar.
 """
+        
+        # Add claims overview
+        if analysis['claims_extracted']:
+            result_text += "### Extraherade Påståenden\n"
+            for claim_data in analysis['claims_extracted'][:5]:  # Top 5
+                result_text += f"- **{claim_data['model']}**: {claim_data['claim'][:100]}...\n"
+            result_text += "\n"
+        
+        # Add verification results
+        if analysis['verified_facts']:
+            result_text += "### Verifierade Fakta\n"
+            for fact in analysis['verified_facts'][:3]:  # Top 3
+                result_text += f"- **{fact['model']}**: {fact['claim'][:80]}...\n"
+                result_text += f"  *Verifiering:* {fact['verification'][:100]}...\n"
+            result_text += "\n"
+        
+        # Add contradictions
+        if analysis['contradictions']:
+            result_text += "### Identifierade Motsättningar\n"
+            for contradiction in analysis['contradictions'][:3]:
+                result_text += f"- {contradiction}\n"
+            result_text += "\n"
+        
+        # Add synthesis points
+        if analysis['synthesis_points']:
+            result_text += "### Syntes-punkter\n"
+            for point in analysis['synthesis_points']:
+                result_text += f"- {point}\n"
+            result_text += "\n"
+        
+        # Add evolution notes
+        if analysis['evolution_notes']:
+            result_text += "### Utveckling Mellan Ronder\n"
+            for note in analysis['evolution_notes']:
+                result_text += f"- {note}\n"
+            result_text += "\n"
+        
+        result_text += "---\n*Detta används internt av OneSeek för att förbättra sitt syntetiserade svar.*\n"
+        result_text += "*Analysen delas INTE med externa modeller.*\n"
+        
+        return result_text
+        
     except Exception as e:
         logger.error(f"Error running internal analysis: {e}", exc_info=True)
         return f"Fel vid intern analys: {str(e)}"
