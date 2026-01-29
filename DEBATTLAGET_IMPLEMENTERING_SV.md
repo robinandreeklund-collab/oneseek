@@ -243,6 +243,30 @@ Runda 3:
 
 **Resultat**: Maximalt 3 påståenden verifieras per runda, vilket ger snabbare och mer fokuserad analys.
 
+### Problem 3: VLLM krasch - Kontext explosion från sökresultat (2024-01-29)
+**Symptom**: VLLM kraschade med "EngineCore encountered an issue". Kontext exploderade från 1,270 tokens till 36,797 tokens.
+
+**Orsak**: När OneSeek utförde intern webbsökning i Runda 1 innehöll Tavily-sökresultaten enorma mängder data (raw_content, bilder, etc.). Metoden `_summarize_search_results` anropade `str()` på hela objektet INNAN slicing, vilket skapade enorma mellanstränar (50KB+) som lades till kontexten.
+
+**Lösning**:
+- Förbättrade `_summarize_search_results` metoden:
+  - Lade till `max_chars` parameter (standard: 500)
+  - Hanterar listor: sammanfattar upp till 3 resultat med fördelad teckenbudget
+  - Hanterar dict: extraherar SPECIFIKA fält (answer, content, text) utan att konvertera hela objektet
+  - Hanterar nästlade strukturer: rekursiv hantering
+  - Slutlig säkerhetskontroll: garanterar att resultat aldrig överstiger max_chars
+- Lade till extra säkerhetsåtgärder i `query_model_in_debate`:
+  - Explicit max_chars=500 gräns för Runda 1 sökresultat
+  - Token-räkning innan tillägg till kontext
+  - Hård trunkering till 600 tecken om fortfarande >200 tokens
+  - Detaljerad loggning av storlekar
+
+**Resultat**: 
+- Kontext explosion förhindrad: 1,270 + ~125 = ~1,400 tokens (istället för 36,797)
+- Token reduktion: 96% (36,797 → 1,400 tokens)
+- VLLM kraschar inte längre
+- Alla tester godkända (5/5)
+
 ## 🎯 Resultat
 
 OneSeek är nu redo att dominera i debattläget med:
