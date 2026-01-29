@@ -146,7 +146,9 @@ export const useStore = create<{
     set({ ongoingCoderSessionId: sessionId });
   },
   openDebate(sessionId: string | null) {
+    console.log("🎯 DEBUG openDebate called with sessionId=", sessionId);
     set({ openDebateSessionId: sessionId });
+    console.log("🎯 DEBUG openDebateSessionId set to=", useStore.getState().openDebateSessionId);
   },
   closeDebate() {
     set({ openDebateSessionId: null });
@@ -331,6 +333,11 @@ function findMessageByToolCallId(toolCallId: string) {
 }
 
 function appendMessage(message: Message) {
+  // DEBUG: Log all messages to trace debate flow
+  if (message.agent && message.agent.includes("debate")) {
+    console.log("🔍 DEBUG appendMessage: agent=", message.agent, "id=", message.id);
+  }
+  
   if (
     message.agent === "reporter" ||
     message.agent === "researcher" ||
@@ -351,8 +358,10 @@ function appendMessage(message: Message) {
     }
     appendCoderActivity(message);
   } else if (message.agent === "debate_orchestrator") {
+    console.log("🎯 DEBUG: debate_orchestrator message detected! Opening sidebar...");
     if (!getOngoingDebateSessionId()) {
       const id = message.id;
+      console.log("🎯 DEBUG: Calling appendDebateSession and openDebate with id=", id);
       appendDebateSession(id);
       openDebate(id);
     }

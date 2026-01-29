@@ -25,6 +25,11 @@ export default function Main() {
   const showCoder = openCoderSessionId !== null;
   const showDebate = openDebateSessionId !== null;
   
+  // DEBUG: Log debate sidebar state
+  if (openDebateSessionId !== null) {
+    console.log("🎯 DEBUG main.tsx: showDebate=", showDebate, "openDebateSessionId=", openDebateSessionId);
+  }
+  
   return (
     <div
       className={cn(

@@ -443,6 +443,11 @@ def _get_agent_name(agent, message_metadata):
         agent_name = agent[0].split(":")[0] if ":" in agent[0] else agent[0]
     else:
         agent_name = message_metadata.get("langgraph_node", "unknown")
+    
+    # DEBUG: Log agent names for debate-related nodes
+    if "debate" in agent_name.lower():
+        logger.info(f"🔍 DEBUG _get_agent_name: agent={agent}, agent_name={agent_name}")
+    
     # Keep debate planner output compatible with planner UI rendering.
     if agent_name == "debate_planner":
         return "planner"
