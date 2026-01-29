@@ -136,6 +136,8 @@
         "description": "När aktiverat deltar alla AI-modeller (inklusive OneSeek) i en 3-ronders debatt med slumpad ordning, sekventiella svar och demokratisk omröstning. OneSeek ger syntes i runda 3."
       },
       "enhancePrompt": "Förbättra prompt med AI",
+      "modes": "Lägen",
+      "trendingQuestions": "Trendande frågor",
       "on": "På",
       "off": "Av"
     },

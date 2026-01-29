@@ -3,16 +3,15 @@
 
 import { MagicWandIcon } from "@radix-ui/react-icons";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowUp, Lightbulb, X } from "lucide-react";
+import { ArrowUp, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useRef, useState } from "react";
 
-import { AiCompare } from "~/components/deer-flow/icons/ai-compare";
-import { DebateIcon } from "~/components/deer-flow/icons/debate";
-import { Detective } from "~/components/deer-flow/icons/detective";
 import MessageInput, {
   type MessageInputRef,
 } from "~/components/deer-flow/message-input";
+import { ModesDropUp } from "~/components/deer-flow/modes-drop-up";
+import { TrendingQuestionsDropUp } from "~/components/deer-flow/trending-questions-drop-up";
 import { ReportStyleDialog } from "~/components/deer-flow/report-style-dialog";
 import { Tooltip } from "~/components/deer-flow/tooltip";
 import { BorderBeam } from "~/components/magicui/border-beam";
@@ -20,13 +19,7 @@ import { Button } from "~/components/ui/button";
 import { enhancePrompt } from "~/core/api";
 import { useConfig } from "~/core/api/hooks";
 import type { Option, Resource } from "~/core/messages";
-import {
-  setEnableDeepThinking,
-  setEnableBackgroundInvestigation,
-  setEnableAiComparison,
-  setEnableDebateMode,
-  useSettingsStore,
-} from "~/core/store";
+import { useSettingsStore } from "~/core/store";
 import { cn } from "~/lib/utils";
 
 export function InputBox({
@@ -53,18 +46,6 @@ export function InputBox({
 }) {
   const t = useTranslations("chat.inputBox");
   const tCommon = useTranslations("common");
-  const enableDeepThinking = useSettingsStore(
-    (state) => state.general.enableDeepThinking,
-  );
-  const backgroundInvestigation = useSettingsStore(
-    (state) => state.general.enableBackgroundInvestigation,
-  );
-  const aiComparison = useSettingsStore(
-    (state) => state.general.enableAiComparison,
-  );
-  const debateMode = useSettingsStore(
-    (state) => state.general.enableDebateMode,
-  );
   const { config, loading } = useConfig();
   const reportStyle = useSettingsStore((state) => state.general.reportStyle);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -137,12 +118,12 @@ export function InputBox({
   return (
     <div
       className={cn(
-        "bg-card relative flex h-full w-full flex-col rounded-[24px] border",
+        "bg-card relative flex w-full flex-col rounded-[24px] border",
         className,
       )}
       ref={containerRef}
     >
-      <div className="w-full">
+      <div className="flex w-full flex-col">
         <AnimatePresence>
           {feedback && (
             <motion.div
@@ -211,7 +192,7 @@ export function InputBox({
         </AnimatePresence>
         <MessageInput
           className={cn(
-            "h-24 px-4 pt-5",
+            "px-4 pt-5",
             feedback && "pt-9",
             isEnhanceAnimating && "transition-all duration-500",
           )}
@@ -224,120 +205,15 @@ export function InputBox({
       </div>
       <div className="flex items-center px-4 py-2">
         <div className="flex grow gap-2">
-          {config?.models?.reasoning && config.models.reasoning.length > 0 && (
-            <Tooltip
-              className="max-w-60"
-              title={
-                <div>
-                  <h3 className="mb-2 font-bold">
-                    {t("deepThinkingTooltip.title", {
-                      status: enableDeepThinking ? t("on") : t("off"),
-                    })}
-                  </h3>
-                  <p>
-                    {t("deepThinkingTooltip.description", {
-                      model: config.models.reasoning[0] ?? "",
-                    })}
-                  </p>
-                </div>
+          <ModesDropUp />
+          <TrendingQuestionsDropUp
+            onSelectQuestion={(question) => {
+              if (inputRef.current) {
+                inputRef.current.setContent(question);
+                setCurrentPrompt(question);
               }
-            >
-              <Button
-                className={cn(
-                  "rounded-2xl",
-                  enableDeepThinking && "!border-brand !text-brand",
-                )}
-                variant="outline"
-                onClick={() => {
-                  setEnableDeepThinking(!enableDeepThinking);
-                }}
-              >
-                <Lightbulb /> {t("deepThinking")}
-              </Button>
-            </Tooltip>
-          )}
-
-          <Tooltip
-            className="max-w-60"
-            title={
-              <div>
-                <h3 className="mb-2 font-bold">
-                  {t("investigationTooltip.title", {
-                    status: backgroundInvestigation ? t("on") : t("off"),
-                  })}
-                </h3>
-                <p>{t("investigationTooltip.description")}</p>
-              </div>
-            }
-          >
-            <Button
-              className={cn(
-                "rounded-2xl",
-                backgroundInvestigation && "!border-brand !text-brand",
-              )}
-              variant="outline"
-              onClick={() =>
-                setEnableBackgroundInvestigation(!backgroundInvestigation)
-              }
-            >
-              <Detective /> {t("investigation")}
-            </Button>
-          </Tooltip>
-          
-          <Tooltip
-            className="max-w-60"
-            title={
-              <div>
-                <h3 className="mb-2 font-bold">
-                  {t("aiComparisonTooltip.title", {
-                    status: aiComparison ? t("on") : t("off"),
-                  })}
-                </h3>
-                <p>{t("aiComparisonTooltip.description")}</p>
-              </div>
-            }
-          >
-            <Button
-              className={cn(
-                "rounded-2xl",
-                aiComparison && "!border-brand !text-brand",
-              )}
-              variant="outline"
-              onClick={() =>
-                setEnableAiComparison(!aiComparison)
-              }
-            >
-              <AiCompare /> {t("aiComparison")}
-            </Button>
-          </Tooltip>
-          
-          <Tooltip
-            className="max-w-60"
-            title={
-              <div>
-                <h3 className="mb-2 font-bold">
-                  {t("debateModeTooltip.title", {
-                    status: debateMode ? t("on") : t("off"),
-                  })}
-                </h3>
-                <p>{t("debateModeTooltip.description")}</p>
-              </div>
-            }
-          >
-            <Button
-              className={cn(
-                "rounded-2xl",
-                debateMode && "!border-brand !text-brand",
-              )}
-              variant="outline"
-              onClick={() =>
-                setEnableDebateMode(!debateMode)
-              }
-            >
-              <DebateIcon className="h-4 w-4" /> {t("debateMode")}
-            </Button>
-          </Tooltip>
-          
+            }}
+          />
           <ReportStyleDialog />
         </div>
         <div className="flex shrink-0 items-center gap-2">
