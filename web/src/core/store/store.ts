@@ -398,13 +398,6 @@ function updateMessage(message: Message) {
   }
   useStore.getState().updateMessage(message);
 }
-    message.agent === "debate_orchestrator" &&
-    !message.isStreaming
-  ) {
-    useStore.getState().setOngoingDebateSession(null);
-  }
-  useStore.getState().updateMessage(message);
-}
 
 function getOngoingResearchId() {
   return useStore.getState().ongoingResearchId;
