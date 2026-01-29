@@ -118,10 +118,7 @@ def build_graph_with_memory():
 
     # build state graph
     builder = _build_base_graph()
-    return builder.compile(
-        checkpointer=memory,
-        interrupt_before=["human_feedback"]
-    )
+    return builder.compile(checkpointer=memory)
 
 
 def build_graph():
