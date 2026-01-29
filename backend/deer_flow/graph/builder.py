@@ -151,14 +151,13 @@ def _build_base_graph():
     # coordinator → coder → __end__ (direct response)
     # The coder node determines whether to go to __end__ or research_team based on context
     
-    # Wire debate chain edges (debate nodes use Command to route)
-    # debate_planner already routes to human_feedback
-    # We need to update human_feedback to route to debate_orchestrator for debate mode
-    # debate_orchestrator routes to proponent (start of debate team sequence)
-    builder.add_edge("proponent", "opponent")
-    builder.add_edge("opponent", "fact_checker")
-    builder.add_edge("fact_checker", "synthesizer")
-    builder.add_edge("synthesizer", "moderator")
+    # Debate chain edges - all routing is dynamic via Command objects
+    # debate_planner routes to human_feedback
+    # human_feedback routes to debate_orchestrator for debate mode
+    # debate_orchestrator dispatches to parallel nodes (proponent, opponent, fact_checker) and synthesizer
+    # All debate nodes route back to orchestrator or forward dynamically
+    # No fixed edges needed - all routing via Command
+    builder.add_edge("synthesizer", "moderator")  # Only fixed edge: synthesizer always goes to moderator
     # moderator and debate_orchestrator use Command to route dynamically
     
     builder.add_conditional_edges(
