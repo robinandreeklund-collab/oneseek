@@ -2129,20 +2129,23 @@ async def researcher_node(
     tools = []
     
     if enable_debate_mode:
-        # In debate mode, use debate tools and debate prompt template
-        logger.info("[researcher_node] Debate mode enabled - using debate agent with debate tools")
-        debate_tools = get_debate_tools()
-        tools.extend(debate_tools)
-        logger.info(f"[researcher_node] Debate tools count: {len(tools)}")
-        logger.debug(f"[researcher_node] Debate tools: {[tool.name if hasattr(tool, 'name') else str(tool) for tool in tools]}")
+        # In debate mode, the debate flow handles everything
+        # We don't need to run the researcher agent - just mark step as complete
+        logger.info("[researcher_node] Debate mode enabled - debate flow handles execution, no researcher agent needed")
         
-        # Use debate-specific execution with debate prompt template
-        return await _setup_and_execute_agent_step_with_custom_prompt(
-            state,
-            config,
-            "researcher",  # agent_type for LLM selection
-            "debate",      # prompt_template to use debate prompt
-            tools,
+        # Get current step info
+        current_step = state.get("current_step", {})
+        step_title = current_step.get("title", "Unknown step")
+        
+        # Mark step as complete by returning to research_team
+        # The debate flow has already executed and added results to the state
+        logger.info(f"[researcher_node] Debate step '{step_title}' completed by debate flow")
+        
+        return Command(
+            goto="research_team",
+            update={
+                "messages": [],  # No additional messages needed
+            }
         )
     else:
         logger.info("Researcher node is researching.")
