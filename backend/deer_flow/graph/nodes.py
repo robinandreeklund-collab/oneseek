@@ -1002,7 +1002,6 @@ def human_feedback_node(
             "debate_max_rounds": 3,
             "debate_scores": {"proponent": 0, "opponent": 0},
             "debate_knockout": False,
-            "debate_phase": "start",
         })
     
     return Command(
@@ -2511,14 +2510,14 @@ Provide a comprehensive debate report with all rounds, voting results, and concl
 
 async def debate_orchestrator_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["proponent", "opponent", "fact_checker", "synthesizer", "reporter"]]:
+) -> Command[Literal["proponent", "reporter"]]:
     """
     Debate orchestrator node - manages rounds, scores, and exit criteria.
     
     This is the conductor that:
-    1. Tracks current round number and phase
-    2. Dispatches to parallel debate roles (proponent, opponent, fact_checker) or sequential (synthesizer)
-    3. Collects responses and routes to moderator
+    1. Tracks current round number
+    2. Routes to proponent to start each round (nodes then flow sequentially)
+    3. Collects scores from moderator after each round
     4. Determines when to exit (rounds complete, knockout, consensus)
     5. Routes to reporter when debate is complete
     """
@@ -2530,148 +2529,85 @@ async def debate_orchestrator_node(
     max_rounds = state.get("debate_max_rounds", 3)
     scores = state.get("debate_scores", {"proponent": 0, "opponent": 0})
     knockout = state.get("debate_knockout", False)
-    debate_phase = state.get("debate_phase", "start")  # start, parallel_complete, synthesis_complete, moderation_complete
     
-    logger.info(f"Orchestrator state: round={current_round}, phase={debate_phase}, scores={scores}")
+    # Increment round
+    current_round += 1
+    logger.info(f"Starting debate round {current_round}/{max_rounds}")
     
-    # Phase 1: Start new round - dispatch to parallel nodes
-    if debate_phase == "start":
-        # Increment round
-        current_round += 1
-        logger.info(f"Starting debate round {current_round}/{max_rounds}")
+    # Check exit criteria before starting new round
+    if current_round > max_rounds:
+        logger.info(f"Max rounds reached: {max_rounds}")
+        exit_reason = f"{max_rounds} rundor uppnått"
+        summary_msg = AIMessage(
+            content=json.dumps({
+                "final_round": current_round - 1,
+                "final_scores": scores,
+                "exit_reason": exit_reason,
+                "winner": "proponent" if scores["proponent"] > scores["opponent"] else "opponent"
+            }, ensure_ascii=False, indent=2),
+            name="debate_orchestrator"
+        )
         
-        # Check exit criteria before starting new round
-        if current_round > max_rounds:
-            logger.info(f"Max rounds reached: {max_rounds}")
-            exit_reason = f"{max_rounds} rundor uppnått"
-            summary_msg = AIMessage(
-                content=json.dumps({
-                    "final_round": current_round - 1,
-                    "final_scores": scores,
-                    "exit_reason": exit_reason,
-                    "winner": "proponent" if scores["proponent"] > scores["opponent"] else "opponent"
-                }, ensure_ascii=False, indent=2),
-                name="debate_orchestrator"
-            )
-            
-            return Command(
-                update={
-                    **preserve_state_meta_fields(state),
-                    "messages": [summary_msg],
-                    "debate_complete": True,
-                },
-                goto="reporter"
-            )
-        elif knockout:
-            logger.info("Knockout detected in previous round")
-            exit_reason = "Knockout-argument identifierat"
-            summary_msg = AIMessage(
-                content=json.dumps({
-                    "final_round": current_round - 1,
-                    "final_scores": scores,
-                    "exit_reason": exit_reason,
-                    "winner": "proponent" if scores["proponent"] > scores["opponent"] else "opponent"
-                }, ensure_ascii=False, indent=2),
-                name="debate_orchestrator"
-            )
-            
-            return Command(
-                update={
-                    **preserve_state_meta_fields(state),
-                    "messages": [summary_msg],
-                    "debate_complete": True,
-                },
-                goto="reporter"
-            )
-        elif abs(scores["proponent"] - scores["opponent"]) >= 3:
-            logger.info(f"Significant score lead: {scores}")
-            exit_reason = f"Betydande poängledning: {max(scores.values())} - {min(scores.values())}"
-            summary_msg = AIMessage(
-                content=json.dumps({
-                    "final_round": current_round - 1,
-                    "final_scores": scores,
-                    "exit_reason": exit_reason,
-                    "winner": "proponent" if scores["proponent"] > scores["opponent"] else "opponent"
-                }, ensure_ascii=False, indent=2),
-                name="debate_orchestrator"
-            )
-            
-            return Command(
-                update={
-                    **preserve_state_meta_fields(state),
-                    "messages": [summary_msg],
-                    "debate_complete": True,
-                },
-                goto="reporter"
-            )
-        
-        # Start parallel phase - dispatch to proponent, opponent, fact_checker
-        # LangGraph will execute these in parallel when we return multiple Command objects
-        # For now, we'll route to first node and track completion
-        logger.info(f"Phase: start → dispatching to parallel nodes for round {current_round}")
         return Command(
             update={
                 **preserve_state_meta_fields(state),
-                "debate_round": current_round,
-                "debate_phase": "awaiting_parallel",
-                "debate_parallel_count": 0,  # Track how many parallel nodes completed
+                "messages": [summary_msg],
+                "debate_complete": True,
             },
-            goto="proponent"  # Start with proponent, will return to orchestrator
+            goto="reporter"
         )
-    
-    # Phase 2: Collecting parallel responses
-    elif debate_phase == "awaiting_parallel":
-        parallel_count = state.get("debate_parallel_count", 0) + 1
-        logger.info(f"Phase: awaiting_parallel → received response {parallel_count}/3")
+    elif knockout:
+        logger.info("Knockout detected in previous round")
+        exit_reason = "Knockout-argument identifierat"
+        summary_msg = AIMessage(
+            content=json.dumps({
+                "final_round": current_round - 1,
+                "final_scores": scores,
+                "exit_reason": exit_reason,
+                "winner": "proponent" if scores["proponent"] > scores["opponent"] else "opponent"
+            }, ensure_ascii=False, indent=2),
+            name="debate_orchestrator"
+        )
         
-        # Check if we have all parallel responses (proponent, opponent, fact_checker)
-        if parallel_count < 3:
-            # Still waiting for more responses
-            next_node = "opponent" if parallel_count == 1 else "fact_checker"
-            logger.info(f"Continuing parallel execution → routing to {next_node}")
-            return Command(
-                update={
-                    **preserve_state_meta_fields(state),
-                    "debate_parallel_count": parallel_count,
-                },
-                goto=next_node
-            )
-        else:
-            # All parallel responses collected, move to synthesis
-            logger.info("All parallel responses collected → routing to synthesizer")
-            return Command(
-                update={
-                    **preserve_state_meta_fields(state),
-                    "debate_phase": "awaiting_synthesis",
-                },
-                goto="synthesizer"
-            )
-    
-    # Phase 3: Synthesis complete, no need for orchestrator (synthesizer routes directly to moderator)
-    # This case shouldn't be reached as synthesizer goes directly to moderator
-    
-    # Phase 4: Moderation complete, start next round or end
-    elif debate_phase == "moderation_complete":
-        logger.info("Moderation complete → checking if another round is needed")
-        # Reset for next round
         return Command(
             update={
                 **preserve_state_meta_fields(state),
-                "debate_phase": "start",
+                "messages": [summary_msg],
+                "debate_complete": True,
             },
-            goto="debate_orchestrator"  # Loop back to check exit criteria and start new round
+            goto="reporter"
         )
-    
-    # Default fallback
-    else:
-        logger.warning(f"Unknown debate phase: {debate_phase}, resetting to start")
+    elif abs(scores["proponent"] - scores["opponent"]) >= 3:
+        logger.info(f"Significant score lead: {scores}")
+        exit_reason = f"Betydande poängledning: {max(scores.values())} - {min(scores.values())}"
+        summary_msg = AIMessage(
+            content=json.dumps({
+                "final_round": current_round - 1,
+                "final_scores": scores,
+                "exit_reason": exit_reason,
+                "winner": "proponent" if scores["proponent"] > scores["opponent"] else "opponent"
+            }, ensure_ascii=False, indent=2),
+            name="debate_orchestrator"
+        )
+        
         return Command(
             update={
                 **preserve_state_meta_fields(state),
-                "debate_phase": "start",
+                "messages": [summary_msg],
+                "debate_complete": True,
             },
-            goto="debate_orchestrator"
+            goto="reporter"
         )
+    
+    # Start new round - route to proponent (then flows: opponent → fact_checker → synthesizer → moderator → back here)
+    logger.info(f"Starting round {current_round}, routing to proponent")
+    return Command(
+        update={
+            **preserve_state_meta_fields(state),
+            "debate_round": current_round,
+        },
+        goto="proponent"
+    )
 
 
 async def debate_team_node(state: State, config: RunnableConfig):
@@ -2690,7 +2626,7 @@ async def debate_team_node(state: State, config: RunnableConfig):
 
 async def proponent_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["debate_orchestrator"]]:
+) -> Command[Literal["opponent"]]:
     """Proponent node - arguments FOR the question."""
     logger.info("Proponent presenting arguments FOR")
     configurable = Configuration.from_runnable_config(config)
@@ -2733,13 +2669,13 @@ async def proponent_node(
             "messages": result.get("messages", []),
             "proponent_response": response_content,
         },
-        goto="debate_orchestrator"
+        goto="opponent"  # Route directly to opponent, not back to orchestrator
     )
 
 
 async def opponent_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["debate_orchestrator"]]:
+) -> Command[Literal["fact_checker"]]:
     """Opponent node - arguments AGAINST the question."""
     logger.info("Opponent presenting arguments AGAINST")
     configurable = Configuration.from_runnable_config(config)
@@ -2782,13 +2718,13 @@ async def opponent_node(
             "messages": result.get("messages", []),
             "opponent_response": response_content,
         },
-        goto="debate_orchestrator"
+        goto="fact_checker"  # Route directly to fact_checker, not back to orchestrator
     )
 
 
 async def fact_checker_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["debate_orchestrator"]]:
+) -> Command[Literal["synthesizer"]]:
     """Fact checker node - verifies claims from both sides."""
     logger.info("Fact checker verifying claims")
     configurable = Configuration.from_runnable_config(config)
@@ -2831,7 +2767,7 @@ async def fact_checker_node(
             "messages": result.get("messages", []),
             "fact_checker_response": response_content,
         },
-        goto="debate_orchestrator"
+        goto="synthesizer"  # Route directly to synthesizer, not back to orchestrator
     )
 
 
@@ -2962,7 +2898,6 @@ async def moderator_node(
                 "messages": [summary_msg],
                 "debate_scores": scores,
                 "debate_knockout": knockout,
-                "debate_phase": "start",  # Reset phase for next round
             },
             goto="debate_orchestrator"
         )
@@ -2986,7 +2921,6 @@ async def moderator_node(
                 "messages": [summary_msg],
                 "debate_scores": scores,
                 "debate_knockout": False,
-                "debate_phase": "start",  # Reset phase for next round
             },
             goto="debate_orchestrator"
         )
