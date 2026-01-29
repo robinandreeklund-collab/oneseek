@@ -337,6 +337,9 @@ function appendMessage(message: Message) {
   if (message.agent && message.agent.includes("debate")) {
     console.log("🔍 DEBUG appendMessage: agent=", message.agent, "id=", message.id);
   }
+  if (message.agent === "external_ai_caller") {
+    console.log("🔍 DEBUG appendMessage: EXTERNAL_AI_CALLER detected! agent=", message.agent, "id=", message.id);
+  }
   
   if (
     message.agent === "reporter" ||
@@ -357,8 +360,8 @@ function appendMessage(message: Message) {
       openCoder(id);
     }
     appendCoderActivity(message);
-  } else if (message.agent === "debate_orchestrator") {
-    console.log("🎯 DEBUG: debate_orchestrator message detected! Opening sidebar...");
+  } else if (message.agent === "debate_orchestrator" || message.agent === "external_ai_caller") {
+    console.log("🎯 DEBUG: debate message detected! agent=", message.agent, "Opening sidebar...");
     if (!getOngoingDebateSessionId()) {
       const id = message.id;
       console.log("🎯 DEBUG: Calling appendDebateSession and openDebate with id=", id);
@@ -387,6 +390,14 @@ function updateMessage(message: Message) {
   }
   if (
     getOngoingDebateSessionId() &&
+    (message.agent === "debate_orchestrator" || message.agent === "external_ai_caller") &&
+    !message.isStreaming
+  ) {
+    // Don't close debate session when streaming completes - keep it open
+    // useStore.getState().setOngoingDebateSession(null);
+  }
+  useStore.getState().updateMessage(message);
+}
     message.agent === "debate_orchestrator" &&
     !message.isStreaming
   ) {
