@@ -23,10 +23,9 @@ AGENT_LLM_MAP: dict[str, LLMType] = {
     "debate": "basic",
     "debate_planner": "basic",
     "code_planner": "basic",
-    # New debate chain agents
+    # Debate chain agents (using real external AI models)
     "debate_orchestrator": "basic",
-    "proponent": "basic",
-    "opponent": "basic",
+    "external_ai_caller": "basic",  # Calls Grok, Gemini, ChatGPT, DeepSeek
     "fact_checker": "basic",
     "synthesizer": "basic",
     "moderator": "basic",

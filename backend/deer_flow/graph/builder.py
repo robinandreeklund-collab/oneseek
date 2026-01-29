@@ -21,11 +21,10 @@ from .nodes import (
     research_team_node,
     researcher_node,
     tester_node,
-    # New debate chain nodes
+    # Debate chain nodes (using real external AI models)
     debate_orchestrator_node,
     debate_team_node,
-    proponent_node,
-    opponent_node,
+    external_ai_caller_node,  # Calls Grok, Gemini, ChatGPT, DeepSeek
     fact_checker_node,
     synthesizer_node,
     moderator_node,
@@ -88,17 +87,15 @@ def _build_debate_team_subgraph():
     """
     debate_builder = StateGraph(State)
     
-    # Add debate team nodes
-    debate_builder.add_node("proponent", proponent_node)
-    debate_builder.add_node("opponent", opponent_node)
+    # Add debate chain nodes (simplified flow with real external AI)
+    debate_builder.add_node("external_ai_caller", external_ai_caller_node)  # Calls Grok, Gemini, ChatGPT, DeepSeek
     debate_builder.add_node("fact_checker", fact_checker_node)
     debate_builder.add_node("synthesizer", synthesizer_node)
     debate_builder.add_node("moderator", moderator_node)
     
-    # Wire them in sequence
-    debate_builder.add_edge(START, "proponent")
-    debate_builder.add_edge("proponent", "opponent")
-    debate_builder.add_edge("opponent", "fact_checker")
+    # Wire them in sequence: external_ai_caller → fact_checker → synthesizer → moderator
+    debate_builder.add_edge(START, "external_ai_caller")
+    debate_builder.add_edge("external_ai_caller", "fact_checker")
     debate_builder.add_edge("fact_checker", "synthesizer")
     debate_builder.add_edge("synthesizer", "moderator")
     # moderator routes back to debate_orchestrator via Command
@@ -124,12 +121,9 @@ def _build_base_graph():
     builder.add_node("tester", tester_node)
     builder.add_node("human_feedback", human_feedback_node)
     
-    # Add new debate chain nodes
+    # Add debate chain nodes (using real external AI models)
     builder.add_node("debate_orchestrator", debate_orchestrator_node)
-    # debate_team is implemented as a sub-graph, but we can add it as a placeholder
-    # Actually, let's wire the debate nodes directly for simplicity
-    builder.add_node("proponent", proponent_node)
-    builder.add_node("opponent", opponent_node)
+    builder.add_node("external_ai_caller", external_ai_caller_node)  # Calls Grok, Gemini, ChatGPT, DeepSeek
     builder.add_node("fact_checker", fact_checker_node)
     builder.add_node("synthesizer", synthesizer_node)
     builder.add_node("moderator", moderator_node)

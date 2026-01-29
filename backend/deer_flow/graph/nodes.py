@@ -1000,9 +1000,8 @@ def human_feedback_node(
         update_dict.update({
             "debate_round": 0,
             "debate_max_rounds": 3,
-            "debate_scores": {"proponent": 0, "opponent": 0},
+            "debate_scores": {"external_ai": 0, "consensus": 0},
             "debate_knockout": False,
-            "debate_phase": "start",  # Start phase for orchestrator
         })
     
     return Command(
@@ -2511,16 +2510,18 @@ Provide a comprehensive debate report with all rounds, voting results, and concl
 
 async def debate_orchestrator_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["proponent", "opponent", "fact_checker", "synthesizer", "reporter"]]:
+) -> Command[Literal["external_ai_caller", "reporter"]]:
     """
     Debate orchestrator node - manages rounds, scores, and exit criteria.
     
     This is the conductor that:
-    1. Tracks current round number and phase
-    2. Dispatches to parallel debate roles (proponent, opponent, fact_checker)
-    3. Collects responses and routes to synthesizer → moderator
-    4. Determines when to exit (rounds complete, knockout, consensus)
+    1. Tracks current round number
+    2. Routes to external_ai_caller to get real AI model responses
+    3. Collects scores from moderator after each round
+    4. Determines when to exit (rounds complete, knockout, significant score lead)
     5. Routes to reporter when debate is complete
+    
+    NEW FLOW: orchestrator → external_ai_caller → fact_checker → synthesizer → moderator → orchestrator
     """
     logger.info("Debate orchestrator starting")
     configurable = Configuration.from_runnable_config(config)
@@ -2528,145 +2529,66 @@ async def debate_orchestrator_node(
     # Get debate state
     current_round = state.get("debate_round", 0)
     max_rounds = state.get("debate_max_rounds", 3)
-    scores = state.get("debate_scores", {"proponent": 0, "opponent": 0})
+    scores = state.get("debate_scores", {"external_ai": 0, "consensus": 0})  # Simplified scoring
     knockout = state.get("debate_knockout", False)
-    debate_phase = state.get("debate_phase", "start")  # start, awaiting_parallel, awaiting_synthesis, moderation_complete
     
-    logger.info(f"Orchestrator state: round={current_round}, phase={debate_phase}, scores={scores}")
+    # Increment round
+    current_round += 1
+    logger.info(f"Starting debate round {current_round}/{max_rounds}")
     
-    # Phase 1: Start new round - dispatch to parallel nodes
-    if debate_phase == "start":
-        # Increment round
-        current_round += 1
-        logger.info(f"Starting debate round {current_round}/{max_rounds}")
+    # Check exit criteria before starting new round
+    if current_round > max_rounds:
+        logger.info(f"Max rounds reached: {max_rounds}")
+        exit_reason = f"{max_rounds} rundor uppnått"
+        summary_msg = AIMessage(
+            content=json.dumps({
+                "final_round": current_round - 1,
+                "final_scores": scores,
+                "exit_reason": exit_reason,
+                "external_ai_models": ["Grok", "Gemini", "ChatGPT", "DeepSeek"]
+            }, ensure_ascii=False, indent=2),
+            name="debate_orchestrator"
+        )
         
-        # Check exit criteria before starting new round
-        if current_round > max_rounds:
-            logger.info(f"Max rounds reached: {max_rounds}")
-            exit_reason = f"{max_rounds} rundor uppnått"
-            summary_msg = AIMessage(
-                content=json.dumps({
-                    "final_round": current_round - 1,
-                    "final_scores": scores,
-                    "exit_reason": exit_reason,
-                    "winner": "proponent" if scores["proponent"] > scores["opponent"] else "opponent"
-                }, ensure_ascii=False, indent=2),
-                name="debate_orchestrator"
-            )
-            
-            return Command(
-                update={
-                    **preserve_state_meta_fields(state),
-                    "messages": [summary_msg],
-                    "debate_complete": True,
-                },
-                goto="reporter"
-            )
-        elif knockout:
-            logger.info("Knockout detected in previous round")
-            exit_reason = "Knockout-argument identifierat"
-            summary_msg = AIMessage(
-                content=json.dumps({
-                    "final_round": current_round - 1,
-                    "final_scores": scores,
-                    "exit_reason": exit_reason,
-                    "winner": "proponent" if scores["proponent"] > scores["opponent"] else "opponent"
-                }, ensure_ascii=False, indent=2),
-                name="debate_orchestrator"
-            )
-            
-            return Command(
-                update={
-                    **preserve_state_meta_fields(state),
-                    "messages": [summary_msg],
-                    "debate_complete": True,
-                },
-                goto="reporter"
-            )
-        elif abs(scores["proponent"] - scores["opponent"]) >= 3:
-            logger.info(f"Significant score lead: {scores}")
-            exit_reason = f"Betydande poängledning: {max(scores.values())} - {min(scores.values())}"
-            summary_msg = AIMessage(
-                content=json.dumps({
-                    "final_round": current_round - 1,
-                    "final_scores": scores,
-                    "exit_reason": exit_reason,
-                    "winner": "proponent" if scores["proponent"] > scores["opponent"] else "opponent"
-                }, ensure_ascii=False, indent=2),
-                name="debate_orchestrator"
-            )
-            
-            return Command(
-                update={
-                    **preserve_state_meta_fields(state),
-                    "messages": [summary_msg],
-                    "debate_complete": True,
-                },
-                goto="reporter"
-            )
-        
-        # Start parallel phase - dispatch to proponent first, will collect responses from all 3 nodes
-        logger.info(f"Phase: start → dispatching to parallel nodes for round {current_round}")
         return Command(
             update={
                 **preserve_state_meta_fields(state),
-                "debate_round": current_round,
-                "debate_phase": "awaiting_parallel",
-                "debate_parallel_count": 0,  # Track how many parallel nodes completed
+                "messages": [summary_msg],
+                "debate_complete": True,
             },
-            goto="proponent"  # Start with proponent, will return to orchestrator
+            goto="reporter"
         )
-    
-    # Phase 2: Collecting parallel responses
-    elif debate_phase == "awaiting_parallel":
-        parallel_count = state.get("debate_parallel_count", 0) + 1
-        logger.info(f"Phase: awaiting_parallel → received response {parallel_count}/3")
+    elif knockout:
+        logger.info("Knockout detected in previous round")
+        exit_reason = "Knockout-argument identifierat"
+        summary_msg = AIMessage(
+            content=json.dumps({
+                "final_round": current_round - 1,
+                "final_scores": scores,
+                "exit_reason": exit_reason,
+                "external_ai_models": ["Grok", "Gemini", "ChatGPT", "DeepSeek"]
+            }, ensure_ascii=False, indent=2),
+            name="debate_orchestrator"
+        )
         
-        # Check if we have all parallel responses (proponent, opponent, fact_checker)
-        if parallel_count < 3:
-            # Still waiting for more responses
-            next_node = "opponent" if parallel_count == 1 else "fact_checker"
-            logger.info(f"Continuing parallel execution → routing to {next_node}")
-            return Command(
-                update={
-                    **preserve_state_meta_fields(state),
-                    "debate_parallel_count": parallel_count,
-                },
-                goto=next_node
-            )
-        else:
-            # All parallel responses collected, move to synthesis
-            logger.info("All parallel responses collected → routing to synthesizer")
-            return Command(
-                update={
-                    **preserve_state_meta_fields(state),
-                    "debate_phase": "awaiting_synthesis",
-                },
-                goto="synthesizer"
-            )
-    
-    # Phase 3: After synthesis and moderation are complete (moderator routes back here)
-    elif debate_phase == "moderation_complete":
-        logger.info("Moderation complete → resetting for next round")
-        # Reset for next round
         return Command(
             update={
                 **preserve_state_meta_fields(state),
-                "debate_phase": "start",
+                "messages": [summary_msg],
+                "debate_complete": True,
             },
-            goto="debate_orchestrator"  # Loop back to check exit criteria and start new round
+            goto="reporter"
         )
     
-    # Default fallback
-    else:
-        logger.warning(f"Unknown debate phase: {debate_phase}, resetting to start")
-        return Command(
-            update={
-                **preserve_state_meta_fields(state),
-                "debate_phase": "start",
-            },
-            goto="debate_orchestrator"
-        )
+    # Start new round - route to external_ai_caller to get real AI responses
+    logger.info(f"Round {current_round}: Routing to external_ai_caller for real AI model responses")
+    return Command(
+        update={
+            **preserve_state_meta_fields(state),
+            "debate_round": current_round,
+        },
+        goto="external_ai_caller"  # Calls Grok, Gemini, ChatGPT, DeepSeek
+    )
 
 
 async def debate_team_node(state: State, config: RunnableConfig):
@@ -2683,34 +2605,42 @@ async def debate_team_node(state: State, config: RunnableConfig):
     pass
 
 
-async def proponent_node(
+async def external_ai_caller_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["debate_orchestrator"]]:
-    """Proponent node - arguments FOR the question."""
-    logger.info("Proponent presenting arguments FOR")
+) -> Command[Literal["fact_checker"]]:
+    """External AI Caller node - calls real external AI models (Grok, Gemini, ChatGPT, DeepSeek)."""
+    logger.info("External AI Caller - querying real AI models")
     configurable = Configuration.from_runnable_config(config)
     locale = state.get("locale", "en-US")
     
-    # Get web search and other tools for aggressive usage
-    tools = [get_web_search_tool(configurable.max_search_results), crawl_tool]
+    # Import the AI comparison tools for querying external models
+    from backend.deer_flow.tools.ai_comparison_tools import (
+        query_grok4,
+        query_gemini_flash,
+        query_gpt35,
+        query_deepseek
+    )
     
-    # Build prompt for proponent
-    messages = apply_prompt_template("proponent", state, configurable, locale)
+    # Get AI comparison tools (includes query tools for external models)
+    tools = [query_grok4, query_gemini_flash, query_gpt35, query_deepseek]
     
-    # Create agent for proponent
-    llm_token_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["proponent"])
+    # Build prompt for external_ai_caller
+    messages = apply_prompt_template("external_ai_caller", state, configurable, locale)
+    
+    # Create agent for external_ai_caller
+    llm_token_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["external_ai_caller"])
     pre_model_hook = partial(ContextManager(llm_token_limit, 3).compress_messages)
     agent = create_agent(
-        "proponent",
-        "proponent",
+        "external_ai_caller",
+        "external_ai_caller",
         tools,
-        "proponent",
+        "external_ai_caller",
         pre_model_hook,
         interrupt_before_tools=configurable.interrupt_before_tools,
         locale=locale,
     )
     
-    # Execute agent
+    # Execute agent - it will call all 4 external AI models
     result = await agent.ainvoke(state, config)
     
     # Extract response - agent returns dict with "messages" key
@@ -2720,72 +2650,23 @@ async def proponent_node(
         if hasattr(last_msg, 'content'):
             response_content = last_msg.content
     
-    logger.info(f"Proponent response length: {len(response_content)}")
+    logger.info(f"External AI responses collected, length: {len(response_content)}")
     
     return Command(
         update={
             **preserve_state_meta_fields(state),
             "messages": result.get("messages", []),
-            "proponent_response": response_content,
+            "external_ai_responses": response_content,  # Store all external AI responses
         },
-        goto="debate_orchestrator"  # Route back to orchestrator for parallel collection
-    )
-
-
-async def opponent_node(
-    state: State, config: RunnableConfig
-) -> Command[Literal["debate_orchestrator"]]:
-    """Opponent node - arguments AGAINST the question."""
-    logger.info("Opponent presenting arguments AGAINST")
-    configurable = Configuration.from_runnable_config(config)
-    locale = state.get("locale", "en-US")
-    
-    # Get web search and other tools for aggressive usage
-    tools = [get_web_search_tool(configurable.max_search_results), crawl_tool]
-    
-    # Build prompt for opponent
-    messages = apply_prompt_template("opponent", state, configurable, locale)
-    
-    # Create agent for opponent
-    llm_token_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["opponent"])
-    pre_model_hook = partial(ContextManager(llm_token_limit, 3).compress_messages)
-    agent = create_agent(
-        "opponent",
-        "opponent",
-        tools,
-        "opponent",
-        pre_model_hook,
-        interrupt_before_tools=configurable.interrupt_before_tools,
-        locale=locale,
-    )
-    
-    # Execute agent
-    result = await agent.ainvoke(state, config)
-    
-    # Extract response - agent returns dict with "messages" key
-    response_content = ""
-    if result and "messages" in result and len(result["messages"]) > 0:
-        last_msg = result["messages"][-1]
-        if hasattr(last_msg, 'content'):
-            response_content = last_msg.content
-    
-    logger.info(f"Opponent response length: {len(response_content)}")
-    
-    return Command(
-        update={
-            **preserve_state_meta_fields(state),
-            "messages": result.get("messages", []),
-            "opponent_response": response_content,
-        },
-        goto="debate_orchestrator"  # Route back to orchestrator for parallel collection
+        goto="fact_checker"  # Route to fact_checker to verify the external AI claims
     )
 
 
 async def fact_checker_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["debate_orchestrator"]]:
-    """Fact checker node - verifies claims from both sides."""
-    logger.info("Fact checker verifying claims")
+) -> Command[Literal["synthesizer"]]:
+    """Fact checker node - verifies claims from external AI models."""
+    logger.info("Fact checker verifying external AI claims")
     configurable = Configuration.from_runnable_config(config)
     locale = state.get("locale", "en-US")
     
@@ -2826,7 +2707,7 @@ async def fact_checker_node(
             "messages": result.get("messages", []),
             "fact_checker_response": response_content,
         },
-        goto="debate_orchestrator"  # Route back to orchestrator for parallel collection (completes parallel phase)
+        goto="synthesizer"  # Route to synthesizer to integrate external AI perspectives
     )
 
 
@@ -2957,21 +2838,17 @@ async def moderator_node(
                 "messages": [summary_msg],
                 "debate_scores": scores,
                 "debate_knockout": knockout,
-                "debate_phase": "moderation_complete",  # Signal orchestrator to check for next round
             },
-            goto="debate_orchestrator"
+            goto="debate_orchestrator"  # Route back for next round
         )
         
     except (json.JSONDecodeError, KeyError) as e:
         logger.error(f"Failed to parse moderator response: {e}")
         logger.error(f"Response content: {response_content[:500]}")
         
-        # Fallback: give equal scores and continue
-        scores["proponent"] += 1
-        scores["opponent"] += 1
-        
+        # Fallback: simple scores
         summary_msg = AIMessage(
-            content=f"Runda {current_round}: Kunde inte bedöma ordentligt. Båda sidor får 1 poäng.",
+            content=f"Runda {current_round}: Kunde inte bedöma ordentligt.",
             name="moderator"
         )
         
@@ -2981,7 +2858,6 @@ async def moderator_node(
                 "messages": [summary_msg],
                 "debate_scores": scores,
                 "debate_knockout": False,
-                "debate_phase": "moderation_complete",  # Signal orchestrator to check for next round
             },
-            goto="debate_orchestrator"
+            goto="debate_orchestrator"  # Route back for next round
         )
