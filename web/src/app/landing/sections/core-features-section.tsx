@@ -2,11 +2,14 @@
 // SPDX-License-Identifier: MIT
 
 import {
-  Bird,
-  Microscope,
+  Search,
+  MessageSquare,
   Podcast,
-  Usb,
-  User,
+  Eye,
+  ShieldCheck,
+  UserX,
+  RefreshCw,
+  Database,
   type LucideProps,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -26,29 +29,44 @@ type FeatureIcon = {
 
 const featureIcons: Array<FeatureIcon> = [
   {
-    Icon: Microscope,
-    href: "https://github.com/bytedance/deer-flow/blob/main/src/tools",
-    className: "lg:col-start-1 lg:col-end-2 lg:row-start-1 lg:row-end-3",
+    Icon: Database,
+    href: "",
+    className: "lg:col-start-1 lg:col-end-2 lg:row-start-1 lg:row-end-2",
   },
   {
-    Icon: User,
-    href: "https://github.com/bytedance/deer-flow/blob/main/src/graph/nodes.py",
-    className: "lg:col-start-1 lg:col-end-2 lg:row-start-3 lg:row-end-4",
-  },
-  {
-    Icon: Bird,
-    href: "https://www.langchain.com/",
+    Icon: Search,
+    href: "",
     className: "lg:col-start-2 lg:col-end-3 lg:row-start-1 lg:row-end-2",
   },
   {
-    Icon: Usb,
-    href: "https://github.com/bytedance/deer-flow/blob/main/src/graph/nodes.py",
-    className: "lg:col-start-2 lg:col-end-3 lg:row-start-2 lg:row-end-3",
+    Icon: MessageSquare,
+    href: "",
+    className: "lg:col-start-1 lg:col-end-2 lg:row-start-2 lg:row-end-3",
   },
   {
     Icon: Podcast,
-    href: "https://github.com/bytedance/deer-flow/blob/main/src/podcast",
+    href: "",
+    className: "lg:col-start-2 lg:col-end-3 lg:row-start-2 lg:row-end-3",
+  },
+  {
+    Icon: Eye,
+    href: "",
+    className: "lg:col-start-1 lg:col-end-2 lg:row-start-3 lg:row-end-4",
+  },
+  {
+    Icon: ShieldCheck,
+    href: "",
     className: "lg:col-start-2 lg:col-end-3 lg:row-start-3 lg:row-end-4",
+  },
+  {
+    Icon: UserX,
+    href: "",
+    className: "lg:col-start-1 lg:col-end-2 lg:row-start-4 lg:row-end-5",
+  },
+  {
+    Icon: RefreshCw,
+    href: "",
+    className: "lg:col-start-2 lg:col-end-3 lg:row-start-4 lg:row-end-5",
   },
 ];
 
@@ -67,7 +85,7 @@ export function CoreFeatureSection() {
         title={t("title")}
         description={t("description")}
       />
-      <BentoGrid className="w-3/4 lg:grid-cols-2 lg:grid-rows-3">
+      <BentoGrid className="w-3/4 lg:grid-cols-2 lg:grid-rows-4">
         {features.map((feature, index) => {
           const iconData = featureIcons[index];
           return iconData ? (
