@@ -23,4 +23,11 @@ AGENT_LLM_MAP: dict[str, LLMType] = {
     "debate": "basic",
     "debate_planner": "basic",
     "code_planner": "basic",
+    # New debate chain agents
+    "debate_orchestrator": "basic",
+    "proponent": "basic",
+    "opponent": "basic",
+    "fact_checker": "basic",
+    "synthesizer": "basic",
+    "moderator": "basic",
 }

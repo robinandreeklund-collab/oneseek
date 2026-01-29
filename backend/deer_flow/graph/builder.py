@@ -21,6 +21,14 @@ from .nodes import (
     research_team_node,
     researcher_node,
     tester_node,
+    # New debate chain nodes
+    debate_orchestrator_node,
+    debate_team_node,
+    proponent_node,
+    opponent_node,
+    fact_checker_node,
+    synthesizer_node,
+    moderator_node,
 )
 from .types import State
 import json
@@ -70,6 +78,34 @@ def continue_to_running_research_team(state: State):
     return "planner"
 
 
+def _build_debate_team_subgraph():
+    """
+    Build the debate team sub-graph with specialized debate nodes.
+    
+    Flow: proponent → opponent → fact_checker → synthesizer → moderator
+    
+    Returns a compiled sub-graph.
+    """
+    debate_builder = StateGraph(State)
+    
+    # Add debate team nodes
+    debate_builder.add_node("proponent", proponent_node)
+    debate_builder.add_node("opponent", opponent_node)
+    debate_builder.add_node("fact_checker", fact_checker_node)
+    debate_builder.add_node("synthesizer", synthesizer_node)
+    debate_builder.add_node("moderator", moderator_node)
+    
+    # Wire them in sequence
+    debate_builder.add_edge(START, "proponent")
+    debate_builder.add_edge("proponent", "opponent")
+    debate_builder.add_edge("opponent", "fact_checker")
+    debate_builder.add_edge("fact_checker", "synthesizer")
+    debate_builder.add_edge("synthesizer", "moderator")
+    # moderator routes back to debate_orchestrator via Command
+    
+    return debate_builder.compile()
+
+
 def _build_base_graph():
     """Build and return the base state graph with all nodes and edges."""
     builder = StateGraph(State)
@@ -87,13 +123,26 @@ def _build_base_graph():
     builder.add_node("coder", coder_node)
     builder.add_node("tester", tester_node)
     builder.add_node("human_feedback", human_feedback_node)
+    
+    # Add new debate chain nodes
+    builder.add_node("debate_orchestrator", debate_orchestrator_node)
+    # debate_team is implemented as a sub-graph, but we can add it as a placeholder
+    # Actually, let's wire the debate nodes directly for simplicity
+    builder.add_node("proponent", proponent_node)
+    builder.add_node("opponent", opponent_node)
+    builder.add_node("fact_checker", fact_checker_node)
+    builder.add_node("synthesizer", synthesizer_node)
+    builder.add_node("moderator", moderator_node)
+    
+    # Wire standard edges
     builder.add_edge("background_investigator", "planner")
     # AI comparison returns Command(goto="reporter") to go directly to reporter.
     # This avoids looping through research_team which would trigger researcher repeatedly.
     # It executes all tools internally before routing to reporter.
     #
-    # Debate mode follows the standard research workflow:
-    # coordinator → debate_planner → human_feedback → research_team → researcher (with debate tools) → reporter
+    # NEW: Separate debate chain:
+    # coordinator → debate_planner → human_feedback → debate_orchestrator → debate_team (proponent → opponent → fact_checker → synthesizer → moderator) → debate_orchestrator → reporter
+    # debate_orchestrator manages rounds and routes between debate_team and reporter
     #
     # Code planner mode follows structured code development workflow:
     # coordinator → code_planner → human_feedback → research_team → coder/tester (with code/test tools) → reporter
@@ -101,6 +150,17 @@ def _build_base_graph():
     # Code router: coordinator can route directly to coder for simple code questions
     # coordinator → coder → __end__ (direct response)
     # The coder node determines whether to go to __end__ or research_team based on context
+    
+    # Wire debate chain edges (debate nodes use Command to route)
+    # debate_planner already routes to human_feedback
+    # We need to update human_feedback to route to debate_orchestrator for debate mode
+    # debate_orchestrator routes to proponent (start of debate team sequence)
+    builder.add_edge("proponent", "opponent")
+    builder.add_edge("opponent", "fact_checker")
+    builder.add_edge("fact_checker", "synthesizer")
+    builder.add_edge("synthesizer", "moderator")
+    # moderator and debate_orchestrator use Command to route dynamically
+    
     builder.add_conditional_edges(
         "research_team",
         continue_to_running_research_team,

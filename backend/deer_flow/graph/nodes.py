@@ -828,11 +828,26 @@ def extract_plan_content(plan_data: str | dict | Any) -> str:
 
 def human_feedback_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["planner", "research_team", "reporter", "__end__"]]:
+) -> Command[Literal["planner", "research_team", "reporter", "debate_orchestrator", "__end__"]]:
     coder_flag = state.get('coder_just_completed', False)
     logger.info(f"[human_feedback_node] ENTERED - coder_just_completed={coder_flag}")
     logger.info(f"[human_feedback_node] State keys: {list(state.keys())}")
     logger.info(f"[human_feedback_node] 'coder_just_completed' in state: {'coder_just_completed' in state}")
+    
+    # Check if this is from debate_planner - route to debate_orchestrator
+    if state.get("enable_debate_mode", False):
+        logger.info("[human_feedback_node] Debate mode detected, routing to debate_orchestrator")
+        # Initialize debate state
+        return Command(
+            update={
+                "debate_round": 0,
+                "debate_max_rounds": 3,
+                "debate_scores": {"proponent": 0, "opponent": 0},
+                "debate_knockout": False,
+                **preserve_state_meta_fields(state),
+            },
+            goto="debate_orchestrator"
+        )
     
     # Check if coder just completed - if so, ask about testing
     if coder_flag:
@@ -2485,3 +2500,278 @@ Provide a comprehensive debate report with all rounds, voting results, and concl
             os.environ["AGENT_RECURSION_LIMIT"] = original_recursion_limit
         elif "AGENT_RECURSION_LIMIT" in os.environ:
             del os.environ["AGENT_RECURSION_LIMIT"]
+
+# ============================================================
+# NEW SEPARATE DEBATE CHAIN NODES
+# ============================================================
+
+async def debate_orchestrator_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["debate_team", "reporter"]]:
+    """
+    Debate orchestrator node - manages rounds, scores, and exit criteria.
+    
+    This is the conductor that:
+    1. Tracks current round number
+    2. Routes to debate_team for each round
+    3. Collects scores from moderator
+    4. Determines when to exit (rounds complete, knockout, consensus)
+    5. Routes to reporter when debate is complete
+    """
+    logger.info("Debate orchestrator starting")
+    configurable = Configuration.from_runnable_config(config)
+    
+    # Get debate state
+    current_round = state.get("debate_round", 0)
+    max_rounds = state.get("debate_max_rounds", 3)
+    scores = state.get("debate_scores", {"proponent": 0, "opponent": 0})
+    knockout = state.get("debate_knockout", False)
+    
+    # Increment round
+    current_round += 1
+    logger.info(f"Starting debate round {current_round}/{max_rounds}")
+    
+    # Check exit criteria
+    should_exit = False
+    exit_reason = None
+    
+    if current_round > max_rounds:
+        should_exit = True
+        exit_reason = f"{max_rounds} rundor uppnått"
+        logger.info(f"Max rounds reached: {max_rounds}")
+    elif knockout:
+        should_exit = True
+        exit_reason = "Knockout-argument identifierat"
+        logger.info("Knockout detected in previous round")
+    elif abs(scores["proponent"] - scores["opponent"]) >= 3:
+        should_exit = True
+        exit_reason = f"Betydande poängledning: {max(scores.values())} - {min(scores.values())}"
+        logger.info(f"Significant score lead: {scores}")
+    
+    # Decide routing
+    if should_exit:
+        logger.info(f"Debate ending: {exit_reason}")
+        # Add summary to state for reporter
+        summary_msg = AIMessage(
+            content=json.dumps({
+                "final_round": current_round - 1,
+                "final_scores": scores,
+                "exit_reason": exit_reason,
+                "winner": "proponent" if scores["proponent"] > scores["opponent"] else "opponent"
+            }, ensure_ascii=False, indent=2),
+            name="debate_orchestrator"
+        )
+        
+        return Command(
+            update={
+                **preserve_state_meta_fields(state),
+                "messages": [summary_msg],
+                "debate_complete": True,
+            },
+            goto="reporter"
+        )
+    else:
+        logger.info(f"Continuing to debate_team for round {current_round}")
+        return Command(
+            update={
+                **preserve_state_meta_fields(state),
+                "debate_round": current_round,
+            },
+            goto="debate_team"
+        )
+
+
+async def debate_team_node(state: State, config: RunnableConfig):
+    """
+    Debate team sub-graph that runs the specialized debate nodes in sequence:
+    proponent → opponent → fact_checker → synthesizer → moderator
+    
+    Each node has its own dedicated prompt and role in the debate.
+    """
+    logger.info("Debate team starting for round %s", state.get("debate_round", 1))
+    
+    # This is a placeholder that will be replaced by the sub-graph
+    # The actual execution happens through the sub-graph edges
+    pass
+
+
+async def proponent_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["debate_team"]]:
+    """Proponent node - arguments FOR the question."""
+    logger.info("Proponent presenting arguments FOR")
+    configurable = Configuration.from_runnable_config(config)
+    
+    # Get web search and other tools for aggressive usage
+    tools = [get_web_search_tool(), crawl_tool]
+    
+    # Use _setup_and_execute_agent_step pattern
+    return await _setup_and_execute_agent_step(
+        state,
+        config,
+        "proponent",
+        tools,
+    )
+
+
+async def opponent_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["debate_team"]]:
+    """Opponent node - arguments AGAINST the question."""
+    logger.info("Opponent presenting arguments AGAINST")
+    configurable = Configuration.from_runnable_config(config)
+    
+    # Get web search and other tools for aggressive usage
+    tools = [get_web_search_tool(), crawl_tool]
+    
+    # Use _setup_and_execute_agent_step pattern
+    return await _setup_and_execute_agent_step(
+        state,
+        config,
+        "opponent",
+        tools,
+    )
+
+
+async def fact_checker_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["debate_team"]]:
+    """Fact checker node - verifies claims from both sides."""
+    logger.info("Fact checker verifying claims")
+    configurable = Configuration.from_runnable_config(config)
+    
+    # Get web search and other tools for verification
+    tools = [get_web_search_tool(), crawl_tool]
+    
+    # Use _setup_and_execute_agent_step pattern
+    return await _setup_and_execute_agent_step(
+        state,
+        config,
+        "fact_checker",
+        tools,
+    )
+
+
+async def synthesizer_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["debate_team"]]:
+    """Synthesizer node - creates superior synthesis from both sides."""
+    logger.info("Synthesizer creating integrated position")
+    configurable = Configuration.from_runnable_config(config)
+    
+    # Get web search and other tools for additional context
+    tools = [get_web_search_tool(), crawl_tool]
+    
+    # Use _setup_and_execute_agent_step pattern
+    return await _setup_and_execute_agent_step(
+        state,
+        config,
+        "synthesizer",
+        tools,
+    )
+
+
+async def moderator_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["debate_orchestrator"]]:
+    """
+    Moderator node - summarizes round, gives scores, determines winner.
+    
+    This node:
+    1. Summarizes the round
+    2. Gives scores (0-3) to proponent and opponent
+    3. Determines round winner
+    4. Checks for knockout arguments
+    5. Updates debate scores in state
+    6. Routes back to debate_orchestrator
+    """
+    logger.info("Moderator evaluating round")
+    configurable = Configuration.from_runnable_config(config)
+    locale = state.get("locale", "en-US")
+    
+    # Get debate state
+    current_round = state.get("debate_round", 1)
+    scores = state.get("debate_scores", {"proponent": 0, "opponent": 0})
+    
+    # Build prompt for moderator
+    messages = apply_prompt_template("moderator", state, configurable, locale)
+    
+    # Add context about current scores
+    messages.append({
+        "role": "system",
+        "content": f"Detta är runda {current_round}. Nuvarande poängställning: Proponent {scores['proponent']} - Opponent {scores['opponent']}"
+    })
+    
+    # Get LLM
+    llm = get_llm_by_type(AGENT_LLM_MAP["moderator"])
+    llm = configure_llm_with_thinking(llm, enable_thinking=False)
+    
+    # Invoke LLM
+    response = await llm.ainvoke(messages)
+    response_content = get_message_content(response) or ""
+    
+    # Parse moderator response (expecting JSON)
+    try:
+        # Strip think tags and markdown fences
+        cleaned_response = strip_think_tags(response_content, expect_json=True)
+        if cleaned_response.startswith("```"):
+            lines = cleaned_response.split('\n')
+            if len(lines) > 0:
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            cleaned_response = '\n'.join(lines).strip()
+        
+        moderator_result = json.loads(cleaned_response)
+        
+        # Update scores
+        round_proponent_score = moderator_result.get("proponent_score", 0)
+        round_opponent_score = moderator_result.get("opponent_score", 0)
+        
+        scores["proponent"] += round_proponent_score
+        scores["opponent"] += round_opponent_score
+        
+        knockout = moderator_result.get("knockout", False)
+        
+        logger.info(f"Round {current_round} scores: Proponent +{round_proponent_score}, Opponent +{round_opponent_score}")
+        logger.info(f"Total scores: Proponent {scores['proponent']}, Opponent {scores['opponent']}")
+        logger.info(f"Knockout: {knockout}")
+        
+        # Create summary message
+        summary_msg = AIMessage(
+            content=json.dumps(moderator_result, ensure_ascii=False, indent=2),
+            name="moderator"
+        )
+        
+        return Command(
+            update={
+                **preserve_state_meta_fields(state),
+                "messages": [summary_msg],
+                "debate_scores": scores,
+                "debate_knockout": knockout,
+            },
+            goto="debate_orchestrator"
+        )
+        
+    except (json.JSONDecodeError, KeyError) as e:
+        logger.error(f"Failed to parse moderator response: {e}")
+        logger.error(f"Response content: {response_content[:500]}")
+        
+        # Fallback: give equal scores and continue
+        scores["proponent"] += 1
+        scores["opponent"] += 1
+        
+        summary_msg = AIMessage(
+            content=f"Runda {current_round}: Kunde inte bedöma ordentligt. Båda sidor får 1 poäng.",
+            name="moderator"
+        )
+        
+        return Command(
+            update={
+                **preserve_state_meta_fields(state),
+                "messages": [summary_msg],
+                "debate_scores": scores,
+                "debate_knockout": False,
+            },
+            goto="debate_orchestrator"
+        )
