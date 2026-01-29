@@ -2255,6 +2255,15 @@ async def ai_comparison_node(
     Executes AI comparison agent with tools, then goes directly to reporter.
     Does NOT use research_team routing to avoid loops.
     """
+    # CRITICAL: Do NOT run ai_comparison when debate_mode is enabled
+    # Debate uses completely separate chain with debate_tools
+    if state.get("enable_debate_mode", False):
+        logger.warning("AI Comparison node called with debate_mode=True - this should NOT happen! Skipping ai_comparison.")
+        return Command(
+            update=preserve_state_meta_fields(state),
+            goto="reporter"
+        )
+    
     logger.info("AI Comparison node starting - Debate OS mode")
     
     configurable = Configuration.from_runnable_config(config)
