@@ -326,9 +326,12 @@ def _get_model_token_limit_defaults() -> dict[str, int]:
         "doubao": 200000,
         # DeepSeek
         "deepseek": 100000,
-        # Ollama/local
-        "qwen": 30000,
-        "llama": 4000,
+        # Ollama/local - note: these are conservative defaults
+        # Users should set token_limit explicitly in conf.yaml for their VLLM models
+        "qwen": 128000,  # Updated: Qwen2.5 supports up to 128K
+        "qwen2.5": 128000,
+        "llama": 128000,  # Llama 3+ supports 128K
+        "llama-3": 128000,
         # Default fallback for unknown models
         "default": 100000,
     }

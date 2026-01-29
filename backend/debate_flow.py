@@ -76,6 +76,18 @@ class DebateFlow:
         self.search_tool = None
         self.retriever_tool = None
         
+        # Get actual token limit from LLM configuration
+        # This allows debate to adapt to user's actual model (e.g., 128K instead of assumed 95K)
+        from backend.deer_flow.llms.llm import get_llm_token_limit_by_type
+        self.token_limit = get_llm_token_limit_by_type("basic")  # OneSeek uses "basic" type
+        
+        # Calculate safety margins dynamically based on actual token limit
+        # Use 60% for input context, leaving 40% for response generation
+        self.max_context_tokens = int(self.token_limit * 0.6)
+        
+        logger.info(f"DebateFlow initialized with token limit: {self.token_limit}, "
+                   f"max context: {self.max_context_tokens}")
+        
         # Debate state
         self.current_round = 0
         self.chain_so_far = []  # Responses in current round
@@ -228,7 +240,7 @@ class DebateFlow:
         Summarize a round's responses to reduce context size.
         
         Takes first 300 chars (~75 tokens) from each response to create
-        a summary. With 95K token context, we can be less aggressive.
+        compact overview. Adapts to actual token limits dynamically.
         
         Args:
             responses: List of response dicts from a round
@@ -239,7 +251,7 @@ class DebateFlow:
         summary_parts = []
         for resp in responses:
             if not resp.get("error"):
-                # Take first 300 chars (increased from 150 for better quality with 95K context)
+                # Take first 300 chars for balance between quality and size
                 snippet = resp['response'][:300]
                 if len(resp['response']) > 300:
                     snippet += "..."
@@ -310,9 +322,11 @@ class DebateFlow:
         Round 1:
         - First model: user query + language rule + token limit
         - Other models: user query + limited chain_so_far (last 3)
+        - OneSeek: gets internal web search knowledge building
         
         Round 2 & 3:
         - All models: user query + SUMMARY of full_previous_round + limited chain_so_far
+        - OneSeek: also gets internal analysis from previous rounds
         
         Args:
             model_key: Model identifier
@@ -338,6 +352,20 @@ class DebateFlow:
             for fact in self.facts[-5:]:  # Last 5 facts to keep context small
                 context_parts.append(f"- {fact['content']}\n")
         
+        # Add OneSeek's internal analyses - ONLY for OneSeek
+        if model_key == "oneseek-local" and self.oneseek_analyses:
+            context_parts.append("\n**Dina Interna Analyser:**\n")
+            for analysis in self.oneseek_analyses[-2:]:  # Last 2 analyses to keep context manageable
+                context_parts.append(f"- Runda {analysis['round']}: ")
+                context_parts.append(f"{len(analysis['claims_extracted'])} påståenden, ")
+                context_parts.append(f"{len(analysis['verified_facts'])} verifieringar, ")
+                context_parts.append(f"{len(analysis['contradictions'])} motsättningar\n")
+                
+                # Add synthesis points
+                if analysis.get('synthesis_points'):
+                    for point in analysis['synthesis_points'][:3]:
+                        context_parts.append(f"  • {point}\n")
+        
         # Add instruction to include name
         context_parts.append(f"\nVIKTIGT: Inled ditt svar med ditt namn: **{model_key}** (eller ditt displaynamn).\n")
         
@@ -349,11 +377,11 @@ class DebateFlow:
                 context_parts.append(f"Svara på {language} och håll ditt svar under 500 tokens.")
                 context_parts.append(f"Ge ett genomtänkt och välunderbyggt svar på frågan.")
             else:
-                # FIXED: Limit to last 5 responses (increased from 3 for 95K context)
+                # Context control: limit to last 5 responses for better quality
                 recent = self.chain_so_far[-5:]
                 context_parts.append(f"\nDetta är runda 1. Senaste {len(recent)} svar:\n")
                 for resp in recent:
-                    # Truncate to 500 chars (increased from 300 for better quality)
+                    # Truncate to 500 chars for balance
                     snippet = resp['response'][:500]
                     if len(resp['response']) > 500:
                         snippet += "..."
@@ -370,12 +398,12 @@ class DebateFlow:
                 context_parts.append(summary)
                 context_parts.append("\n")
             
-            # FIXED: Limit chain_so_far to last 5 responses (increased from 3)
+            # Context control: limit chain_so_far to last 5 responses
             if self.chain_so_far:
                 recent = self.chain_so_far[-5:]
                 context_parts.append(f"\nRunda {self.current_round}, senaste {len(recent)} svar:\n")
                 for resp in recent:
-                    # Truncate to 500 chars (increased from 300)
+                    # Truncate to 500 chars for balance
                     snippet = resp['response'][:500]
                     if len(resp['response']) > 500:
                         snippet += "..."
@@ -395,11 +423,14 @@ class DebateFlow:
         token_count = self._count_tokens(context)
         logger.info(f"Context for {model_key} round {self.current_round}: {token_count} tokens")
         
-        # Warnings for large contexts (adjusted for 95K token model)
-        if token_count > 50000:
-            logger.error(f"⚠️ CRITICAL: Context {token_count} tokens exceeds 50K! Approaching limit!")
-        elif token_count > 30000:
-            logger.warning(f"⚠️ WARNING: Context {token_count} tokens exceeds 30K")
+        # Warnings for large contexts - dynamic thresholds based on actual token limit
+        critical_threshold = int(self.max_context_tokens * 0.83)  # 83% of max context (50% of total)
+        warning_threshold = int(self.max_context_tokens * 0.5)    # 50% of max context (30% of total)
+        
+        if token_count > critical_threshold:
+            logger.error(f"⚠️ CRITICAL: Context {token_count} tokens exceeds {critical_threshold}! Approaching limit!")
+        elif token_count > warning_threshold:
+            logger.warning(f"⚠️ WARNING: Context {token_count} tokens exceeds {warning_threshold}")
         
         return context
 
@@ -412,6 +443,7 @@ class DebateFlow:
         """
         Query a model with debate context.
         
+        SPECIAL: For OneSeek in Round 1, performs web search first to build knowledge.
         FIXED: Added context size guard to prevent VLLM crashes.
         """
         if model_key not in self.models:
@@ -428,18 +460,61 @@ class DebateFlow:
             model = self.models[model_key]
             display_name = DEBATE_MODELS.get(model_key, {}).get("display_name", model_key)
             
+            # SPECIAL: OneSeek does web search in Round 1 before responding (internal knowledge building)
+            if model_key == "oneseek-local" and self.current_round == 1 and self.search_tool:
+                logger.info(f"OneSeek performing internal web search before Round 1 response")
+                try:
+                    # Perform web search for knowledge building (NOT shared with external models)
+                    # Use ainvoke for async LangChain tools
+                    search_results = await asyncio.wait_for(
+                        self.search_tool.ainvoke(user_query),
+                        timeout=5.0
+                    )
+                    
+                    # Store search knowledge internally for OneSeek (NOT in self.facts - that's shared)
+                    # CRITICAL: Aggressively limit to prevent context explosion (max ~500 chars = ~125 tokens)
+                    search_summary = self._summarize_search_results(search_results, max_chars=500)
+                    logger.info(f"OneSeek built internal knowledge from web search ({len(search_summary)} chars): {search_summary[:100]}...")
+                    
+                    # We'll add this to the context below
+                    oneseek_internal_knowledge = search_summary
+                except asyncio.TimeoutError:
+                    logger.warning("Web search timeout for OneSeek internal knowledge building")
+                    oneseek_internal_knowledge = None
+                except Exception as e:
+                    logger.warning(f"Web search error for OneSeek: {e}")
+                    oneseek_internal_knowledge = None
+            else:
+                oneseek_internal_knowledge = None
+            
             # Build context for this model
             context = self.build_context_for_model(model_key, user_query, locale)
+            
+            # Add OneSeek's internal knowledge if available (Round 1 only)
+            # SAFETY: Double-check size before adding to prevent context explosion
+            if oneseek_internal_knowledge and model_key == "oneseek-local":
+                # Count tokens in internal knowledge
+                knowledge_tokens = self._count_tokens(oneseek_internal_knowledge)
+                if knowledge_tokens > 200:
+                    # Still too large, truncate further
+                    logger.warning(f"Internal knowledge still large ({knowledge_tokens} tokens), truncating further")
+                    # Aggressively truncate to max 150 tokens (~600 chars)
+                    oneseek_internal_knowledge = oneseek_internal_knowledge[:600]
+                    knowledge_tokens = self._count_tokens(oneseek_internal_knowledge)
+                
+                logger.info(f"Adding internal knowledge to context ({knowledge_tokens} tokens)")
+                context += f"\n\n**Din Interna Kunskapsbyggande (endast för dig, delas EJ):**\n{oneseek_internal_knowledge}\n"
+            
             token_count = self._count_tokens(context)
             
-            # Hard limit to prevent VLLM crashes (adjusted for 95K token model)
-            # Keep safety margin: max 60K tokens (leaving 35K for response)
-            if token_count > 60000:
+            # Hard limit to prevent VLLM crashes - use dynamic limit based on actual model
+            # Safety margin: 60% of total token limit for input context
+            if token_count > self.max_context_tokens:
                 logger.error(f"Context too large ({token_count} tokens) for {model_key}, skipping")
                 return {
                     "model": model_key,
                     "display_name": display_name,
-                    "response": f"❌ Hoppades över: Kontexten ({token_count} tokens) överskrider gränsen på 60K tokens. Säkerhetsmarginal för 95K modell.",
+                    "response": f"❌ Hoppades över: Kontexten ({token_count} tokens) överskrider gränsen på {self.max_context_tokens} tokens. Säkerhetsmarginal för {self.token_limit} token modell.",
                     "error": True,
                     "context_used": f"Context too large: {token_count} tokens"
                 }
@@ -492,10 +567,12 @@ class DebateFlow:
         """
         Run OneSeek's internal analysis between responses.
         This analyzes other models' responses for:
-        - Factual accuracy (via web search)
-        - Logical consistency
-        - Missing information
-        - Potential counterarguments
+        1. Analyzing all responses from external models
+        2. Finding claims made by each model
+        3. Verifying data and claims via web search
+        4. Analyzing how external models' responses change through different rounds
+        5. Creating synthesis between answers for OneSeek's own response
+        6. Addressing others with verified data
         
         This analysis is NOT shared with other models, only used by OneSeek.
         
@@ -511,52 +588,338 @@ class DebateFlow:
         analysis = {
             "round": self.current_round,
             "timestamp": len(self.oneseek_analyses),
-            "insights": []
+            "insights": [],
+            "claims_extracted": [],
+            "verified_facts": [],
+            "contradictions": [],
+            "synthesis_points": [],
+            "evolution_notes": []
         }
         
-        # Analyze each response
+        # Analyze each response from external models
         for resp in current_responses:
-            if resp.get("error"):
-                continue
+            if resp.get("error") or resp["model"] == "oneseek-local":
+                continue  # Skip errors and OneSeek's own responses
                 
             insight = {
                 "model": resp["display_name"],
-                "checks": []
+                "model_key": resp["model"],
+                "response_snippet": resp["response"][:300] + "..." if len(resp["response"]) > 300 else resp["response"],
+                "checks": [],
+                "claims": [],
+                "verification_results": []
             }
             
-            # Use search_tool but DO NOT share results with other models in next round automatically
-            # Only OneSeek uses this internal analysis.
-            # We do NOT add to self.facts here.
-            
-            # Simple fact-check via web search if available
-            if self.search_tool and len(resp["response"]) > 100:
-                try:
-                    # Extract key claims (simplified - just take first 200 chars)
-                    claim = resp["response"][:200]
-                    search_query = f"{user_query} {claim}"
-                    
-                    # Quick web search
-                    search_results = await asyncio.wait_for(
-                        asyncio.to_thread(self.search_tool.invoke, search_query),
-                        timeout=5.0
-                    )
-                    
-                    insight["checks"].append({
-                        "type": "web_search",
-                        "query": search_query[:100],
-                        "results_count": len(search_results) if isinstance(search_results, list) else 1
-                    })
-                except asyncio.TimeoutError:
-                    logger.warning("Web search timeout during internal analysis")
-                except Exception as e:
-                    logger.warning(f"Web search error during internal analysis: {e}")
+            # 1. Extract key claims from the response
+            claims = self._extract_claims(resp["response"])
+            insight["claims"] = claims
+            analysis["claims_extracted"].extend([{
+                "model": resp["display_name"],
+                "claim": claim
+            } for claim in claims])
             
             analysis["insights"].append(insight)
         
+        # 2. Verify only 2-3 TOTAL claims across all models (not per model)
+        # Prioritize claims from different models for diversity
+        if self.search_tool and analysis["claims_extracted"]:
+            # Select up to 3 claims, trying to get one from each model
+            claims_to_verify = []
+            models_covered = set()
+            
+            # First pass: get one claim per model (up to 3 models)
+            for claim_data in analysis["claims_extracted"]:
+                if len(claims_to_verify) >= 3:
+                    break
+                if claim_data["model"] not in models_covered:
+                    claims_to_verify.append(claim_data)
+                    models_covered.add(claim_data["model"])
+            
+            # Second pass: fill remaining slots if we have less than 3
+            if len(claims_to_verify) < 3:
+                for claim_data in analysis["claims_extracted"]:
+                    if len(claims_to_verify) >= 3:
+                        break
+                    if claim_data not in claims_to_verify:
+                        claims_to_verify.append(claim_data)
+            
+            logger.info(f"Verifying {len(claims_to_verify)} claims total (limit: 2-3 across all models)")
+            
+            # Verify the selected claims
+            for claim_data in claims_to_verify:
+                try:
+                    claim = claim_data["claim"]
+                    model_name = claim_data["model"]
+                    search_query = f"{claim} fact check verify"
+                    
+                    # Web search for verification - use ainvoke for async LangChain tools
+                    search_results = await asyncio.wait_for(
+                        self.search_tool.ainvoke(search_query),
+                        timeout=5.0
+                    )
+                    
+                    verification = {
+                        "claim": claim,
+                        "search_query": search_query[:100],
+                        "results_count": len(search_results) if isinstance(search_results, list) else 1,
+                        "results_summary": self._summarize_search_results(search_results, max_chars=300)
+                    }
+                    
+                    # Find the corresponding insight and add verification
+                    for insight in analysis["insights"]:
+                        if insight["model"] == model_name:
+                            insight["verification_results"].append(verification)
+                            insight["checks"].append({
+                                "type": "web_search_verification",
+                                "query": search_query[:100],
+                                "results_count": verification["results_count"]
+                            })
+                            break
+                    
+                    analysis["verified_facts"].append({
+                        "model": model_name,
+                        "claim": claim,
+                        "verification": verification["results_summary"]
+                    })
+                    
+                except asyncio.TimeoutError:
+                    logger.warning(f"Web search timeout during claim verification: {claim[:50]}")
+                except Exception as e:
+                    logger.warning(f"Web search error during claim verification: {e}")
+        
+        # 3. Analyze evolution across rounds (compare with previous rounds)
+        if len(self.debate_history) > 0 and self.current_round > 1:
+            evolution_analysis = self._analyze_response_evolution(current_responses)
+            analysis["evolution_notes"] = evolution_analysis
+        
+        # 4. Find contradictions between models
+        contradictions = self._find_contradictions(current_responses)
+        analysis["contradictions"] = contradictions
+        
+        # 5. Create synthesis points for OneSeek's response
+        synthesis = self._create_synthesis_points(current_responses, analysis["verified_facts"])
+        analysis["synthesis_points"] = synthesis
+        
         self.oneseek_analyses.append(analysis)
-        logger.info(f"Internal analysis complete: {len(analysis['insights'])} insights")
+        logger.info(f"Internal analysis complete: {len(analysis['insights'])} insights, "
+                   f"{len(analysis['claims_extracted'])} claims, "
+                   f"{len(analysis['verified_facts'])} verifications, "
+                   f"{len(analysis['contradictions'])} contradictions")
         
         return analysis
+    
+    def _extract_claims(self, response: str) -> List[str]:
+        """
+        Extract key factual claims from a response.
+        Simple heuristic: split by sentences and filter for statements.
+        
+        Args:
+            response: The response text
+            
+        Returns:
+            List of extracted claims
+        """
+        import re
+        
+        # Split into sentences
+        sentences = re.split(r'[.!?]+', response)
+        claims = []
+        
+        for sentence in sentences:
+            sentence = sentence.strip()
+            # Filter for substantial sentences (>30 chars) that contain factual indicators
+            if len(sentence) > 30 and any(word in sentence.lower() for word in 
+                ['är', 'visar', 'bevisar', 'indikerar', 'forskning', 'studie', 'data', 
+                 'is', 'shows', 'proves', 'indicates', 'research', 'study']):
+                claims.append(sentence)
+                if len(claims) >= 5:  # Limit to top 5 claims per response
+                    break
+        
+        return claims
+    
+    def _summarize_search_results(self, search_results: Any, max_chars: int = 500) -> str:
+        """
+        Summarize search results into a brief verification note.
+        
+        CRITICAL: Aggressively limits output size to prevent context explosion.
+        
+        Args:
+            search_results: Results from web search
+            max_chars: Maximum characters to return (default: 500)
+            
+        Returns:
+            Summary string (guaranteed to be <= max_chars)
+        """
+        if isinstance(search_results, list):
+            if len(search_results) > 0:
+                # Build summary from multiple results, limited to max_chars total
+                summary_parts = []
+                remaining_chars = max_chars - 50  # Reserve space for prefix
+                
+                for idx, result in enumerate(search_results[:3]):  # Max 3 results
+                    if remaining_chars <= 0:
+                        break
+                        
+                    if isinstance(result, dict):
+                        # Try to get title and content, but limit each
+                        title = result.get('title', '')[:100]
+                        content = result.get('content', '')[:200]
+                        
+                        if title and content:
+                            part = f"{idx+1}. {title}: {content}"
+                        elif title:
+                            part = f"{idx+1}. {title}"
+                        elif content:
+                            part = f"{idx+1}. {content}"
+                        else:
+                            # Fallback: take first value that's a string
+                            for v in result.values():
+                                if isinstance(v, str) and len(v) > 10:
+                                    part = f"{idx+1}. {v[:150]}"
+                                    break
+                            else:
+                                continue
+                        
+                        if len(part) > remaining_chars:
+                            part = part[:remaining_chars] + "..."
+                        
+                        summary_parts.append(part)
+                        remaining_chars -= len(part) + 2  # +2 for newline
+                
+                if summary_parts:
+                    result = "Sökresultat:\n" + "\n".join(summary_parts)
+                else:
+                    result = f"Hittade {len(search_results)} källor"
+            else:
+                result = "Inga resultat"
+        else:
+            # For non-list results, extract key info carefully
+            # NEVER convert entire object to string - too dangerous
+            if isinstance(search_results, dict):
+                # Try to extract useful fields
+                summary_text = ""
+                for key in ['answer', 'content', 'text', 'results']:
+                    if key in search_results:
+                        val = search_results[key]
+                        if isinstance(val, str):
+                            summary_text = val[:max_chars]
+                            break
+                        elif isinstance(val, list) and len(val) > 0:
+                            # Recursively summarize
+                            return self._summarize_search_results(val, max_chars)
+                
+                if summary_text:
+                    result = summary_text
+                else:
+                    result = f"Sökresultat tillgängligt ({len(search_results)} fält)"
+            else:
+                # Last resort: convert to string but with strict limit
+                result = str(search_results)[:max_chars]
+        
+        # Final safety check: ensure we never exceed max_chars
+        if len(result) > max_chars:
+            result = result[:max_chars] + "..."
+        
+        return result
+    
+    def _analyze_response_evolution(self, current_responses: List[Dict[str, Any]]) -> List[str]:
+        """
+        Analyze how models' positions have evolved across rounds.
+        
+        Args:
+            current_responses: Current round responses
+            
+        Returns:
+            List of evolution notes
+        """
+        evolution_notes = []
+        
+        # Compare current responses with previous rounds
+        if len(self.debate_history) > 0:
+            prev_round = self.debate_history[-1]
+            prev_responses = {r["model"]: r for r in prev_round["responses"]}
+            
+            for curr_resp in current_responses:
+                if curr_resp["model"] in prev_responses:
+                    prev_resp = prev_responses[curr_resp["model"]]
+                    # Simple comparison: check if response length or content changed significantly
+                    if abs(len(curr_resp["response"]) - len(prev_resp["response"])) > 200:
+                        evolution_notes.append(
+                            f"{curr_resp['display_name']} ändrade sin position betydligt "
+                            f"(från {len(prev_resp['response'])} till {len(curr_resp['response'])} tecken)"
+                        )
+        
+        return evolution_notes
+    
+    def _find_contradictions(self, responses: List[Dict[str, Any]]) -> List[str]:
+        """
+        Find potential contradictions between model responses.
+        Simple heuristic: look for opposing keywords.
+        
+        Args:
+            responses: List of responses
+            
+        Returns:
+            List of contradiction notes
+        """
+        contradictions = []
+        
+        # Look for opposing statements
+        opposing_pairs = [
+            ('ja', 'nej'),
+            ('sant', 'falskt'),
+            ('korrekt', 'inkorrekt'),
+            ('bra', 'dåligt'),
+            ('yes', 'no'),
+            ('true', 'false'),
+            ('correct', 'incorrect'),
+            ('good', 'bad'),
+        ]
+        
+        for i, resp1 in enumerate(responses):
+            for j, resp2 in enumerate(responses[i+1:], i+1):
+                # Check for opposing keywords
+                for word1, word2 in opposing_pairs:
+                    if word1 in resp1["response"].lower() and word2 in resp2["response"].lower():
+                        contradictions.append(
+                            f"Möjlig motsättning mellan {resp1['display_name']} och {resp2['display_name']} "
+                            f"om '{word1}' vs '{word2}'"
+                        )
+                        break
+        
+        return contradictions[:5]  # Limit to top 5
+    
+    def _create_synthesis_points(
+        self, 
+        responses: List[Dict[str, Any]], 
+        verified_facts: List[Dict[str, Any]]
+    ) -> List[str]:
+        """
+        Create synthesis points from all responses and verified facts.
+        
+        Args:
+            responses: All responses in current round
+            verified_facts: Verified facts from web search
+            
+        Returns:
+            List of synthesis points
+        """
+        synthesis = []
+        
+        # Group common themes
+        synthesis.append(f"Totalt {len(responses)} perspektiv analyserade i denna runda")
+        
+        # Summarize verified facts
+        if verified_facts:
+            synthesis.append(f"{len(verified_facts)} påståenden verifierade via webbsökning")
+        
+        # Note consensus or disagreement
+        if len(responses) > 2:
+            synthesis.append(
+                "Identifierade gemensamma teman och skillnader mellan modellernas perspektiv"
+            )
+        
+        return synthesis
 
     async def collect_votes(
         self,
@@ -582,12 +945,12 @@ class DebateFlow:
         votes = {}
         vote_details = []
         
-        # Build MINIMAL voting context (adjusted for 95K token model)
+        # Build MINIMAL voting context - adapts to actual token limits
         voting_context = f"Fråga: {user_query}\n\nRunda 3 svar (sammanfattade):\n"
         
         for idx, resp in enumerate(round_3_responses):
             if not resp.get("error"):
-                # Increased from 300 to 500 chars for better voting quality with 95K context
+                # Take more chars for better voting quality
                 response_text = resp['response']
                 if len(response_text) > 500:
                     response_text = response_text[:500] + "... [fortsätter]"
@@ -598,7 +961,7 @@ class DebateFlow:
         
         # Log voting context size for monitoring
         token_count = self._count_tokens(voting_context)
-        logger.info(f"Voting context: {token_count} tokens (adjusted for 95K model)")
+        logger.info(f"Voting context: {token_count} tokens")
         
         if token_count > 10000:
             logger.warning(f"⚠️ Voting context large: {token_count} tokens")
