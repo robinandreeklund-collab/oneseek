@@ -465,8 +465,9 @@ class DebateFlow:
                 logger.info(f"OneSeek performing internal web search before Round 1 response")
                 try:
                     # Perform web search for knowledge building (NOT shared with external models)
+                    # Use ainvoke for async LangChain tools
                     search_results = await asyncio.wait_for(
-                        asyncio.to_thread(self.search_tool.invoke, user_query),
+                        self.search_tool.ainvoke(user_query),
                         timeout=5.0
                     )
                     
@@ -651,9 +652,9 @@ class DebateFlow:
                     model_name = claim_data["model"]
                     search_query = f"{claim} fact check verify"
                     
-                    # Web search for verification
+                    # Web search for verification - use ainvoke for async LangChain tools
                     search_results = await asyncio.wait_for(
-                        asyncio.to_thread(self.search_tool.invoke, search_query),
+                        self.search_tool.ainvoke(search_query),
                         timeout=5.0
                     )
                     
