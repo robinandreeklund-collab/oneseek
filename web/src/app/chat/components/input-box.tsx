@@ -203,19 +203,7 @@ export function InputBox({
           onChange={setCurrentPrompt}
         />
       </div>
-      <div className="flex items-center px-4 py-2">
-        <div className="flex grow gap-2">
-          <ModesDropUp />
-          <TrendingQuestionsDropUp
-            onSelectQuestion={(question) => {
-              if (inputRef.current) {
-                inputRef.current.setContent(question);
-                setCurrentPrompt(question);
-              }
-            }}
-          />
-          <ReportStyleDialog />
-        </div>
+      <div className="flex items-center justify-end px-4 pt-2 pb-1">
         <div className="flex shrink-0 items-center gap-2">
           <Tooltip title={t("enhancePrompt")}>
             <Button
@@ -254,6 +242,18 @@ export function InputBox({
             </Button>
           </Tooltip>
         </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
+        <ModesDropUp />
+        <TrendingQuestionsDropUp
+          onSelectQuestion={(question) => {
+            if (inputRef.current) {
+              inputRef.current.setContent(question);
+              setCurrentPrompt(question);
+            }
+          }}
+        />
+        <ReportStyleDialog />
       </div>
       {isEnhancing && (
         <>

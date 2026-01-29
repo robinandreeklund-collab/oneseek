@@ -1,14 +1,21 @@
 <svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
-  <title id="title">OneSeek Logo</title>
-  <desc id="desc">Abstract circular logo with gradient background and stylized OS initials</desc>
+  <title id="title">OneSeek Monogram</title>
+  <desc id="desc">Monochrome circular OneSeek monogram with intertwined O and S</desc>
   <defs>
-    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#111827"/>
-      <stop offset="50%" stop-color="#1f2937"/>
-      <stop offset="100%" stop-color="#0ea5e9"/>
+    <linearGradient id="mono" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f8fafc" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#cbd5e1" stop-opacity="0.9"/>
     </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
   </defs>
-  <circle cx="100" cy="100" r="92" fill="url(#grad)" />
-  <path d="M70 70c0-16 14-30 30-30s30 14 30 30-14 30-30 30-30 14-30 30 14 30 30 30 30-14 30-30" stroke="#38bdf8" stroke-width="10" fill="none" stroke-linecap="round" />
-  <text x="100" y="108" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-weight="700" font-size="42" fill="#e5e7eb">OS</text>
+  <circle cx="100" cy="100" r="88" fill="none" stroke="url(#mono)" stroke-width="6" opacity="0.8"/>
+  <path d="M80 115c0 14 10 25 22 25s22-11 22-25-10-25-22-25-22-11-22-25 10-25 22-25 22 11 22 25" fill="none" stroke="url(#mono)" stroke-width="10" stroke-linecap="round" filter="url(#glow)"/>
+  <path d="M70 65c12-16 48-16 60 0" fill="none" stroke="url(#mono)" stroke-width="6" stroke-linecap="round" opacity="0.7"/>
+  <path d="M70 135c12 16 48 16 60 0" fill="none" stroke="url(#mono)" stroke-width="6" stroke-linecap="round" opacity="0.7"/>
 </svg>
