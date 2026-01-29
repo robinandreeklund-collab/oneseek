@@ -2608,21 +2608,25 @@ async def debate_team_node(state: State, config: RunnableConfig):
 async def external_ai_caller_node(
     state: State, config: RunnableConfig
 ) -> Command[Literal["fact_checker"]]:
-    """External AI Caller node - calls real external AI models (Grok, Gemini, ChatGPT, DeepSeek)."""
-    logger.info("External AI Caller - querying real AI models")
+    """
+    External AI Caller node - orchestrates sequential debate rounds.
+    
+    Uses debate_tools to call models ONE AT A TIME in randomized order:
+    - start_debate_round() to initialize and randomize
+    - query_model_in_round() for each model sequentially
+    - debater_web_search() for fact verification
+    """
+    logger.info("External AI Caller - orchestrating sequential debate round")
     configurable = Configuration.from_runnable_config(config)
     locale = state.get("locale", "en-US")
     
-    # Import the AI comparison tools for querying external models
-    from backend.deer_flow.tools.ai_comparison_tools import (
-        query_grok4,
-        query_gemini_flash,
-        query_gpt35,
-        query_deepseek
-    )
+    # Import debate tools for sequential execution
+    from backend.deer_flow.tools.debate_tools import get_debate_tools
     
-    # Get AI comparison tools (includes query tools for external models)
-    tools = [query_grok4, query_gemini_flash, query_gpt35, query_deepseek]
+    # Get debate tools (includes start_debate_round, query_model_in_round, etc.)
+    tools = get_debate_tools()
+    
+    logger.info(f"External AI Caller using {len(tools)} debate tools for sequential execution")
     
     # Build prompt for external_ai_caller
     messages = apply_prompt_template("external_ai_caller", state, configurable, locale)
@@ -2640,7 +2644,7 @@ async def external_ai_caller_node(
         locale=locale,
     )
     
-    # Execute agent - it will call all 4 external AI models
+    # Execute agent - it will orchestrate sequential debate using debate_tools
     result = await agent.ainvoke(state, config)
     
     # Extract response - agent returns dict with "messages" key
@@ -2650,13 +2654,13 @@ async def external_ai_caller_node(
         if hasattr(last_msg, 'content'):
             response_content = last_msg.content
     
-    logger.info(f"External AI responses collected, length: {len(response_content)}")
+    logger.info(f"Debate round completed, response length: {len(response_content)}")
     
     return Command(
         update={
             **preserve_state_meta_fields(state),
             "messages": result.get("messages", []),
-            "external_ai_responses": response_content,  # Store all external AI responses
+            "external_ai_responses": response_content,  # Store debate round responses
         },
         goto="fact_checker"  # Route to fact_checker to verify the external AI claims
     )
