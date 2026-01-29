@@ -24,7 +24,6 @@ import { cn } from "~/lib/utils";
 export function ModesDropUp() {
   const t = useTranslations("chat.inputBox");
   const [isOpen, setIsOpen] = useState(false);
-  
   const enableDeepThinking = useSettingsStore(
     (state) => state.general.enableDeepThinking,
   );
@@ -83,7 +82,7 @@ export function ModesDropUp() {
         onClick={() => setIsOpen(!isOpen)}
       >
         <Settings className="h-3.5 w-3.5" />
-        Lägen {activeModesCount > 0 && `(${activeModesCount})`}
+        {t("modes")} {activeModesCount > 0 && `(${activeModesCount})`}
       </Button>
 
       {isOpen && (

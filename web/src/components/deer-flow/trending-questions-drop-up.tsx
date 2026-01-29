@@ -8,17 +8,17 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { Button } from "~/components/ui/button";
-import { cn } from "~/lib/utils";
 
 export function TrendingQuestionsDropUp({
   onSelectQuestion,
 }: {
   onSelectQuestion?: (question: string) => void;
 }) {
-  const t = useTranslations("chat");
+  const tChat = useTranslations("chat");
+  const tInputBox = useTranslations("chat.inputBox");
   const [isOpen, setIsOpen] = useState(false);
   
-  const questions = t.raw("conversationStarters") as string[];
+  const questions = tChat.raw("conversationStarters") as string[];
 
   const handleSelectQuestion = (question: string) => {
     onSelectQuestion?.(question);
@@ -34,7 +34,7 @@ export function TrendingQuestionsDropUp({
         onClick={() => setIsOpen(!isOpen)}
       >
         <TrendingUp className="h-3.5 w-3.5" />
-        Trendande frågor
+        {tInputBox("trendingQuestions")}
       </Button>
 
       {isOpen && (

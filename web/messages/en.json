@@ -136,6 +136,8 @@
         "description": "When enabled, all AI models (including OneSeek) participate in a 3-round debate with randomized order, sequential responses, and democratic voting. OneSeek provides synthesis in round 3."
       },
       "enhancePrompt": "Enhance prompt with AI",
+      "modes": "Modes",
+      "trendingQuestions": "Trending Questions",
       "on": "On",
       "off": "Off"
     },
