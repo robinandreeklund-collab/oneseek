@@ -739,9 +739,12 @@ async def _stream_graph_events(
                             f"value_len={len(getattr(event_data['__interrupt__'][0], 'value', '')) if hasattr(event_data['__interrupt__'][0], 'value') and hasattr(event_data['__interrupt__'][0].value, '__len__') else 'unknown'}"
                         )
                         yield _create_interrupt_event(thread_id, event_data)
+                        # Don't continue - we successfully yielded the interrupt event
+                        continue
                     else:
                         logger.debug(f"[{safe_thread_id}] Interrupt checkpoint detected but no interrupt data yet, skipping event")
-                logger.debug(f"[{safe_thread_id}] Dict event without interrupt, skipping")
+                else:
+                    logger.debug(f"[{safe_thread_id}] Dict event without interrupt, skipping")
                 continue
 
             message_chunk, message_metadata = cast(
