@@ -118,7 +118,7 @@ export function InputBox({
   return (
     <div
       className={cn(
-        "bg-card relative flex h-full w-full flex-col rounded-[24px] border",
+        "bg-card relative flex w-full flex-col rounded-[24px] border",
         className,
       )}
       ref={containerRef}
@@ -192,7 +192,7 @@ export function InputBox({
         </AnimatePresence>
         <MessageInput
           className={cn(
-            "flex-1 px-4 pt-5",
+            "px-4 pt-5",
             feedback && "pt-9",
             isEnhanceAnimating && "transition-all duration-500",
           )}

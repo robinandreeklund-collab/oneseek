@@ -173,7 +173,7 @@ const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
 
     if (loading) {
       return (
-        <div className={className}>
+        <div className={cn("flex min-h-24 max-h-40 flex-col items-center justify-center", className)}>
           <LoadingOutlined />
         </div>
       );
