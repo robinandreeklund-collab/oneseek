@@ -7,10 +7,8 @@ import { Welcome } from "./welcome";
 
 export function ConversationStarter({
   className,
-  onSend,
 }: {
   className?: string;
-  onSend?: (message: string) => void;
 }) {
   return (
     <div

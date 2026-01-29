@@ -108,7 +108,7 @@ export function MessagesBlock({ className }: { className?: string }) {
           onSendMessage={handleSend}
         />
       ) : (
-        <ConversationStarter onSend={handleSend} />
+        <ConversationStarter />
       )}
       {!isReplay ? (
         <div className="relative flex shrink-0 pb-4">
