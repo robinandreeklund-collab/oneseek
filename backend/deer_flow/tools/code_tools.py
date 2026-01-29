@@ -127,7 +127,13 @@ def ensure_workspace_requirements() -> str:
     This file contains all Python testing and development tools.
     Returns the path to the requirements file.
     """
-    workspace_root = Path(os.getenv("CODE_WORKSPACE_ROOT", tempfile.gettempdir())) / "oneseek_workspace"
+    # Get workspace root - use CODE_WORKSPACE_ROOT directly (no extra subdirectory)
+    # Only add 'oneseek_workspace' if using temp directory (fallback)
+    code_workspace = os.getenv("CODE_WORKSPACE_ROOT", None)
+    if code_workspace:
+        workspace_root = Path(code_workspace)
+    else:
+        workspace_root = Path(tempfile.gettempdir()) / "oneseek_workspace"
     workspace_root.mkdir(parents=True, exist_ok=True)
     
     requirements_path = workspace_root / "workspace_requirements.txt"
@@ -279,8 +285,13 @@ def file_system_tool(
         logger.warning(error_msg)
         return f"Tool disabled: {error_msg}"
     
-    # Get workspace root from environment or use temp directory
-    workspace_root = Path(os.getenv("CODE_WORKSPACE_ROOT", tempfile.gettempdir())) / "oneseek_workspace"
+    # Get workspace root - use CODE_WORKSPACE_ROOT directly (no extra subdirectory)
+    # Only add 'oneseek_workspace' if using temp directory (fallback)
+    code_workspace = os.getenv("CODE_WORKSPACE_ROOT", None)
+    if code_workspace:
+        workspace_root = Path(code_workspace)
+    else:
+        workspace_root = Path(tempfile.gettempdir()) / "oneseek_workspace"
     workspace_root.mkdir(parents=True, exist_ok=True)
     
     # Ensure workspace_requirements.txt exists in workspace
