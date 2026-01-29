@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   Sheet,
   SheetContent,
@@ -7,7 +7,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Card, CardContent } from "@/components/ui/card";
-import { XIcon, Clock, PlayCircle, CheckCircle } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { XIcon, Clock, PlayCircle, CheckCircle, FileText, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ToolAction } from "@/types/tool-action";
 
@@ -22,6 +23,8 @@ export function ToolActionDetailSidebar({
   onOpenChange,
   toolAction,
 }: ToolActionDetailSidebarProps) {
+  const [activeTab, setActiveTab] = useState("activities");
+  
   if (!toolAction) return null;
 
   const getColorClasses = (color: string) => {
@@ -35,6 +38,9 @@ export function ToolActionDetailSidebar({
   };
 
   const colors = getColorClasses(toolAction.color);
+  
+  // Extract workspace files if available
+  const workspaceFiles = (toolAction as any).workspace_files || [];
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -68,9 +74,22 @@ export function ToolActionDetailSidebar({
           </div>
         </div>
 
-        {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="p-6 space-y-6">
+        {/* Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
+          <TabsList className="grid w-full grid-cols-2 rounded-none border-b">
+            <TabsTrigger value="activities" className="flex items-center gap-2">
+              <Activity className="h-4 w-4" />
+              Aktiviteter
+            </TabsTrigger>
+            <TabsTrigger value="files" className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Filer
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Activities Tab */}
+          <TabsContent value="activities" className="flex-1 overflow-y-auto m-0">
+            <div className="p-6 space-y-6">
             {/* Status and Timing */}
             <Card>
               <CardContent className="p-4">
@@ -182,8 +201,77 @@ export function ToolActionDetailSidebar({
               </Card>
             )}
           </div>
-        </div>
+        </TabsContent>
+
+        {/* Files Tab */}
+        <TabsContent value="files" className="flex-1 overflow-y-auto m-0">
+          <div className="p-6">
+            {workspaceFiles && workspaceFiles.length > 0 ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-semibold">
+                    Workspace Filer ({workspaceFiles.length})
+                  </h3>
+                </div>
+                {workspaceFiles.map((file: any, index: number) => (
+                  <Card key={index} className="hover:bg-muted/50 transition-colors">
+                    <CardContent className="p-4">
+                      <div className="flex items-start gap-3">
+                        <FileText className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <h4 className="text-sm font-medium break-all">
+                              {file.path || file.name}
+                            </h4>
+                            {file.size && (
+                              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                {formatFileSize(file.size)}
+                              </span>
+                            )}
+                          </div>
+                          {file.content && (
+                            <div className="bg-muted/50 p-2 rounded text-xs font-mono overflow-x-auto max-h-32 overflow-y-auto">
+                              <pre className="whitespace-pre-wrap break-words">
+                                {file.content.substring(0, 500)}
+                                {file.content.length > 500 && '...'}
+                              </pre>
+                            </div>
+                          )}
+                          {file.type && (
+                            <div className="mt-2 text-xs text-muted-foreground">
+                              Type: {file.type}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <FileText className="h-12 w-12 text-muted-foreground/50 mb-4" />
+                <h3 className="text-sm font-medium text-muted-foreground mb-2">
+                  Inga filer skapade än
+                </h3>
+                <p className="text-xs text-muted-foreground/70 max-w-sm">
+                  Filer som skapas i workspace kommer att visas här
+                </p>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+      </Tabs>
       </SheetContent>
     </Sheet>
   );
+}
+
+// Helper function to format file size
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
 }

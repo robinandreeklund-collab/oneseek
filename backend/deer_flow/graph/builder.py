@@ -11,6 +11,7 @@ from .nodes import (
     analyst_node,
     background_investigation_node,
     coder_node,
+    code_planner_node,
     coordinator_node,
     debate_planner_node,
     extract_plan_content,
@@ -19,6 +20,7 @@ from .nodes import (
     reporter_node,
     research_team_node,
     researcher_node,
+    tester_node,
 )
 from .types import State
 import json
@@ -63,6 +65,8 @@ def continue_to_running_research_team(state: State):
         return "analyst"
     if incomplete_step.step_type == StepType.PROCESSING:
         return "coder"
+    if incomplete_step.step_type == StepType.TESTING:
+        return "tester"
     return "planner"
 
 
@@ -74,12 +78,14 @@ def _build_base_graph():
     builder.add_node("background_investigator", background_investigation_node)
     builder.add_node("ai_comparison", ai_comparison_node)
     builder.add_node("debate_planner", debate_planner_node)
+    builder.add_node("code_planner", code_planner_node)
     builder.add_node("planner", planner_node)
     builder.add_node("reporter", reporter_node)
     builder.add_node("research_team", research_team_node)
     builder.add_node("researcher", researcher_node)
     builder.add_node("analyst", analyst_node)
     builder.add_node("coder", coder_node)
+    builder.add_node("tester", tester_node)
     builder.add_node("human_feedback", human_feedback_node)
     builder.add_edge("background_investigator", "planner")
     # AI comparison returns Command(goto="reporter") to go directly to reporter.
@@ -89,13 +95,16 @@ def _build_base_graph():
     # Debate mode follows the standard research workflow:
     # coordinator → debate_planner → human_feedback → research_team → researcher (with debate tools) → reporter
     #
+    # Code planner mode follows structured code development workflow:
+    # coordinator → code_planner → human_feedback → research_team → coder/tester (with code/test tools) → reporter
+    #
     # Code router: coordinator can route directly to coder for simple code questions
     # coordinator → coder → __end__ (direct response)
     # The coder node determines whether to go to __end__ or research_team based on context
     builder.add_conditional_edges(
         "research_team",
         continue_to_running_research_team,
-        ["planner", "researcher", "analyst", "coder"],
+        ["planner", "researcher", "analyst", "coder", "tester"],
     )
     builder.add_edge("reporter", END)
     return builder

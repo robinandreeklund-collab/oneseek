@@ -11,14 +11,96 @@ import os
 import subprocess
 import tempfile
 import json
-from typing import Annotated, Optional, Dict, Any
+import threading
+from typing import Annotated, Optional, Dict, Any, List
 from pathlib import Path
+from datetime import datetime
 
 from langchain_core.tools import tool
 
 from .decorators import log_io
 
 logger = logging.getLogger(__name__)
+
+# Run-scoped storage for tracking workspace files
+# Using a simple global dict with automatic run_id generation
+_workspace_files_by_run: Dict[str, List[Dict[str, Any]]] = {}
+_workspace_files_lock = threading.Lock()
+_current_run_id: Dict[int, str] = {}  # Maps thread_id to run_id
+
+
+def set_current_run_id(run_id: str):
+    """Set the current run_id for this thread."""
+    thread_id = threading.get_ident()
+    _current_run_id[thread_id] = run_id
+    logger.info(f"Set run_id={run_id} for thread={thread_id}")
+
+
+def get_current_run_id() -> str:
+    """Get the current run_id for this thread, or 'default' if not set."""
+    thread_id = threading.get_ident()
+    return _current_run_id.get(thread_id, "default")
+
+
+def get_workspace_files(run_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Get the list of workspace files tracked for the given run."""
+    if run_id is None:
+        run_id = get_current_run_id()
+    
+    with _workspace_files_lock:
+        files = _workspace_files_by_run.get(run_id, [])
+        logger.info(f"Retrieved {len(files)} workspace files for run_id={run_id}")
+        return files.copy()  # Return copy to avoid external modifications
+
+
+def clear_workspace_files(run_id: Optional[str] = None):
+    """Clear the workspace files for the given run."""
+    if run_id is None:
+        run_id = get_current_run_id()
+    
+    with _workspace_files_lock:
+        if run_id in _workspace_files_by_run:
+            del _workspace_files_by_run[run_id]
+        logger.info(f"Cleared workspace files for run_id={run_id}")
+
+
+def track_workspace_file(path: str, operation: str, size: int = 0, content: Optional[str] = None, run_id: Optional[str] = None):
+    """Track a file operation in the workspace context for the given run."""
+    if run_id is None:
+        run_id = get_current_run_id()
+    
+    with _workspace_files_lock:
+        if run_id not in _workspace_files_by_run:
+            _workspace_files_by_run[run_id] = []
+        
+        files = _workspace_files_by_run[run_id]
+        
+        # Find existing entry for this path
+        existing = next((f for f in files if f['path'] == path), None)
+        
+        file_info = {
+            'path': path,
+            'name': os.path.basename(path),
+            'size': size,
+            'operation': operation,
+            'modified': datetime.now().isoformat()
+        }
+        
+        # Only include first 1000 chars of content to avoid huge payloads
+        if content and operation == 'write':
+            file_info['content'] = content[:1000] if len(content) > 1000 else content
+            file_info['truncated'] = len(content) > 1000
+        
+        if existing:
+            # Update existing entry
+            existing.update(file_info)
+            logger.info(f"[run_id={run_id}] Updated workspace file: {path}, operation: {operation}")
+        else:
+            # Add new entry
+            files.append(file_info)
+            logger.info(f"[run_id={run_id}] Tracking workspace file: {path}, operation: {operation}")
+        
+        logger.info(f"[run_id={run_id}] Current workspace files count: {len(files)}")
 
 
 def _is_linux_sandbox_enabled() -> bool:
@@ -37,6 +119,58 @@ def _is_react_sandbox_enabled() -> bool:
     """Check if React sandbox tool is enabled from configuration."""
     env_enabled = os.getenv("ENABLE_REACT_SANDBOX", "false").lower()
     return env_enabled in ("true", "1", "yes", "on")
+
+
+def ensure_workspace_requirements() -> str:
+    """
+    Ensure workspace_requirements.txt exists in the workspace root.
+    This file contains all Python testing and development tools.
+    Returns the path to the requirements file.
+    """
+    # Get workspace root - use CODE_WORKSPACE_ROOT directly (no extra subdirectory)
+    # Only add 'oneseek_workspace' if using temp directory (fallback)
+    code_workspace = os.getenv("CODE_WORKSPACE_ROOT", None)
+    if code_workspace:
+        workspace_root = Path(code_workspace)
+    else:
+        workspace_root = Path(tempfile.gettempdir()) / "oneseek_workspace"
+    workspace_root.mkdir(parents=True, exist_ok=True)
+    
+    requirements_path = workspace_root / "workspace_requirements.txt"
+    
+    # Content for workspace requirements
+    requirements_content = """# OneSeek Workspace Requirements
+# This file contains all Python testing and development tools needed for the workspace
+# Install with: pip install -r workspace_requirements.txt
+
+# Testing Framework
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-mock>=3.11.1
+
+# Code Quality & Linting
+pylint>=3.0.0
+flake8>=6.1.0
+black>=23.7.0
+isort>=5.12.0
+
+# Type Checking
+mypy>=1.5.0
+
+# Code Coverage
+coverage>=7.3.0
+
+# Common Development Dependencies
+requests>=2.31.0
+python-dotenv>=1.0.0
+"""
+    
+    # Create or update the requirements file if it doesn't exist
+    if not requirements_path.exists():
+        requirements_path.write_text(requirements_content, encoding='utf-8')
+        logger.info(f"Created workspace_requirements.txt at {requirements_path}")
+    
+    return str(requirements_path)
 
 
 @tool
@@ -62,6 +196,9 @@ def linux_sandbox_tool(
         error_msg = "Linux sandbox tool is disabled. Set ENABLE_LINUX_SANDBOX=true to enable."
         logger.warning(error_msg)
         return f"Tool disabled: {error_msg}"
+    
+    # Ensure workspace_requirements.txt exists
+    ensure_workspace_requirements()
     
     logger.info(f"Executing command in Linux sandbox: {command}")
     
@@ -148,9 +285,17 @@ def file_system_tool(
         logger.warning(error_msg)
         return f"Tool disabled: {error_msg}"
     
-    # Get workspace root from environment or use temp directory
-    workspace_root = Path(os.getenv("CODE_WORKSPACE_ROOT", tempfile.gettempdir())) / "oneseek_workspace"
+    # Get workspace root - use CODE_WORKSPACE_ROOT directly (no extra subdirectory)
+    # Only add 'oneseek_workspace' if using temp directory (fallback)
+    code_workspace = os.getenv("CODE_WORKSPACE_ROOT", None)
+    if code_workspace:
+        workspace_root = Path(code_workspace)
+    else:
+        workspace_root = Path(tempfile.gettempdir()) / "oneseek_workspace"
     workspace_root.mkdir(parents=True, exist_ok=True)
+    
+    # Ensure workspace_requirements.txt exists in workspace
+    ensure_workspace_requirements()
     
     # Resolve and validate path
     try:
@@ -179,6 +324,11 @@ def file_system_tool(
             
             target_path.parent.mkdir(parents=True, exist_ok=True)
             target_path.write_text(content, encoding='utf-8')
+            
+            # Track this file operation
+            file_size = len(content.encode('utf-8'))
+            track_workspace_file(path, operation, file_size, content)
+            
             return f"✓ Successfully wrote {len(content)} bytes to '{path}'"
         
         elif operation == "list":

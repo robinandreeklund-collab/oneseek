@@ -11,6 +11,7 @@ class StepType(str, Enum):
     RESEARCH = "research"
     ANALYSIS = "analysis"
     PROCESSING = "processing"
+    TESTING = "testing"
 
 
 class Step(BaseModel):

@@ -7,7 +7,16 @@ from .retriever import get_retriever_tool
 from .search import get_web_search_tool
 from .tts import OpenAITTS
 from .debate_tools import get_debate_tools
-from .code_tools import get_code_tools, linux_sandbox_tool, file_system_tool, react_sandbox_tool
+from .code_tools import (
+    get_code_tools, 
+    linux_sandbox_tool, 
+    file_system_tool, 
+    react_sandbox_tool,
+    get_workspace_files,
+    clear_workspace_files,
+    set_current_run_id,
+)
+from .test_tools import get_test_tools, python_test_tool, javascript_test_tool
 
 __all__ = [
     "crawl_tool",
@@ -20,4 +29,10 @@ __all__ = [
     "linux_sandbox_tool",
     "file_system_tool",
     "react_sandbox_tool",
+    "get_workspace_files",
+    "clear_workspace_files",
+    "set_current_run_id",
+    "get_test_tools",
+    "python_test_tool",
+    "javascript_test_tool",
 ]
