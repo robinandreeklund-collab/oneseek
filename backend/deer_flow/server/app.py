@@ -485,6 +485,10 @@ def _create_event_stream_message(
 
 def _create_interrupt_event(thread_id, event_data):
     """Create interrupt event."""
+    # Defensive check: ensure __interrupt__ tuple is not empty
+    if not isinstance(event_data.get("__interrupt__"), (list, tuple)) or len(event_data["__interrupt__"]) == 0:
+        raise ValueError("Cannot create interrupt event: __interrupt__ tuple is empty")
+    
     interrupt = event_data["__interrupt__"][0]
     # Use the 'id' attribute (LangGraph 1.0+) instead of deprecated 'ns[0]'
     interrupt_id = getattr(interrupt, "id", None) or thread_id
@@ -727,12 +731,16 @@ async def _stream_graph_events(
                     )
                 
                 if "__interrupt__" in event_data:
-                    logger.debug(
-                        f"[{safe_thread_id}] Processing interrupt event: "
-                        f"id={getattr(event_data['__interrupt__'][0], 'id', 'unknown') if isinstance(event_data['__interrupt__'], (list, tuple)) and len(event_data['__interrupt__']) > 0 else 'unknown'}, "
-                        f"value_len={len(getattr(event_data['__interrupt__'][0], 'value', '')) if isinstance(event_data['__interrupt__'], (list, tuple)) and len(event_data['__interrupt__']) > 0 and hasattr(event_data['__interrupt__'][0], 'value') and hasattr(event_data['__interrupt__'][0].value, '__len__') else 'unknown'}"
-                    )
-                    yield _create_interrupt_event(thread_id, event_data)
+                    # Check if __interrupt__ tuple is non-empty before processing
+                    if isinstance(event_data['__interrupt__'], (list, tuple)) and len(event_data['__interrupt__']) > 0:
+                        logger.debug(
+                            f"[{safe_thread_id}] Processing interrupt event: "
+                            f"id={getattr(event_data['__interrupt__'][0], 'id', 'unknown')}, "
+                            f"value_len={len(getattr(event_data['__interrupt__'][0], 'value', '')) if hasattr(event_data['__interrupt__'][0], 'value') and hasattr(event_data['__interrupt__'][0].value, '__len__') else 'unknown'}"
+                        )
+                        yield _create_interrupt_event(thread_id, event_data)
+                    else:
+                        logger.debug(f"[{safe_thread_id}] Interrupt checkpoint detected but no interrupt data yet, skipping event")
                 logger.debug(f"[{safe_thread_id}] Dict event without interrupt, skipping")
                 continue
 
