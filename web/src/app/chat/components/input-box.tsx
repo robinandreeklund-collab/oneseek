@@ -192,7 +192,7 @@ export function InputBox({
         </AnimatePresence>
         <MessageInput
           className={cn(
-            "h-24 px-4 pt-5",
+            "min-h-24 max-h-40 px-4 pt-5",
             feedback && "pt-9",
             isEnhanceAnimating && "transition-all duration-500",
           )}
