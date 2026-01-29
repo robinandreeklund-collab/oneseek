@@ -2507,13 +2507,13 @@ Provide a comprehensive debate report with all rounds, voting results, and concl
 
 async def debate_orchestrator_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["debate_team", "reporter"]]:
+) -> Command[Literal["proponent", "reporter"]]:
     """
     Debate orchestrator node - manages rounds, scores, and exit criteria.
     
     This is the conductor that:
     1. Tracks current round number
-    2. Routes to debate_team for each round
+    2. Routes to proponent (start of debate chain) for each round
     3. Collects scores from moderator
     4. Determines when to exit (rounds complete, knockout, consensus)
     5. Routes to reporter when debate is complete
@@ -2571,13 +2571,13 @@ async def debate_orchestrator_node(
             goto="reporter"
         )
     else:
-        logger.info(f"Continuing to debate_team for round {current_round}")
+        logger.info(f"Continuing to proponent (debate chain start) for round {current_round}")
         return Command(
             update={
                 **preserve_state_meta_fields(state),
                 "debate_round": current_round,
             },
-            goto="debate_team"
+            goto="proponent"
         )
 
 
@@ -2597,77 +2597,197 @@ async def debate_team_node(state: State, config: RunnableConfig):
 
 async def proponent_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["debate_team"]]:
+) -> Command[Literal["opponent"]]:
     """Proponent node - arguments FOR the question."""
     logger.info("Proponent presenting arguments FOR")
     configurable = Configuration.from_runnable_config(config)
+    locale = state.get("locale", "en-US")
     
     # Get web search and other tools for aggressive usage
     tools = [get_web_search_tool(), crawl_tool]
     
-    # Use _setup_and_execute_agent_step pattern
-    return await _setup_and_execute_agent_step(
-        state,
-        config,
+    # Build prompt for proponent
+    messages = apply_prompt_template("proponent", state, configurable, locale)
+    
+    # Create agent for proponent
+    llm_token_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["proponent"])
+    pre_model_hook = partial(ContextManager(llm_token_limit, 3).compress_messages)
+    agent = create_agent(
+        "proponent",
         "proponent",
         tools,
+        "proponent",
+        pre_model_hook,
+        interrupt_before_tools=configurable.interrupt_before_tools,
+        locale=locale,
+    )
+    
+    # Execute agent
+    agent_messages = await agent.ainvoke(state, config)
+    
+    # Extract response
+    response_content = ""
+    if agent_messages and len(agent_messages) > 0:
+        last_msg = agent_messages[-1]
+        if hasattr(last_msg, 'content'):
+            response_content = last_msg.content
+    
+    logger.info(f"Proponent response length: {len(response_content)}")
+    
+    return Command(
+        update={
+            **preserve_state_meta_fields(state),
+            "messages": agent_messages,
+            "proponent_response": response_content,
+        },
+        goto="opponent"
     )
 
 
 async def opponent_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["debate_team"]]:
+) -> Command[Literal["fact_checker"]]:
     """Opponent node - arguments AGAINST the question."""
     logger.info("Opponent presenting arguments AGAINST")
     configurable = Configuration.from_runnable_config(config)
+    locale = state.get("locale", "en-US")
     
     # Get web search and other tools for aggressive usage
     tools = [get_web_search_tool(), crawl_tool]
     
-    # Use _setup_and_execute_agent_step pattern
-    return await _setup_and_execute_agent_step(
-        state,
-        config,
+    # Build prompt for opponent
+    messages = apply_prompt_template("opponent", state, configurable, locale)
+    
+    # Create agent for opponent
+    llm_token_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["opponent"])
+    pre_model_hook = partial(ContextManager(llm_token_limit, 3).compress_messages)
+    agent = create_agent(
+        "opponent",
         "opponent",
         tools,
+        "opponent",
+        pre_model_hook,
+        interrupt_before_tools=configurable.interrupt_before_tools,
+        locale=locale,
+    )
+    
+    # Execute agent
+    agent_messages = await agent.ainvoke(state, config)
+    
+    # Extract response
+    response_content = ""
+    if agent_messages and len(agent_messages) > 0:
+        last_msg = agent_messages[-1]
+        if hasattr(last_msg, 'content'):
+            response_content = last_msg.content
+    
+    logger.info(f"Opponent response length: {len(response_content)}")
+    
+    return Command(
+        update={
+            **preserve_state_meta_fields(state),
+            "messages": agent_messages,
+            "opponent_response": response_content,
+        },
+        goto="fact_checker"
     )
 
 
 async def fact_checker_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["debate_team"]]:
+) -> Command[Literal["synthesizer"]]:
     """Fact checker node - verifies claims from both sides."""
     logger.info("Fact checker verifying claims")
     configurable = Configuration.from_runnable_config(config)
+    locale = state.get("locale", "en-US")
     
     # Get web search and other tools for verification
     tools = [get_web_search_tool(), crawl_tool]
     
-    # Use _setup_and_execute_agent_step pattern
-    return await _setup_and_execute_agent_step(
-        state,
-        config,
+    # Build prompt for fact_checker
+    messages = apply_prompt_template("fact_checker", state, configurable, locale)
+    
+    # Create agent for fact_checker
+    llm_token_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["fact_checker"])
+    pre_model_hook = partial(ContextManager(llm_token_limit, 3).compress_messages)
+    agent = create_agent(
+        "fact_checker",
         "fact_checker",
         tools,
+        "fact_checker",
+        pre_model_hook,
+        interrupt_before_tools=configurable.interrupt_before_tools,
+        locale=locale,
+    )
+    
+    # Execute agent
+    agent_messages = await agent.ainvoke(state, config)
+    
+    # Extract response
+    response_content = ""
+    if agent_messages and len(agent_messages) > 0:
+        last_msg = agent_messages[-1]
+        if hasattr(last_msg, 'content'):
+            response_content = last_msg.content
+    
+    logger.info(f"Fact checker response length: {len(response_content)}")
+    
+    return Command(
+        update={
+            **preserve_state_meta_fields(state),
+            "messages": agent_messages,
+            "fact_checker_response": response_content,
+        },
+        goto="synthesizer"
     )
 
 
 async def synthesizer_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["debate_team"]]:
+) -> Command[Literal["moderator"]]:
     """Synthesizer node - creates superior synthesis from both sides."""
     logger.info("Synthesizer creating integrated position")
     configurable = Configuration.from_runnable_config(config)
+    locale = state.get("locale", "en-US")
     
     # Get web search and other tools for additional context
     tools = [get_web_search_tool(), crawl_tool]
     
-    # Use _setup_and_execute_agent_step pattern
-    return await _setup_and_execute_agent_step(
-        state,
-        config,
+    # Build prompt for synthesizer
+    messages = apply_prompt_template("synthesizer", state, configurable, locale)
+    
+    # Create agent for synthesizer
+    llm_token_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["synthesizer"])
+    pre_model_hook = partial(ContextManager(llm_token_limit, 3).compress_messages)
+    agent = create_agent(
+        "synthesizer",
         "synthesizer",
         tools,
+        "synthesizer",
+        pre_model_hook,
+        interrupt_before_tools=configurable.interrupt_before_tools,
+        locale=locale,
+    )
+    
+    # Execute agent
+    agent_messages = await agent.ainvoke(state, config)
+    
+    # Extract response
+    response_content = ""
+    if agent_messages and len(agent_messages) > 0:
+        last_msg = agent_messages[-1]
+        if hasattr(last_msg, 'content'):
+            response_content = last_msg.content
+    
+    logger.info(f"Synthesizer response length: {len(response_content)}")
+    
+    return Command(
+        update={
+            **preserve_state_meta_fields(state),
+            "messages": agent_messages,
+            "synthesizer_response": response_content,
+        },
+        goto="moderator"
     )
 
 
