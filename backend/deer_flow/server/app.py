@@ -1152,7 +1152,24 @@ def _make_event(event_type: str, data: dict[str, any]):
         data.pop("content")
     # Ensure JSON serialization with proper encoding
     try:
+        max_event_bytes = int(os.getenv("STREAM_EVENT_MAX_BYTES", "900000"))
         json_data = json.dumps(data, ensure_ascii=False)
+        if len(json_data.encode("utf-8")) > max_event_bytes:
+            trimmed = dict(data)
+            if isinstance(trimmed.get("content"), str):
+                trimmed["content"] = trimmed["content"][:2000] + "... [truncated]"
+            if "tool_calls" in trimmed:
+                trimmed["tool_calls"] = trimmed.get("tool_calls", [])[:3]
+            if "tool_call_chunks" in trimmed:
+                trimmed["tool_call_chunks"] = []
+            if "tool_actions" in trimmed:
+                trimmed["tool_actions"] = trimmed.get("tool_actions", [])[-3:]
+            json_data = json.dumps(trimmed, ensure_ascii=False)
+            if len(json_data.encode("utf-8")) > max_event_bytes:
+                json_data = json.dumps(
+                    {"thread_id": data.get("thread_id", ""), "error": "event_too_large"},
+                    ensure_ascii=False,
+                )
 
         finish_reason = data.get("finish_reason", "")
         chat_stream_message(

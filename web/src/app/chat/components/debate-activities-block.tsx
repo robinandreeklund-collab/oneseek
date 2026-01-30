@@ -236,6 +236,18 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
     const args = toolCall.args as { model_key?: string };
     return args.model_key;
   }, [toolCall.args, toolCall.name]);
+  const metrics = useMemo(() => {
+    if (!toolCall.result) return null;
+    const match = toolCall.result.match(/METRICS:\s*(.+)$/m);
+    if (!match) return null;
+    const parts = match[1].split(" ").filter(Boolean);
+    const entries: Record<string, string> = {};
+    for (const part of parts) {
+      const [key, value] = part.split("=");
+      if (key && value) entries[key] = value;
+    }
+    return entries;
+  }, [toolCall.result]);
   const [fullPrompt, setFullPrompt] = useState<string | null>(null);
   const [promptLoading, setPromptLoading] = useState(false);
   const [promptError, setPromptError] = useState<string | null>(null);
@@ -334,6 +346,25 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
                   >
                     {toolCall.result.trim()}
                   </SyntaxHighlighter>
+                  {metrics && (
+                    <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                      {metrics.latency_ms && (
+                        <span className="rounded-full border border-border/60 px-2 py-0.5">
+                          {metrics.latency_ms} ms
+                        </span>
+                      )}
+                      {metrics.tokens_in && (
+                        <span className="rounded-full border border-border/60 px-2 py-0.5">
+                          in {metrics.tokens_in}
+                        </span>
+                      )}
+                      {metrics.tokens_out && (
+                        <span className="rounded-full border border-border/60 px-2 py-0.5">
+                          out {metrics.tokens_out}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   {toolCall.name === "query_model_in_round" && (
                     <div className="border-t border-border/50 p-2 text-xs">
                       <Button

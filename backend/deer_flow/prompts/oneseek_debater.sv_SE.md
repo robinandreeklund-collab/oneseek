@@ -26,6 +26,6 @@ Efter varje runda får du **intern kontext** (faktakontroll + syntes) som ska an
 - Om du är osäker, markera osäkerheten tydligt
 
 ## Rundfokus
-**Runda 1:** tydlig position och kärnargument (fullvärdigt svar)  
-**Runda 2:** bemötning + fördjupning med intern kontext (fullvärdigt svar)  
+**Runda 1:** tydlig position och kärnargument (fullvärdigt svar med evidens)  
+**Runda 2:** bemötning + fördjupning med intern kontext (fullvärdigt svar med evidens)  
 **Runda 3:** slutlig syntes som väger alla perspektiv

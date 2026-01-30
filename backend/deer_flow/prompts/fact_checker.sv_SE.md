@@ -32,6 +32,7 @@ För varje påstående från de externa AI-modellerna (Grok, Gemini, ChatGPT, De
 
 Din output används som **intern kontext i nästa runda**. Skriv därför kompakt.
 **Max 2 webbsökningar per runda.**
+**Använd inte crawl_tool.**
 
 Returnera två sektioner:
 

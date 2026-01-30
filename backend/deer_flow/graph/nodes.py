@@ -3009,18 +3009,17 @@ async def external_ai_caller_node(
                 latency_ms = response.get("latency_ms")
                 tokens_in = response.get("tokens_in")
                 tokens_out = response.get("tokens_out")
-                if latency_ms is not None or tokens_in is not None or tokens_out is not None:
-                    tool_result_text += "\n\n**Metrics**\n"
-                    if latency_ms is not None:
-                        tool_result_text += f"- latency_ms: {latency_ms}\n"
-                    if tokens_in is not None:
-                        tool_result_text += f"- tokens_in: {tokens_in}\n"
-                    if tokens_out is not None:
-                        tool_result_text += f"- tokens_out: {tokens_out}\n"
+                metrics_parts = []
+                if latency_ms is not None:
+                    metrics_parts.append(f"latency_ms={latency_ms}")
+                if tokens_in is not None:
+                    metrics_parts.append(f"tokens_in={tokens_in}")
+                if tokens_out is not None:
+                    metrics_parts.append(f"tokens_out={tokens_out}")
+                if metrics_parts:
+                    tool_result_text += "\n\nMETRICS: " + " ".join(metrics_parts)
             if context_used:
-                tool_result_text += "\n\n### Kontext skickad till modellen\n```text\n"
-                tool_result_text += context_used
-                tool_result_text += "\n```\n"
+                tool_result_text += "\n\n(Hela prompten kan hämtas via knappen i UI.)"
             if len(tool_result_text) > max_tool_result_chars:
                 tool_result_text = (
                     tool_result_text[:max_tool_result_chars]
@@ -3238,7 +3237,7 @@ async def fact_checker_node(
         """Cached crawl for fact checking."""
         return debate_flow.cached_crawl(url, current_round)
 
-    tools = [cached_web_search, cached_crawl]
+    tools = [cached_web_search]
     
     # Build prompt for fact_checker
     messages = apply_prompt_template("fact_checker", state, configurable, locale)
@@ -3267,7 +3266,7 @@ async def fact_checker_node(
     )
     
     # Build synthesizer agent (run in parallel)
-    synth_tools = [cached_web_search, cached_crawl]
+    synth_tools = [cached_web_search]
     synth_messages = apply_prompt_template("synthesizer", state, configurable, locale)
     synth_llm_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["synthesizer"])
     synth_pre_hook = partial(ContextManager(synth_llm_limit, 3).compress_messages)
