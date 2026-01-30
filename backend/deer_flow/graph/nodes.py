@@ -3060,9 +3060,10 @@ async def external_ai_caller_node(
                         tool_call_id=round_finished_id,
                     )
                 )
+                summary_text = f"Runda {round_num} klar. {len(model_order)} modeller svarade."
                 messages_out.append(
                     AIMessage(
-                        content=combined_response,
+                        content=summary_text,
                         name="external_ai_caller",
                         response_metadata={"finish_reason": "stop"},
                         additional_kwargs={
@@ -3221,9 +3222,15 @@ async def fact_checker_node(
     # Cached tools
     base_search_tool = get_web_search_tool(configurable.max_search_results)
 
+    search_count = 0
+
     @tool("web_search")
     def cached_web_search(query: str) -> str:
-        """Cached web search for fact checking."""
+        """Cached web search for fact checking (max 2)."""
+        nonlocal search_count
+        if search_count >= 2:
+            return "SEARCH_LIMIT_REACHED: Max 2 web searches per round."
+        search_count += 1
         return debate_flow.cached_web_search(query, current_round)
 
     @tool("crawl_tool")

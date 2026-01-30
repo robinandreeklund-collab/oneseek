@@ -462,6 +462,9 @@ def _create_event_stream_message(
     content = message_chunk.content
     if not isinstance(content, str):
         content = json.dumps(content, ensure_ascii=False)
+    max_message_chars = int(os.getenv("STREAM_MESSAGE_MAX_CHARS", "12000"))
+    if isinstance(content, str) and len(content) > max_message_chars:
+        content = content[:max_message_chars] + "... [truncated]"
 
     event_stream_message = {
         "thread_id": thread_id,
