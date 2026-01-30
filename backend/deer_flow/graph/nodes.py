@@ -3022,7 +3022,6 @@ Svara INTE med vanlig text eller markdown. Endast ren JSON!"""
         logger.info(f"Round {current_round} scores: Proponent +{round_proponent_score}, Opponent +{round_opponent_score}")
         logger.info(f"Total scores: Proponent {scores['proponent']}, Opponent {scores['opponent']}")
         logger.info(f"Knockout: {knockout}")
-        logger.info(f"Moderator: Setting debate_round={current_round} in state update")
         
         # Create summary message
         summary_msg = AIMessage(
@@ -3030,19 +3029,17 @@ Svara INTE med vanlig text eller markdown. Endast ren JSON!"""
             name="moderator"
         )
         
-        # Build state update - explicitly set all debate fields
+        # Build state update - moderator only updates scores and knockout
+        # debate_round is managed ONLY by debate_orchestrator to avoid conflicts
         state_update = {
+            **preserve_state_meta_fields(state),
             "messages": [summary_msg],
             "debate_scores": scores,
             "debate_knockout": knockout,
-            "debate_round": current_round,  # CRITICAL: Preserve round number!
+            # DO NOT set debate_round here - let orchestrator manage it
         }
-        # Add meta fields but let debate fields from above take precedence
-        for key, value in preserve_state_meta_fields(state).items():
-            if key not in state_update:
-                state_update[key] = value
         
-        logger.info(f"Moderator: State update keys: {list(state_update.keys())}, debate_round in update: {state_update.get('debate_round')}")
+        logger.info(f"Moderator: Returning scores={scores}, knockout={knockout} to orchestrator")
         
         return Command(
             update=state_update,
