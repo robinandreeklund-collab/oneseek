@@ -143,18 +143,16 @@ PlanCard.displayName = "PlanCard";
 
 const ActivityListItem = React.memo(({ messageId }: { messageId: string }) => {
   const message = useMessage(messageId);
-  if (message) {
-    if (!message.isStreaming && message.toolCalls?.length) {
-      const toolCallComponents = message.toolCalls
-        .filter(toolCall => !(typeof toolCall.result === "string" && toolCall.result?.startsWith("Error")))
-        .map(toolCall => {
-          // For debate tools, use MCPToolCall which handles them nicely
-          return <MCPToolCall key={toolCall.id} toolCall={toolCall} />;
-        });
-      
-      if (toolCallComponents.length > 0) {
-        return <>{toolCallComponents}</>;
-      }
+  if (message?.toolCalls?.length) {
+    const toolCallComponents = message.toolCalls
+      .filter(toolCall => !(typeof toolCall.result === "string" && toolCall.result?.startsWith("Error")))
+      .map(toolCall => {
+        // For debate tools, use MCPToolCall which handles them nicely
+        return <MCPToolCall key={toolCall.id} toolCall={toolCall} />;
+      });
+    
+    if (toolCallComponents.length > 0) {
+      return <>{toolCallComponents}</>;
     }
   }
   return null;
