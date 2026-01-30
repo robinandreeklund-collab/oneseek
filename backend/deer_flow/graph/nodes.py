@@ -1015,7 +1015,7 @@ def human_feedback_node(
         update_dict.update({
             "debate_round": 0,
             "debate_max_rounds": 3,
-            "debate_scores": {"external_ai": 0, "consensus": 0},
+            "debate_scores": {"proponent": 0, "opponent": 0},
             "debate_knockout": False,
         })
     
@@ -2553,7 +2553,7 @@ async def debate_orchestrator_node(
     # Get debate state
     current_round = state.get("debate_round", 0)
     max_rounds = state.get("debate_max_rounds", 3)
-    scores = state.get("debate_scores", {"external_ai": 0, "consensus": 0})  # Simplified scoring
+    scores = state.get("debate_scores", {"proponent": 0, "opponent": 0})
     knockout = state.get("debate_knockout", False)
     logger.info(f"Orchestrator: Read debate_round={current_round} from state (before increment)")
     
@@ -2760,6 +2760,7 @@ async def external_ai_caller_node(
     try:
         # Create tool calls list to show progress in frontend
         tool_calls = []
+        tool_results = []
         import uuid
         
         # Step 1: Start the debate round
@@ -2774,6 +2775,12 @@ async def external_ai_caller_node(
         logger.info(f"Step 1: Starting debate round {round_num}")
         debate_flow.start_new_round(round_num)
         logger.info(f"Round {round_num} started")
+        tool_results.append(
+            ToolMessage(
+                content=f"Round {round_num} started",
+                tool_call_id=start_round_id,
+            )
+        )
         
         # Step 2: Query each model EXACTLY once
         all_models = list(debate_flow.models.keys())
@@ -2785,7 +2792,7 @@ async def external_ai_caller_node(
             query_model_id = f"call_{uuid.uuid4().hex[:24]}"
             tool_calls.append({
                 "id": query_model_id,
-                "name": "query_model_in_debate",
+                "name": "query_model_in_round",
                 "args": {
                     "model_key": model_key,
                     "round_number": round_num,
@@ -2810,6 +2817,12 @@ async def external_ai_caller_node(
             
             responses.append(f"Model {model_key}: {response_text}")
             logger.info(f"  ✓ Model {model_key} responded ({len(response_text)} chars)")
+            tool_results.append(
+                ToolMessage(
+                    content=f"{model_key}: {response_text}",
+                    tool_call_id=query_model_id,
+                )
+            )
         
         # Step 3: Done! Combine all responses
         combined_response = "\n\n".join(responses)
@@ -2820,6 +2833,7 @@ async def external_ai_caller_node(
             content=combined_response,
             name="external_ai_caller",
             tool_calls=tool_calls,  # Show tool calls in frontend
+            response_metadata={"finish_reason": "stop"},
             additional_kwargs={
                 "round": round_num,
                 "models_queried": len(all_models),
@@ -2830,7 +2844,7 @@ async def external_ai_caller_node(
         return Command(
             update={
                 **preserve_state_meta_fields(state),
-                "messages": [response_message],
+                "messages": [response_message, *tool_results],
                 "external_ai_responses": combined_response,
             },
             goto="fact_checker"
@@ -2840,7 +2854,8 @@ async def external_ai_caller_node(
         logger.error(f"Error in deterministic external_ai_caller: {e}", exc_info=True)
         error_message = AIMessage(
             content=f"Error in debate round: {str(e)}",
-            name="external_ai_caller"
+            name="external_ai_caller",
+            response_metadata={"finish_reason": "stop"},
         )
         return Command(
             update={
