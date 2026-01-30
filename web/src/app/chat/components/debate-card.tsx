@@ -32,11 +32,12 @@ export function DebateCard({
   );
   
   const state = useMemo(() => {
-    if (message?.isStreaming) {
+    // Show "running" if this is the ongoing debate session (not completed yet)
+    if (isOngoing) {
       return t("runningDebate");
     }
     return t("debateComplete");
-  }, [message?.isStreaming, t]);
+  }, [isOngoing, t]);
 
   const handleOpen = useCallback(() => {
     if (openDebateSessionId === sessionId) {
