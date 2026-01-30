@@ -242,6 +242,10 @@ def preserve_state_meta_fields(state: State) -> dict:
     These fields are critical for workflow continuity and should be explicitly
     included in all Command.update dicts to prevent them from reverting to defaults.
     
+    NOTE: Debate-specific fields (debate_round, debate_scores, etc.) are NOT included
+    here because they are managed explicitly by debate nodes (debate_orchestrator, moderator).
+    Auto-preserving them can cause conflicts with explicit updates.
+    
     Args:
         state: Current state object
         
@@ -257,13 +261,6 @@ def preserve_state_meta_fields(state: State) -> dict:
         "max_clarification_rounds": state.get("max_clarification_rounds", 3),
         "clarification_rounds": state.get("clarification_rounds", 0),
         "resources": state.get("resources", []),
-        # Debate state fields (CRITICAL: preserve across all transitions!)
-        "debate_round": state.get("debate_round", 0),
-        "debate_scores": state.get("debate_scores", {"proponent": 0, "opponent": 0}),
-        "debate_knockout": state.get("debate_knockout", False),
-        "debate_max_rounds": state.get("debate_max_rounds", 3),
-        "debate_error_count": state.get("debate_error_count", 0),
-        "debate_complete": state.get("debate_complete", False),
     }
 
 
@@ -2597,6 +2594,10 @@ async def debate_orchestrator_node(
                     update={
                         **preserve_state_meta_fields(state),
                         "messages": [error_msg],
+                        "debate_round": current_round,
+                        "debate_scores": scores,
+                        "debate_knockout": knockout,
+                        "debate_max_rounds": max_rounds,
                         "debate_complete": True,
                         "debate_error_count": error_count,
                     },
@@ -2630,6 +2631,10 @@ async def debate_orchestrator_node(
             update={
                 **preserve_state_meta_fields(state),
                 "messages": [summary_msg],
+                "debate_round": current_round,
+                "debate_scores": scores,
+                "debate_knockout": knockout,
+                "debate_max_rounds": max_rounds,
                 "debate_complete": True,
                 "debate_error_count": 0,  # Reset on successful completion
             },
@@ -2652,6 +2657,10 @@ async def debate_orchestrator_node(
             update={
                 **preserve_state_meta_fields(state),
                 "messages": [summary_msg],
+                "debate_round": current_round,
+                "debate_scores": scores,
+                "debate_knockout": knockout,
+                "debate_max_rounds": max_rounds,
                 "debate_complete": True,
                 "debate_error_count": 0,  # Reset on successful completion
             },
@@ -2675,6 +2684,10 @@ async def debate_orchestrator_node(
         update={
             **preserve_state_meta_fields(state),
             "debate_round": current_round,
+            "debate_scores": scores,
+            "debate_knockout": knockout,
+            "debate_max_rounds": max_rounds,
+            "debate_complete": False,
             "debate_flow": debate_flow,  # ADD debate_flow to state!
             "debate_error_count": error_count,  # Track errors for circuit breaker
         },
