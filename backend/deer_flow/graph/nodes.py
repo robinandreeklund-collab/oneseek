@@ -2728,7 +2728,19 @@ async def external_ai_caller_node(
     
     # DETERMINISTIC EXECUTION - no LLM making decisions!
     try:
+        # Create tool calls list to show progress in frontend
+        tool_calls = []
+        import uuid
+        
         # Step 1: Start the debate round
+        # Emit tool call for starting round
+        start_round_id = f"call_{uuid.uuid4().hex[:24]}"
+        tool_calls.append({
+            "id": start_round_id,
+            "name": "start_debate_round",
+            "args": {"round_number": round_num}
+        })
+        
         logger.info(f"Step 1: Starting debate round {round_num}")
         debate_flow.start_new_round(round_num)
         logger.info(f"Round {round_num} started")
@@ -2739,6 +2751,18 @@ async def external_ai_caller_node(
         
         responses = []
         for i, model_key in enumerate(all_models, 1):
+            # Emit tool call for querying model
+            query_model_id = f"call_{uuid.uuid4().hex[:24]}"
+            tool_calls.append({
+                "id": query_model_id,
+                "name": "query_model_in_debate",
+                "args": {
+                    "model_key": model_key,
+                    "round_number": round_num,
+                    "model_index": f"{i}/{len(all_models)}"
+                }
+            })
+            
             logger.info(f"  Querying model {i}/{len(all_models)}: {model_key}")
             # Build context and query model
             user_query = state.get("user_query", "")
@@ -2760,10 +2784,11 @@ async def external_ai_caller_node(
         combined_response = "\n\n".join(responses)
         logger.info(f"Step 3: Round {round_num} complete - all {len(all_models)} models queried")
         
-        # Create AIMessage with proper metadata to trigger sidebar
+        # Create AIMessage with tool_calls to show progress in frontend
         response_message = AIMessage(
             content=combined_response,
             name="external_ai_caller",
+            tool_calls=tool_calls,  # Show tool calls in frontend
             additional_kwargs={
                 "round": round_num,
                 "models_queried": len(all_models),
