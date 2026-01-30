@@ -327,6 +327,16 @@ class DebateFlow:
         
         context_parts = []
         
+        # Load OneSeek's dedicated debate prompt
+        if model_key == "oneseek-local":
+            from backend.deer_flow.prompts.template import get_prompt_template
+            try:
+                oneseek_system = get_prompt_template("oneseek_debater", locale)
+                context_parts.append(f"\n### Din Strategi och Regler:\n{oneseek_system}\n\n")
+                logger.info(f"Loaded oneseek_debater prompt for {model_key}")
+            except FileNotFoundError:
+                logger.warning(f"oneseek_debater prompt not found for locale {locale}")
+        
         # Add user query
         context_parts.append(f"Användares fråga: {user_query}\n")
         
