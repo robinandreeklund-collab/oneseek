@@ -242,8 +242,8 @@ def preserve_state_meta_fields(state: State) -> dict:
     These fields are critical for workflow continuity and should be explicitly
     included in all Command.update dicts to prevent them from reverting to defaults.
     
-    NOTE: Debate state fields (debate_round, debate_scores, etc.) are NOT included here.
-    They are managed explicitly by debate_orchestrator and moderator nodes to avoid conflicts.
+    Debate state fields ARE included to ensure they persist across node transitions.
+    Orchestrator can explicitly override these values when needed.
     
     Args:
         state: Current state object
@@ -260,7 +260,13 @@ def preserve_state_meta_fields(state: State) -> dict:
         "max_clarification_rounds": state.get("max_clarification_rounds", 3),
         "clarification_rounds": state.get("clarification_rounds", 0),
         "resources": state.get("resources", []),
-        # Debate state fields are NOT auto-preserved - managed explicitly by debate nodes
+        # Debate state fields - preserve across transitions so orchestrator can read them
+        "debate_round": state.get("debate_round", 0),
+        "debate_scores": state.get("debate_scores", {"proponent": 0, "opponent": 0}),
+        "debate_knockout": state.get("debate_knockout", False),
+        "debate_max_rounds": state.get("debate_max_rounds", 3),
+        "debate_error_count": state.get("debate_error_count", 0),
+        "debate_complete": state.get("debate_complete", False),
     }
 
 
