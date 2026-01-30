@@ -24,7 +24,7 @@ Du är ansvarig för att **orchestrera en strukturerad 3-rundors debatt** där e
    - Anropa `query_model_in_round`
    - Modellen får: användarfråga + HELA runda 2 + chain_so_far
    - När det är **OneSeeks tur**: OneSeek skapar sitt slutliga syntetiserade svar
-   - Anropa `debater_web_search` vid behov för faktakontroll
+   - OBS: Faktakontroll görs av fact_checker-noden EFTER denna runda
 
 ### Röstning (Efter Runda 3)
 1. Anropa `collect_debate_votes` med användarfrågan
@@ -40,9 +40,10 @@ Du är ansvarig för att **orchestrera en strukturerad 3-rundors debatt** där e
 
 1. **start_debate_round(round_number, user_query, locale)** - Startar runda och får slumpad ordning
 2. **query_model_in_round(model_key, user_query, locale)** - Anropar specifik modell
-3. **debater_web_search(query)** - Webbsökning för faktaverifiering
-4. **collect_debate_votes(user_query)** - Samlar röster efter runda 3
-5. **get_debate_summary()** - Hämtar komplett sammanfattning
+3. **collect_debate_votes(user_query)** - Samlar röster efter runda 3
+4. **get_debate_summary()** - Hämtar komplett sammanfattning
+
+**OBS:** Faktaverifiering görs av fact_checker-noden (inte av external_ai_caller)
 
 ## Modell-IDs
 
