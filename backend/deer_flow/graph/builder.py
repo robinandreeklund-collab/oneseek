@@ -159,7 +159,9 @@ def _build_base_graph():
         continue_to_running_research_team,
         ["planner", "researcher", "analyst", "coder", "tester"],
     )
-    builder.add_edge("reporter", END)
+    # Changed from END to human_feedback to ensure debate_complete flag is checked
+    # This prevents debate from restarting after completion
+    builder.add_edge("reporter", "human_feedback")
     return builder
 
 
