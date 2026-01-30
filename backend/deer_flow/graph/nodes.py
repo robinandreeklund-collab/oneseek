@@ -2897,6 +2897,7 @@ async def external_ai_caller_node(
         import uuid
         user_query = state.get("clarified_research_topic") or state.get("research_topic", "")
         locale = state.get("locale", "sv-SE")
+        max_context_chars = int(os.getenv("DEBATE_TOOL_CONTEXT_MAX_CHARS", "8000"))
         
         if pending_model:
             model_key = pending_model.get("model_key")
@@ -2913,6 +2914,11 @@ async def external_ai_caller_node(
                 response_text = str(response)
                 context_used = ""
             
+            if context_used and len(context_used) > max_context_chars:
+                context_used = (
+                    context_used[:max_context_chars]
+                    + f"... [trunkerat till {max_context_chars} tecken]"
+                )
             tool_result_text = f"### {model_key} svar\n\n{response_text}"
             if context_used:
                 tool_result_text += "\n\n### Kontext skickad till modellen\n```text\n"
