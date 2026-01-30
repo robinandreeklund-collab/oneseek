@@ -944,15 +944,18 @@ def human_feedback_node(
     plan_iterations = state["plan_iterations"] if state.get("plan_iterations", 0) else 0
     
     # Determine routing based on mode
-    if state.get("enable_debate_mode", False) and not state.get("debate_complete", False):
-        # Debate mode - route to debate_orchestrator after plan approval (only if debate not yet complete)
+    if state.get("debate_complete", False):
+        # Debate is complete - route to END (debate has separate chain, never use research_team)
+        goto = END
+        logger.info("[human_feedback_node] Debate complete, routing to END (debate is separate chain)")
+    elif state.get("enable_debate_mode", False):
+        # Debate mode - route to debate_orchestrator after plan approval
         goto = "debate_orchestrator"
         logger.info("[human_feedback_node] Plan approved in debate mode, routing to debate_orchestrator")
     else:
-        # Normal mode - route to research_team (or if debate already complete)
+        # Normal mode - route to research_team
         goto = "research_team"
-        if state.get("debate_complete", False):
-            logger.info("[human_feedback_node] Debate already complete, routing to research_team instead of restarting")
+        logger.info("[human_feedback_node] Plan approved, routing to research_team")
     
     try:
         # Safely extract plan content from different types (string, AIMessage, dict)
