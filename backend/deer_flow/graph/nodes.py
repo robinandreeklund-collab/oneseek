@@ -2844,10 +2844,22 @@ async def moderator_node(
     # Build prompt for moderator
     messages = apply_prompt_template("moderator", state, configurable, locale)
     
-    # Add context about current scores
+    # Add context about current scores AND EXPLICIT JSON REQUEST
     messages.append({
         "role": "system",
-        "content": f"Detta är runda {current_round}. Nuvarande poängställning: Proponent {scores['proponent']} - Opponent {scores['opponent']}"
+        "content": f"""Detta är runda {current_round}. Nuvarande poängställning: Proponent {scores['proponent']} - Opponent {scores['opponent']}
+
+**KRITISKT VIKTIGT**: Du MÅSTE svara ENDAST med giltig JSON i detta exakta format (inga extra ord eller text):
+
+{{
+  "proponent_score": 0-3,
+  "opponent_score": 0-3,
+  "winner": "proponent/opponent/tie",
+  "summary": "kort sammanfattning av rundan",
+  "knockout": false
+}}
+
+Svara INTE med vanlig text eller markdown. Endast ren JSON!"""
     })
     
     # Get LLM
