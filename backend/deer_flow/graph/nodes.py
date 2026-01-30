@@ -2648,24 +2648,14 @@ async def external_ai_caller_node(
     logger.info("External AI Caller - orchestrating debate round (DETERMINISTIC)")
     configurable = Configuration.from_runnable_config(config)
     
-    # Get debate flow instance from state
-    from backend.debate_flow import DebateFlow
-    debate_flow = state.get("debate_flow")
-    
-    if not debate_flow:
-        logger.error("No debate_flow found in state!")
-        error_message = AIMessage(
-            content="Error: No debate flow found",
-            name="external_ai_caller"
-        )
-        return Command(
-            update={
-                **preserve_state_meta_fields(state),
-                "messages": [error_message],
-                "external_ai_responses": "",
-            },
-            goto="fact_checker"
-        )
+    # Always recreate debate_flow instance (don't rely on state persistence)
+    # LangGraph doesn't properly pass complex Python objects through state
+    from backend.debate_flow import get_debate_flow
+    debate_flow = get_debate_flow(
+        max_search_results=configurable.max_search_results,
+        resources=state.get("resources", [])
+    )
+    logger.info("Created debate_flow instance in external_ai_caller")
     
     # Get current round number from debate_flow
     round_num = debate_flow.current_round
