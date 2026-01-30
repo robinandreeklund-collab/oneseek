@@ -18,18 +18,20 @@ export default function ActionBlock({ actions, live = false, onToolClick }: Acti
     }
   }, [live]);
 
-  // Log when actions change for debugging
+  // Log when actions change for debugging (only in development)
   React.useEffect(() => {
-    console.log('[ActionBlock] Actions updated:', {
-      count: actions.length,
-      live,
-      isOpen: live || open,
-      actions: actions.map(a => ({
-        tool: a.display_name,
-        status: a.status,
-        iteration: a.iteration
-      }))
-    });
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[ActionBlock] Actions updated:', {
+        count: actions.length,
+        live,
+        isOpen: live || open,
+        actions: actions.map(a => ({
+          tool: a.display_name,
+          status: a.status,
+          iteration: a.iteration
+        }))
+      });
+    }
   }, [actions, live, open]);
 
   if (!actions || actions.length === 0) {

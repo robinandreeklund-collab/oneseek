@@ -373,7 +373,16 @@ class OneSeekGraphAgent:
                 steps_list.append(content)
                 logger.info(f"Step: {content}")
             elif event_type == "tool_action":
-                tool_actions_list.append(content)
+                # Check if this tool action already exists (by tool_call_id) to avoid duplicates
+                tool_call_id = content.get("tool_call_id")
+                existing_index = next((i for i, action in enumerate(tool_actions_list) 
+                                      if action.get("tool_call_id") == tool_call_id), None)
+                if existing_index is not None:
+                    # Update existing tool action in place
+                    tool_actions_list[existing_index] = content
+                else:
+                    # Add new tool action
+                    tool_actions_list.append(content)
                 logger.info(f"Tool action: {content}")
         
         # Convert dict messages to LangChain messages
@@ -546,7 +555,16 @@ class OneSeekGraphAgent:
                 steps_list.append(content)
                 logger.info(f"Step: {content}")
             elif event_type == "tool_action":
-                tool_actions_list.append(content)
+                # Check if this tool action already exists (by tool_call_id) to avoid duplicates
+                tool_call_id = content.get("tool_call_id")
+                existing_index = next((i for i, action in enumerate(tool_actions_list) 
+                                      if action.get("tool_call_id") == tool_call_id), None)
+                if existing_index is not None:
+                    # Update existing tool action in place
+                    tool_actions_list[existing_index] = content
+                else:
+                    # Add new tool action
+                    tool_actions_list.append(content)
                 logger.info(f"Tool action: {content}")
             
             # Also call external realtime callback if provided
