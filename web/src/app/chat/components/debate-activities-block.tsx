@@ -5,7 +5,7 @@ import { CheckCircle2, Loader2, PencilRuler } from "lucide-react";
 import { motion } from "framer-motion";
 import { useTheme } from "next-themes";
 import { useTranslations } from "next-intl";
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import SyntaxHighlighter from "react-syntax-highlighter";
 import { docco } from "react-syntax-highlighter/dist/esm/styles/hljs";
 import { dark } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -20,6 +20,8 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "~/components/ui/accordion";
+import { Button } from "~/components/ui/button";
+import { Progress } from "~/components/ui/progress";
 import { findMCPTool } from "~/core/mcp";
 import { isPlannerAgent } from "~/core/messages";
 import type { Message, ToolCallRuntime } from "~/core/messages";
@@ -41,7 +43,47 @@ export function DebateActivitiesBlock({
   const activityIds = useStore((state) =>
     state.debateActivityIds.get(sessionId),
   );
+  const messages = useStore((state) => state.messages);
   const ongoing = useStore((state) => state.ongoingDebateSessionId === sessionId);
+  const activityMessages = useMemo(() => {
+    if (!activityIds) return [];
+    return activityIds
+      .map((id) => messages.get(id))
+      .filter((message): message is Message => Boolean(message));
+  }, [activityIds, messages]);
+  const progressInfo = useMemo(() => {
+    let latestRound = 0;
+    let total = 0;
+    let completed = 0;
+    for (const message of activityMessages) {
+      for (const toolCall of message.toolCalls ?? []) {
+        if (toolCall.name === "start_debate_round") {
+          const args = toolCall.args as { round_number?: number };
+          latestRound = Math.max(latestRound, args.round_number ?? 0);
+        }
+      }
+    }
+    for (const message of activityMessages) {
+      for (const toolCall of message.toolCalls ?? []) {
+        if (toolCall.name !== "query_model_in_round") continue;
+        const args = toolCall.args as { round_number?: number; models_total?: number; model_index?: string };
+        if ((args.round_number ?? 0) !== latestRound) continue;
+        if (args.models_total) {
+          total = Math.max(total, args.models_total);
+        } else if (args.model_index) {
+          const parts = args.model_index.split("/");
+          const parsedTotal = Number(parts[1]);
+          if (!Number.isNaN(parsedTotal)) {
+            total = Math.max(total, parsedTotal);
+          }
+        }
+        if (toolCall.result !== undefined) {
+          completed += 1;
+        }
+      }
+    }
+    return { latestRound, total, completed };
+  }, [activityMessages]);
   
   // Guard against undefined activityIds
   if (!activityIds || activityIds.length === 0) {
@@ -54,6 +96,19 @@ export function DebateActivitiesBlock({
   
   return (
     <>
+      {progressInfo.total > 0 && (
+        <div className="px-4 pt-4">
+          <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
+            <span>Runda {progressInfo.latestRound}</span>
+            <span>
+              {progressInfo.completed}/{progressInfo.total} modeller klara
+            </span>
+          </div>
+          <Progress
+            value={(progressInfo.completed / progressInfo.total) * 100}
+          />
+        </div>
+      )}
       <ul className={cn("flex flex-col py-4", className)}>
         {activityIds.map(
           (activityId, i) => {
@@ -175,11 +230,15 @@ ActivityListItem.displayName = "ActivityListItem";
 function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
   const tool = useMemo(() => findMCPTool(toolCall.name), [toolCall.name]);
   const { resolvedTheme } = useTheme();
+  const threadId = useStore((state) => state.threadId);
   const modelKey = useMemo(() => {
     if (toolCall.name !== "query_model_in_round") return undefined;
     const args = toolCall.args as { model_key?: string };
     return args.model_key;
   }, [toolCall.args, toolCall.name]);
+  const [fullPrompt, setFullPrompt] = useState<string | null>(null);
+  const [promptLoading, setPromptLoading] = useState(false);
+  const [promptError, setPromptError] = useState<string | null>(null);
   
   // Custom display name for debate tools
   const displayName = useMemo(() => {
@@ -275,6 +334,54 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
                   >
                     {toolCall.result.trim()}
                   </SyntaxHighlighter>
+                  {toolCall.name === "query_model_in_round" && (
+                    <div className="border-t border-border/50 p-2 text-xs">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={promptLoading}
+                        onClick={async () => {
+                          if (fullPrompt) {
+                            setFullPrompt(null);
+                            return;
+                          }
+                          setPromptError(null);
+                          setPromptLoading(true);
+                          try {
+                            const response = await fetch(
+                              `/api/debate/tool-context?thread_id=${encodeURIComponent(threadId)}&tool_call_id=${encodeURIComponent(toolCall.id)}&max_chars=50000`,
+                            );
+                            if (!response.ok) {
+                              throw new Error("Prompt not found");
+                            }
+                            const data = (await response.json()) as {
+                              context?: string;
+                            };
+                            setFullPrompt(data.context ?? "");
+                          } catch (error) {
+                            setPromptError("Kunde inte hämta full prompt.");
+                          } finally {
+                            setPromptLoading(false);
+                          }
+                        }}
+                      >
+                        {fullPrompt ? "Dölj full prompt" : "Visa full prompt"}
+                      </Button>
+                      {promptLoading && (
+                        <div className="mt-2 text-muted-foreground">
+                          Hämtar prompt...
+                        </div>
+                      )}
+                      {promptError && (
+                        <div className="mt-2 text-destructive">{promptError}</div>
+                      )}
+                      {fullPrompt && (
+                        <pre className="mt-2 max-h-[260px] whitespace-pre-wrap rounded-md border border-border/60 bg-background/70 p-2 text-xs">
+                          {fullPrompt}
+                        </pre>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </AccordionContent>

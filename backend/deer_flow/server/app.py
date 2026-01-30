@@ -35,6 +35,7 @@ from backend.deer_flow.config.report_style import ReportStyle
 from backend.deer_flow.config.tools import SELECTED_RAG_PROVIDER
 from backend.deer_flow.citations import merge_citations
 from backend.deer_flow.graph.builder import build_graph_with_memory
+from backend.debate_flow import get_debate_flow
 from backend.deer_flow.graph.checkpoint import chat_stream_message
 from backend.deer_flow.graph.utils import (
     build_clarified_topic_from_history,
@@ -1163,6 +1164,22 @@ def _make_event(event_type: str, data: dict[str, any]):
         # Return a safe error event
         error_data = json.dumps({"error": "Serialization failed"}, ensure_ascii=False)
         return f"event: error\ndata: {error_data}\n\n"
+
+
+@app.get("/api/debate/tool-context")
+async def get_debate_tool_context(
+    thread_id: str,
+    tool_call_id: str,
+    max_chars: int = 50000,
+):
+    """Return full model prompt context on demand (not streamed)."""
+    debate_flow = get_debate_flow(thread_id=thread_id)
+    context = debate_flow.get_tool_context(tool_call_id)
+    if not context:
+        raise HTTPException(status_code=404, detail="Context not found")
+    if max_chars and len(context) > max_chars:
+        context = context[:max_chars] + "... [truncated]"
+    return {"tool_call_id": tool_call_id, "context": context}
 
 
 @app.post("/api/tts")

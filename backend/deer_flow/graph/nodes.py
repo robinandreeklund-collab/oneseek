@@ -1,6 +1,7 @@
 # Copyright (c) 2025 Bytedance Ltd. and/or its affiliates
 # SPDX-License-Identifier: MIT
 
+import asyncio
 import json
 import logging
 import os
@@ -324,6 +325,23 @@ def build_rounds_preview(rounds: list[dict], max_chars: int = 400) -> list[dict]
             "responses": responses_preview,
         })
     return preview
+
+
+def extract_claim_sentences(text: str, max_claims: int = 8) -> list[str]:
+    """Extract claim-like sentences for controlled fact checking."""
+    if not text:
+        return []
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    claims = []
+    for sentence in sentences:
+        cleaned = sentence.strip()
+        if len(cleaned) < 20:
+            continue
+        if any(token in cleaned.lower() for token in ["%", "år", "year", "miljoner", "million", "billion", "studie", "rapport", "enligt", "according", "fakta", "data"]) or re.search(r"\d", cleaned):
+            claims.append(cleaned)
+        if len(claims) >= max_claims:
+            break
+    return claims
 
 
 def validate_and_fix_plan(plan: dict, enforce_web_search: bool = False, enable_web_search: bool = True) -> dict:
@@ -1000,7 +1018,7 @@ def human_feedback_node(
                 },
                 goto="planner",
             )
-        elif feedback_normalized.startswith("[ACCEPTED"):
+        elif feedback_normalized.startswith("[ACCEPTED") or feedback_normalized.startswith("ACCEPTED"):
             logger.info("Plan is accepted by user.")
         else:
             logger.warning(f"Unsupported feedback format: {feedback}. Please use '[ACCEPTED]' to accept or '[EDIT_PLAN]' to edit.")
@@ -2975,12 +2993,30 @@ async def external_ai_caller_node(
                 response_text = str(response)
                 context_used = ""
             
+            # Store full context for on-demand UI
+            try:
+                debate_flow.store_tool_context(query_model_id, context_used)
+            except Exception:
+                pass
+            
             if context_used and len(context_used) > max_context_chars:
                 context_used = (
                     context_used[:max_context_chars]
                     + f"... [trunkerat till {max_context_chars} tecken]"
                 )
             tool_result_text = f"### {model_key} svar\n\n{response_text}"
+            if isinstance(response, dict):
+                latency_ms = response.get("latency_ms")
+                tokens_in = response.get("tokens_in")
+                tokens_out = response.get("tokens_out")
+                if latency_ms is not None or tokens_in is not None or tokens_out is not None:
+                    tool_result_text += "\n\n**Metrics**\n"
+                    if latency_ms is not None:
+                        tool_result_text += f"- latency_ms: {latency_ms}\n"
+                    if tokens_in is not None:
+                        tool_result_text += f"- tokens_in: {tokens_in}\n"
+                    if tokens_out is not None:
+                        tool_result_text += f"- tokens_out: {tokens_out}\n"
             if context_used:
                 tool_result_text += "\n\n### Kontext skickad till modellen\n```text\n"
                 tool_result_text += context_used
@@ -3005,6 +3041,25 @@ async def external_ai_caller_node(
             is_last_model = (pending_index + 1) >= len(model_order)
             messages_out: list[AIMessage | ToolMessage] = [*tool_results]
             if is_last_model:
+                round_finished_id = f"call_{uuid.uuid4().hex[:24]}"
+                messages_out.append(
+                    AIMessage(
+                        content="",
+                        name="external_ai_caller",
+                        tool_calls=[{
+                            "id": round_finished_id,
+                            "name": "round_finished",
+                            "args": {"round_number": round_num},
+                        }],
+                        response_metadata={"finish_reason": "stop"},
+                    )
+                )
+                messages_out.append(
+                    ToolMessage(
+                        content=f"Round {round_num} finished",
+                        tool_call_id=round_finished_id,
+                    )
+                )
                 messages_out.append(
                     AIMessage(
                         content=combined_response,
@@ -3095,6 +3150,7 @@ async def external_ai_caller_node(
                 "model_key": model_key,
                 "round_number": round_num,
                 "model_index": f"{model_index + 1}/{len(model_order)}",
+                "models_total": len(model_order),
                 "user_query": user_query,
                 "locale": locale,
             },
@@ -3155,11 +3211,38 @@ async def fact_checker_node(
     thread_id = get_thread_id_from_config(config)
     locale = state.get("locale", "en-US")
     
-    # Get web search and other tools for verification
-    tools = [get_web_search_tool(configurable.max_search_results), crawl_tool]
+    from backend.debate_flow import get_debate_flow
+    debate_flow = get_debate_flow(thread_id=thread_id)
+    current_round = state.get("debate_round", 1)
+    
+    # Controlled claim extraction
+    claims = extract_claim_sentences(state.get("external_ai_responses", ""))
+    
+    # Cached tools
+    base_search_tool = get_web_search_tool(configurable.max_search_results)
+
+    @tool("web_search")
+    def cached_web_search(query: str) -> str:
+        return debate_flow.cached_web_search(query, current_round)
+
+    @tool("crawl_tool")
+    def cached_crawl(url: str) -> str:
+        return debate_flow.cached_crawl(url, current_round)
+
+    tools = [cached_web_search, cached_crawl]
     
     # Build prompt for fact_checker
     messages = apply_prompt_template("fact_checker", state, configurable, locale)
+    if claims:
+        claims_text = "\n".join(f"- {claim}" for claim in claims)
+        messages.append({
+            "role": "system",
+            "content": (
+                "Verifiera endast följande explicit formulerade påståenden. "
+                "Undvik att söka på nya eller vaga påståenden.\n\n"
+                f"{claims_text}"
+            ),
+        })
     
     # Create agent for fact_checker
     llm_token_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["fact_checker"])
@@ -3174,35 +3257,65 @@ async def fact_checker_node(
         locale=locale,
     )
     
-    # Execute agent
-    result = await agent.ainvoke(state, config)
+    # Build synthesizer agent (run in parallel)
+    synth_tools = [cached_web_search, cached_crawl]
+    synth_messages = apply_prompt_template("synthesizer", state, configurable, locale)
+    synth_llm_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["synthesizer"])
+    synth_pre_hook = partial(ContextManager(synth_llm_limit, 3).compress_messages)
+    synth_agent = create_agent(
+        "synthesizer",
+        "synthesizer",
+        synth_tools,
+        "synthesizer",
+        synth_pre_hook,
+        interrupt_before_tools=configurable.interrupt_before_tools,
+        locale=locale,
+    )
     
-    # Extract response - agent returns dict with "messages" key
+    # Execute both agents concurrently
+    synth_state = {**state, "messages": synth_messages}
+    result, synth_result = await asyncio.gather(
+        agent.ainvoke(state, config),
+        synth_agent.ainvoke(synth_state, config),
+    )
+    
+    # Extract responses
     response_content = ""
     if result and "messages" in result and len(result["messages"]) > 0:
         last_msg = result["messages"][-1]
-        if hasattr(last_msg, 'content'):
+        if hasattr(last_msg, "content"):
             response_content = last_msg.content
     
-    logger.info(f"Fact checker response length: {len(response_content)}")
+    synth_content = ""
+    if synth_result and "messages" in synth_result and len(synth_result["messages"]) > 0:
+        synth_msg = synth_result["messages"][-1]
+        if hasattr(synth_msg, "content"):
+            synth_content = synth_msg.content
     
-    # Store internal fact-check results for next-round context
+    logger.info(f"Fact checker response length: {len(response_content)}")
+    logger.info(f"Synthesizer response length: {len(synth_content)}")
+    
+    # Store internal fact-check + synthesis for next-round context
     try:
-        from backend.debate_flow import get_debate_flow
-        debate_flow = get_debate_flow(thread_id=thread_id)
-        current_round = state.get("debate_round", 1)
         if response_content:
             debate_flow.add_internal_fact_check(current_round, response_content)
+        if synth_content:
+            debate_flow.add_internal_summary(current_round, synth_content)
     except Exception as e:
-        logger.warning(f"Failed to store internal fact check: {e}")
+        logger.warning(f"Failed to store internal fact/synth: {e}")
+    
+    combined_messages = []
+    combined_messages.extend(result.get("messages", []) if result else [])
+    combined_messages.extend(synth_result.get("messages", []) if synth_result else [])
     
     return Command(
         update={
             **preserve_state_meta_fields(state),
-            "messages": result.get("messages", []),
+            "messages": combined_messages,
             "fact_checker_response": response_content,
+            "synthesizer_response": synth_content,
         },
-        goto="synthesizer"  # Route to synthesizer to integrate external AI perspectives
+        goto="synthesizer"  # synthesizer node will skip if already present
     )
 
 
@@ -3211,6 +3324,12 @@ async def synthesizer_node(
 ) -> Command[Literal["moderator"]]:
     """Synthesizer node - creates superior synthesis from both sides."""
     logger.info("Synthesizer creating integrated position")
+    if state.get("synthesizer_response"):
+        logger.info("Synthesizer already computed in parallel step, skipping.")
+        return Command(
+            update=preserve_state_meta_fields(state),
+            goto="moderator",
+        )
     configurable = Configuration.from_runnable_config(config)
     thread_id = get_thread_id_from_config(config)
     locale = state.get("locale", "en-US")

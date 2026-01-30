@@ -86,6 +86,9 @@ class DebateFlow:
         self.internal_fact_checks = []  # Internal fact-check summaries per round
         self.internal_summaries = []  # Internal synthesis summaries per round
         self.oneseek_round1_presearch_done = False
+        self.search_cache = {}
+        self.crawl_cache = {}
+        self.context_by_tool_call_id = {}
         
         # Token counting for context monitoring
         self.token_encoder = None
@@ -306,7 +309,7 @@ class DebateFlow:
             return ""
         try:
             search_results = await asyncio.wait_for(
-                asyncio.to_thread(self.search_tool.invoke, user_query),
+                asyncio.to_thread(self.cached_web_search, user_query, self.current_round),
                 timeout=5.0,
             )
             formatted = self._format_search_results(search_results, max_items=3)
@@ -314,6 +317,40 @@ class DebateFlow:
         except Exception as e:
             logger.warning(f"Round 1 presearch failed: {e}")
             return ""
+
+    def cached_web_search(self, query: str, round_number: int) -> Any:
+        """Cache web search results per round/query."""
+        cache_key = f"{round_number}:{query.strip().lower()}"
+        if cache_key in self.search_cache:
+            return self.search_cache[cache_key]
+        if not self.search_tool:
+            return []
+        result = self.search_tool.invoke(query)
+        self.search_cache[cache_key] = result
+        return result
+
+    def cached_crawl(self, url: str, round_number: int) -> Any:
+        """Cache crawl results per round/url."""
+        cache_key = f"{round_number}:{url.strip().lower()}"
+        if cache_key in self.crawl_cache:
+            return self.crawl_cache[cache_key]
+        from backend.deer_flow.tools import crawl_tool
+        result = crawl_tool.invoke(url)
+        self.crawl_cache[cache_key] = result
+        return result
+
+    def store_tool_context(self, tool_call_id: str, context: str, max_chars: int = 120000) -> None:
+        """Store full context for later retrieval."""
+        if not tool_call_id:
+            return
+        context_text = context or ""
+        if len(context_text) > max_chars:
+            context_text = context_text[:max_chars] + "... [trunkerat]"
+        self.context_by_tool_call_id[tool_call_id] = context_text
+
+    def get_tool_context(self, tool_call_id: str) -> str:
+        """Retrieve stored tool context by tool_call_id."""
+        return self.context_by_tool_call_id.get(tool_call_id, "")
 
     def _build_internal_context(self, up_to_round: int) -> str:
         """Build cumulative internal context up to a given round."""
@@ -368,6 +405,9 @@ class DebateFlow:
         self.internal_fact_checks = []
         self.internal_summaries = []
         self.oneseek_round1_presearch_done = False
+        self.search_cache = {}
+        self.crawl_cache = {}
+        self.context_by_tool_call_id = {}
         logger.info("DebateFlow state reset")
 
     def add_fact(self, fact: str, source: str = "web_search"):
@@ -580,8 +620,11 @@ class DebateFlow:
             logger.info(f"Querying {display_name} in round {self.current_round} (context: {token_count} tokens)")
             
             # Query the model
+            import time
+            start_time = time.monotonic()
             messages = [HumanMessage(content=context)]
             response = await model.ainvoke(messages)
+            latency_ms = int((time.monotonic() - start_time) * 1000)
             
             response_text = response.content if hasattr(response, "content") else str(response)
             
@@ -596,7 +639,10 @@ class DebateFlow:
                 "round": self.current_round,
                 "position": len(self.chain_so_far),
                 "error": False,
-                "context_used": context
+                "context_used": context,
+                "latency_ms": latency_ms,
+                "tokens_in": token_count,
+                "tokens_out": self._count_tokens(response_text),
             }
             
             # Add to chain_so_far
@@ -670,7 +716,7 @@ class DebateFlow:
                     
                     # Quick web search
                     search_results = await asyncio.wait_for(
-                        asyncio.to_thread(self.search_tool.invoke, search_query),
+                        asyncio.to_thread(self.cached_web_search, search_query, self.current_round),
                         timeout=5.0
                     )
                     
