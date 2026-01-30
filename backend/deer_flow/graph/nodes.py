@@ -2555,7 +2555,8 @@ async def debate_orchestrator_node(
     if messages and len(messages) > 0:
         # Check last 10 messages for errors from any debate node
         recent_messages = messages[-10:] if len(messages) >= 10 else messages
-        error_indicators = ["Error querying", "ERROR", "error", "AttributeError", "Exception", "Traceback"]
+        # More precise error indicators - avoid false positives
+        error_indicators = ["Error querying", "ERROR:", "error:", "AttributeError", "Exception:", "Traceback"]
         
         # Check if there are errors in recent messages
         error_in_recent = False
@@ -2563,6 +2564,7 @@ async def debate_orchestrator_node(
         for msg in reversed(recent_messages):
             if hasattr(msg, 'name') and msg.name in ["external_ai_caller", "moderator", "fact_checker", "synthesizer"]:
                 content = msg.content if isinstance(msg.content, str) else str(msg.content)
+                # Only detect actual errors, not JSON fields like '"error": false'
                 if any(indicator in content for indicator in error_indicators):
                     error_in_recent = True
                     error_node = msg.name
