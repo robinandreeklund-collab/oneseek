@@ -149,10 +149,13 @@ def _build_base_graph():
     # debate_planner routes to human_feedback
     # human_feedback routes to debate_orchestrator for debate mode
     # debate_orchestrator dispatches to parallel nodes (proponent, opponent, fact_checker) and synthesizer
-    # All debate nodes route back to orchestrator or forward dynamically
-    # No fixed edges needed - all routing via Command
-    builder.add_edge("synthesizer", "moderator")  # Only fixed edge: synthesizer always goes to moderator
-    # moderator and debate_orchestrator use Command to route dynamically
+    # Debate chain edges - enforce correct flow after EACH round
+    # Flow: orchestrator → external_ai_caller → fact_checker → synthesizer → moderator → orchestrator (loop)
+    builder.add_edge("external_ai_caller", "fact_checker")
+    builder.add_edge("fact_checker", "synthesizer")
+    builder.add_edge("synthesizer", "moderator")
+    builder.add_edge("moderator", "debate_orchestrator")
+    # debate_orchestrator uses Command to route to external_ai_caller (next round) or reporter (complete)
     
     builder.add_conditional_edges(
         "research_team",
