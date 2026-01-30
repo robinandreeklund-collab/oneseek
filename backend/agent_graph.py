@@ -28,6 +28,7 @@ class AgentState(TypedDict):
     tool_actions: List[Dict[str, Any]]  # Track tool invocations for ActionBlock
     system_prompt: Optional[str]
     enable_thinking: Optional[bool]
+    current_iteration: Optional[int]  # Track current round/iteration number for persistence
 
 
 class OneSeekGraphAgent:
@@ -324,7 +325,8 @@ class OneSeekGraphAgent:
             "steps": [],
             "tool_actions": [],  # Initialize tool_actions
             "system_prompt": system_prompt,
-            "enable_thinking": enable_thinking
+            "enable_thinking": enable_thinking,
+            "current_iteration": 0  # Initialize iteration counter in state for persistence
         }
         
         # Execute the graph
@@ -371,7 +373,16 @@ class OneSeekGraphAgent:
                 steps_list.append(content)
                 logger.info(f"Step: {content}")
             elif event_type == "tool_action":
-                tool_actions_list.append(content)
+                # Check if this tool action already exists (by tool_call_id) to avoid duplicates
+                tool_call_id = content.get("tool_call_id")
+                existing_index = next((i for i, action in enumerate(tool_actions_list) 
+                                      if action.get("tool_call_id") == tool_call_id), None)
+                if existing_index is not None:
+                    # Update existing tool action in place
+                    tool_actions_list[existing_index] = content
+                else:
+                    # Add new tool action
+                    tool_actions_list.append(content)
                 logger.info(f"Tool action: {content}")
         
         # Convert dict messages to LangChain messages
@@ -395,15 +406,17 @@ class OneSeekGraphAgent:
             "steps": [],
             "tool_actions": [],  # Initialize tool_actions
             "system_prompt": system_prompt,
-            "enable_thinking": enable_thinking
+            "enable_thinking": enable_thinking,
+            "current_iteration": 0  # Initialize iteration counter in state for persistence
         }
         
         max_iterations = 5  # Prevent infinite loops
-        iteration = 0
         
-        while iteration < max_iterations:
-            iteration += 1
-            logger.info(f"Iteration {iteration}")
+        # Use state-based iteration to track rounds persistently
+        while current_state.get("current_iteration", 0) < max_iterations:
+            current_state["current_iteration"] = current_state.get("current_iteration", 0) + 1
+            iteration = current_state["current_iteration"]
+            logger.info(f"Round {iteration} (state-based iteration tracking)")
             
             # Run agent node
             agent_result = self._agent_node_streaming(current_state, callback)
@@ -452,6 +465,7 @@ class OneSeekGraphAgent:
                     }
                     tool_calls_from_last_msg.append(tool_action)
                     tool_actions_list.append(tool_action)
+                    logger.info(f"Tool action STARTED - Round {iteration}: {display_name} (id: {tool_call_id})")
                     callback("tool_action", tool_action)
             
             # Execute tools
@@ -487,6 +501,7 @@ class OneSeekGraphAgent:
                         }
                     
                     # Update the tool action in the list
+                    logger.info(f"Tool action COMPLETED - Round {iteration}: {tool_action.get('display_name')} (duration: {tool_action['duration']:.2f}s)")
                     callback("tool_action", tool_action)
             
             # Add tool messages to state
@@ -540,7 +555,16 @@ class OneSeekGraphAgent:
                 steps_list.append(content)
                 logger.info(f"Step: {content}")
             elif event_type == "tool_action":
-                tool_actions_list.append(content)
+                # Check if this tool action already exists (by tool_call_id) to avoid duplicates
+                tool_call_id = content.get("tool_call_id")
+                existing_index = next((i for i, action in enumerate(tool_actions_list) 
+                                      if action.get("tool_call_id") == tool_call_id), None)
+                if existing_index is not None:
+                    # Update existing tool action in place
+                    tool_actions_list[existing_index] = content
+                else:
+                    # Add new tool action
+                    tool_actions_list.append(content)
                 logger.info(f"Tool action: {content}")
             
             # Also call external realtime callback if provided
@@ -567,15 +591,17 @@ class OneSeekGraphAgent:
             "steps": [],
             "tool_actions": [],
             "system_prompt": system_prompt,
-            "enable_thinking": enable_thinking
+            "enable_thinking": enable_thinking,
+            "current_iteration": 0  # Initialize iteration counter in state for persistence
         }
         
         max_iterations = 5
-        iteration = 0
         
-        while iteration < max_iterations:
-            iteration += 1
-            logger.info(f"Iteration {iteration}")
+        # Use state-based iteration to track rounds persistently
+        while current_state.get("current_iteration", 0) < max_iterations:
+            current_state["current_iteration"] = current_state.get("current_iteration", 0) + 1
+            iteration = current_state["current_iteration"]
+            logger.info(f"Round {iteration} (state-based iteration tracking)")
             
             # Run agent node
             agent_result = self._agent_node_streaming(current_state, callback)
@@ -624,6 +650,7 @@ class OneSeekGraphAgent:
                     }
                     tool_calls_from_last_msg.append(tool_action)
                     tool_actions_list.append(tool_action)
+                    logger.info(f"Tool action STARTED - Round {iteration}: {display_name} (id: {tool_call_id})")
                     callback("tool_action", tool_action)  # This triggers realtime_callback immediately!
             
             # Execute tools
@@ -659,6 +686,7 @@ class OneSeekGraphAgent:
                         }
                     
                     # Update the tool action in the list and trigger realtime callback
+                    logger.info(f"Tool action COMPLETED - Round {iteration}: {tool_action.get('display_name')} (duration: {tool_action['duration']:.2f}s)")
                     callback("tool_action", tool_action)  # This triggers realtime_callback immediately!
             
             # Add tool messages to state
