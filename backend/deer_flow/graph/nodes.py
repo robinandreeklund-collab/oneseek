@@ -2665,8 +2665,8 @@ async def external_ai_caller_node(
     try:
         # Step 1: Start the debate round
         logger.info(f"Step 1: Starting debate round {round_num}")
-        round_start_msg = debate_flow.start_debate_round(round_num)
-        logger.info(f"Round started: {round_start_msg}")
+        debate_flow.start_new_round(round_num)
+        logger.info(f"Round {round_num} started")
         
         # Step 2: Query each model EXACTLY once
         all_models = list(debate_flow.models.keys())
@@ -2675,7 +2675,9 @@ async def external_ai_caller_node(
         responses = []
         for i, model_key in enumerate(all_models, 1):
             logger.info(f"  Querying model {i}/{len(all_models)}: {model_key}")
-            response = debate_flow.query_model_in_round(model_key, round_num)
+            # Build context and query model
+            user_query = state.get("user_query", "")
+            response = await debate_flow.query_model_in_debate(model_key, user_query, round_num)
             responses.append(f"Model {model_key}: {response}")
             logger.info(f"  ✓ Model {model_key} responded ({len(response)} chars)")
         
