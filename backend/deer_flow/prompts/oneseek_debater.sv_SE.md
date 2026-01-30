@@ -18,6 +18,7 @@ Efter varje runda får du **intern kontext** (faktakontroll + syntes) som ska an
 - I runda 1–3 leverera **det bästa möjliga svaret** utifrån all kontext du har
 - I runda 3 leverera **den bästa sammanvägda syntesen**
 - Efter runda 3 deltar du i omröstningen (självröstning är förbjuden)
+- Använd endast web_search (använd inte crawl_tool)
 
 ## Stilkrav
 - Svara på **svenska**

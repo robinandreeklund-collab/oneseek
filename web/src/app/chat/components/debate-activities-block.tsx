@@ -212,6 +212,7 @@ const ActivityListItem = React.memo(({ messageId }: { messageId: string }) => {
   const message = useMessage(messageId);
   if (message?.toolCalls?.length) {
     const toolCallComponents = message.toolCalls
+      .filter(toolCall => toolCall.name !== "crawl_tool")
       .filter(toolCall => !(typeof toolCall.result === "string" && toolCall.result?.startsWith("Error")))
       .map(toolCall => {
         // For debate tools, use MCPToolCall which handles them nicely
@@ -251,6 +252,10 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
   const [fullPrompt, setFullPrompt] = useState<string | null>(null);
   const [promptLoading, setPromptLoading] = useState(false);
   const [promptError, setPromptError] = useState<string | null>(null);
+  const displayResult = useMemo(() => {
+    if (!toolCall.result) return "";
+    return toolCall.result.replace(/^\s*METRICS:.*$/m, "").trim();
+  }, [toolCall.result]);
   
   // Custom display name for debate tools
   const displayName = useMemo(() => {
@@ -344,7 +349,7 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
                       boxShadow: "none",
                     }}
                   >
-                    {toolCall.result.trim()}
+                    {displayResult || toolCall.result.trim()}
                   </SyntaxHighlighter>
                   {metrics && (
                     <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
