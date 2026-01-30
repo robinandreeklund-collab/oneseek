@@ -26,13 +26,14 @@ Du är ansvarig för att **orchestrera EN ENSKILD RUNDA** i en debatt där exter
   - Sammanfatta att rundan är klar och returnera
 
 ### Kontext Varje Runda:
-- **Runda 1**: Modeller får användarfråga + chain_so_far
-- **Runda 2**: Modeller får användarfråga + HELA runda 1 + chain_so_far  
-- **Runda 3**: Modeller får användarfråga + HELA runda 1-2 + chain_so_far
+- **Runda 1**: Modeller får användarfråga + chain_so_far (inga interna resultat ännu)
+- **Runda 2**: Modeller får användarfråga + HELA runda 1 + interna resultat från runda 1 + chain_so_far  
+- **Runda 3**: Modeller får användarfråga + HELA runda 1–2 + kumulativa interna resultat (runda 1–2) + chain_so_far
 
 ### Efter Du Är Klar:
 - **Gör INTE mer** - du är klar med denna runda
 - Flödet går automatiskt till: fact_checker → synthesizer → moderator → debate_orchestrator
+- Interna resultat sparas och används som kontext i nästa runda
 - debate_orchestrator beslutar om nästa runda eller avslut
 
 **VIKTIGT**: Anropa ALDRIG `collect_debate_votes` eller `get_debate_summary` - det hanteras av andra noder!

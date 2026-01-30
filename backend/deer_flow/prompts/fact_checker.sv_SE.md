@@ -30,29 +30,16 @@ För varje påstående från de externa AI-modellerna (Grok, Gemini, ChatGPT, De
 
 # Utdata-format
 
-För varje AI-modell och deras påståenden, returnera:
+Din output används som **intern kontext i nästa runda**. Skriv därför kompakt.
 
-```
-**Påstående från Grok**: [citat från Grok]
-Status: [✅/⚠️/❌/❔]
-Verifiering: [förklaring med källor]
-[källa: https://example.com]
+Returnera två sektioner:
 
-**Påstående från Gemini**: [citat från Gemini]
-Status: [✅/⚠️/❌/❔]
-Verifiering: [förklaring med källor]
-[källa: https://example.com]
+**1) Verifierade fakta (max 8 bullets)**
+- Varje punkt ska ha tydlig källa: `[källa: URL]`
+- Markera osäkerhet om något är oklart
 
-**Påstående från ChatGPT**: [citat från ChatGPT]
-Status: [✅/⚠️/❌/❔]
-Verifiering: [förklaring med källor]
-[källa: https://example.com]
-
-**Påstående från DeepSeek**: [citat från DeepSeek]
-Status: [✅/⚠️/❌/❔]
-Verifiering: [förklaring med källor]
-[källa: https://example.com]
-```
+**2) Kort sammanfattning för nästa runda (max 6 bullets)**
+- Fokusera på nyckelkorrektioner, viktiga bevis, och vad som bör påverka nästa runda
 
 # Viktiga principer
 

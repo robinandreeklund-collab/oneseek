@@ -1431,6 +1431,62 @@ def coordinator_node(
     )
 
 
+def _format_debate_results_for_report(debate_results: dict) -> str:
+    """Create a compact debate context for the reporter model."""
+    def truncate(text: str, max_chars: int = 900) -> str:
+        if not text:
+            return ""
+        text = text.strip()
+        if len(text) > max_chars:
+            return text[:max_chars] + "... [trunkerat]"
+        return text
+
+    user_query = debate_results.get("user_query", "")
+    rounds = debate_results.get("rounds", [])
+    vote_results = debate_results.get("vote_results")
+    internal_fact_checks = debate_results.get("internal_fact_checks", [])
+    internal_summaries = debate_results.get("internal_summaries", [])
+
+    parts = [
+        "Denna debattprocess är intern för OneSeek och ska inte delas externt.",
+        f"Fråga: {user_query}",
+    ]
+
+    for round_data in rounds:
+        round_number = round_data.get("round")
+        parts.append(f"\n## Runda {round_number}")
+        for resp in round_data.get("responses", []):
+            display = resp.get("display_name") or resp.get("model", "Modell")
+            response_text = truncate(resp.get("response", ""))
+            parts.append(f"- **{display}**: {response_text}")
+
+    if internal_fact_checks:
+        parts.append("\n## Interna faktakontroller (kumulativa)")
+        for entry in internal_fact_checks:
+            round_number = entry.get("round")
+            parts.append(f"- Runda {round_number}: {truncate(entry.get('content', ''), 700)}")
+
+    if internal_summaries:
+        parts.append("\n## Interna synteser (kumulativa)")
+        for entry in internal_summaries:
+            round_number = entry.get("round")
+            parts.append(f"- Runda {round_number}: {truncate(entry.get('content', ''), 700)}")
+
+    if vote_results:
+        parts.append("\n## Röstningsresultat (endast externa modeller)")
+        parts.append(f"Vinnare: {vote_results.get('winner')}")
+        parts.append(f"Röster: {vote_results.get('votes')}")
+        details = vote_results.get("vote_details", [])
+        if details:
+            parts.append("Detaljer:")
+            for detail in details:
+                voter = detail.get("voter", "okänd")
+                vote = detail.get("vote", "okänd")
+                parts.append(f"- {voter} → {vote}")
+
+    return "\n".join(parts)
+
+
 def reporter_node(state: State, config: RunnableConfig):
     """Reporter node that write a final report."""
     logger.info("Reporter write final report")
@@ -1440,12 +1496,22 @@ def reporter_node(state: State, config: RunnableConfig):
     debate_results = state.get("debate_results")
     if debate_results:
         logger.info("Handling debate results in reporter node")
-        final_report = debate_results.get("final_report", "Debate completed but no report generated.")
+        final_report = debate_results.get("final_report")
+        if not final_report or len(final_report) < 100:
+            locale = state.get("locale", "sv-SE")
+            debate_context = _format_debate_results_for_report(debate_results)
+            input_ = {
+                "messages": [HumanMessage(content=debate_context)],
+                "locale": locale,
+            }
+            invoke_messages = apply_prompt_template("debate_reporter", input_, configurable, locale)
+            response = get_llm_by_type(AGENT_LLM_MAP["reporter"]).invoke(invoke_messages)
+            final_report = strip_think_tags(response.content)
         
-        # If the report seems short or missing, we might want to wrap it
+        # Ensure a title is present
         if len(final_report) < 100:
-            final_report = f"# Debate Results\n\n{final_report}"
-            
+            final_report = f"# Debattresultat\n\n{final_report}"
+        
         return {
             "final_report": final_report,
             "citations": state.get("citations", []),
@@ -2642,12 +2708,35 @@ async def debate_orchestrator_node(
     if current_round > max_rounds:
         logger.info(f"Max rounds reached: {max_rounds}")
         exit_reason = f"{max_rounds} rundor uppnått"
+        thread_id = get_thread_id_from_config(config)
+        user_query = state.get("clarified_research_topic") or state.get("research_topic", "")
+        vote_results = None
+        debate_rounds = []
+        internal_fact_checks = []
+        internal_summaries = []
+        try:
+            from backend.debate_flow import get_debate_flow
+            debate_flow = get_debate_flow(thread_id=thread_id)
+            round_3_responses = list(debate_flow.chain_so_far) if debate_flow.chain_so_far else []
+            if round_3_responses:
+                vote_results = await debate_flow.collect_votes(user_query, round_3_responses)
+            debate_rounds = list(debate_flow.debate_history)
+            if round_3_responses:
+                debate_rounds.append({
+                    "round": debate_flow.current_round,
+                    "responses": round_3_responses,
+                })
+            internal_fact_checks = list(getattr(debate_flow, "internal_fact_checks", []))
+            internal_summaries = list(getattr(debate_flow, "internal_summaries", []))
+        except Exception as e:
+            logger.warning(f"Failed to collect debate votes or history: {e}")
         summary_msg = AIMessage(
             content=json.dumps({
                 "final_round": current_round - 1,
                 "final_scores": scores,
                 "exit_reason": exit_reason,
-                "external_ai_models": ["Grok", "Gemini", "ChatGPT", "DeepSeek"]
+                "external_ai_models": ["Grok", "Gemini", "ChatGPT", "DeepSeek"],
+                "vote_results": vote_results,
             }, ensure_ascii=False, indent=2),
             name="debate_orchestrator"
         )
@@ -2662,12 +2751,40 @@ async def debate_orchestrator_node(
                 "debate_knockout": knockout,
                 "debate_max_rounds": max_rounds,
                 "debate_error_count": 0,  # Reset on successful completion
+                "debate_results": {
+                    "status": "completed",
+                    "final_round": current_round - 1,
+                    "rounds": debate_rounds,
+                    "vote_results": vote_results,
+                    "internal_fact_checks": internal_fact_checks,
+                    "internal_summaries": internal_summaries,
+                    "user_query": user_query,
+                },
             },
             goto="reporter"
         )
     elif knockout:
         logger.info("Knockout detected in previous round")
         exit_reason = "Knockout-argument identifierat"
+        thread_id = get_thread_id_from_config(config)
+        user_query = state.get("clarified_research_topic") or state.get("research_topic", "")
+        debate_rounds = []
+        internal_fact_checks = []
+        internal_summaries = []
+        try:
+            from backend.debate_flow import get_debate_flow
+            debate_flow = get_debate_flow(thread_id=thread_id)
+            current_responses = list(debate_flow.chain_so_far) if debate_flow.chain_so_far else []
+            debate_rounds = list(debate_flow.debate_history)
+            if current_responses:
+                debate_rounds.append({
+                    "round": debate_flow.current_round,
+                    "responses": current_responses,
+                })
+            internal_fact_checks = list(getattr(debate_flow, "internal_fact_checks", []))
+            internal_summaries = list(getattr(debate_flow, "internal_summaries", []))
+        except Exception as e:
+            logger.warning(f"Failed to collect debate history for knockout: {e}")
         summary_msg = AIMessage(
             content=json.dumps({
                 "final_round": current_round - 1,
@@ -2688,6 +2805,15 @@ async def debate_orchestrator_node(
                 "debate_knockout": knockout,
                 "debate_max_rounds": max_rounds,
                 "debate_error_count": 0,  # Reset on successful completion
+                "debate_results": {
+                    "status": "completed",
+                    "final_round": current_round - 1,
+                    "rounds": debate_rounds,
+                    "vote_results": None,
+                    "internal_fact_checks": internal_fact_checks,
+                    "internal_summaries": internal_summaries,
+                    "user_query": user_query,
+                },
             },
             goto="reporter"
         )
@@ -2940,6 +3066,7 @@ async def fact_checker_node(
     """Fact checker node - verifies claims from external AI models."""
     logger.info("Fact checker verifying external AI claims")
     configurable = Configuration.from_runnable_config(config)
+    thread_id = get_thread_id_from_config(config)
     locale = state.get("locale", "en-US")
     
     # Get web search and other tools for verification
@@ -2973,6 +3100,16 @@ async def fact_checker_node(
     
     logger.info(f"Fact checker response length: {len(response_content)}")
     
+    # Store internal fact-check results for next-round context
+    try:
+        from backend.debate_flow import get_debate_flow
+        debate_flow = get_debate_flow(thread_id=thread_id)
+        current_round = state.get("debate_round", 1)
+        if response_content:
+            debate_flow.add_internal_fact_check(current_round, response_content)
+    except Exception as e:
+        logger.warning(f"Failed to store internal fact check: {e}")
+    
     return Command(
         update={
             **preserve_state_meta_fields(state),
@@ -2989,6 +3126,7 @@ async def synthesizer_node(
     """Synthesizer node - creates superior synthesis from both sides."""
     logger.info("Synthesizer creating integrated position")
     configurable = Configuration.from_runnable_config(config)
+    thread_id = get_thread_id_from_config(config)
     locale = state.get("locale", "en-US")
     
     # Get web search and other tools for additional context
@@ -3021,6 +3159,16 @@ async def synthesizer_node(
             response_content = last_msg.content
     
     logger.info(f"Synthesizer response length: {len(response_content)}")
+    
+    # Store internal synthesis summary for next-round context
+    try:
+        from backend.debate_flow import get_debate_flow
+        debate_flow = get_debate_flow(thread_id=thread_id)
+        current_round = state.get("debate_round", 1)
+        if response_content:
+            debate_flow.add_internal_summary(current_round, response_content)
+    except Exception as e:
+        logger.warning(f"Failed to store internal synthesis: {e}")
     
     return Command(
         update={

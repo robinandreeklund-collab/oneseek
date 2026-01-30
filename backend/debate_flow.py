@@ -83,6 +83,8 @@ class DebateFlow:
         self.debate_history = []  # All rounds history
         self.oneseek_analyses = []  # OneSeek internal analyses
         self.facts = []  # Shared facts accumulated from tools
+        self.internal_fact_checks = []  # Internal fact-check summaries per round
+        self.internal_summaries = []  # Internal synthesis summaries per round
         
         # Token counting for context monitoring
         self.token_encoder = None
@@ -251,6 +253,53 @@ class DebateFlow:
         
         return summary
 
+    def _truncate_internal(self, content: str, max_chars: int = 1400) -> str:
+        """Truncate internal context to keep prompts bounded."""
+        cleaned = content.strip() if isinstance(content, str) else str(content)
+        if len(cleaned) > max_chars:
+            return cleaned[:max_chars] + "... [trunkerat]"
+        return cleaned
+
+    def add_internal_fact_check(self, round_number: int, content: str) -> None:
+        """Store internal fact-check results for a round."""
+        entry = {
+            "round": round_number,
+            "content": self._truncate_internal(content, max_chars=1400),
+        }
+        self.internal_fact_checks.append(entry)
+        # Keep last few entries
+        if len(self.internal_fact_checks) > 6:
+            self.internal_fact_checks = self.internal_fact_checks[-6:]
+
+    def add_internal_summary(self, round_number: int, content: str) -> None:
+        """Store internal synthesis summary for a round."""
+        entry = {
+            "round": round_number,
+            "content": self._truncate_internal(content, max_chars=1400),
+        }
+        self.internal_summaries.append(entry)
+        if len(self.internal_summaries) > 6:
+            self.internal_summaries = self.internal_summaries[-6:]
+
+    def _build_internal_context(self, up_to_round: int) -> str:
+        """Build cumulative internal context up to a given round."""
+        if up_to_round < 1:
+            return ""
+
+        parts: list[str] = []
+        for round_number in range(1, up_to_round + 1):
+            round_parts: list[str] = []
+            for entry in self.internal_fact_checks:
+                if entry.get("round") == round_number:
+                    round_parts.append(f"Faktakontroll Runda {round_number}:\n{entry.get('content', '')}")
+            for entry in self.internal_summaries:
+                if entry.get("round") == round_number:
+                    round_parts.append(f"Syntes Runda {round_number}:\n{entry.get('content', '')}")
+            if round_parts:
+                parts.append("\n".join(round_parts))
+
+        return "\n\n".join(parts)
+
     def start_new_round(self, round_number: int):
         """
         Start a new debate round with clean state.
@@ -282,6 +331,8 @@ class DebateFlow:
         self.debate_history = []
         self.oneseek_analyses = []
         self.facts = []
+        self.internal_fact_checks = []
+        self.internal_summaries = []
         logger.info("DebateFlow state reset")
 
     def add_fact(self, fact: str, source: str = "web_search"):
@@ -380,14 +431,22 @@ class DebateFlow:
                     context_parts.append(f"\n{resp['display_name']}: {snippet}\n")
                 context_parts.append(f"\nDitt svar (på {language}, max 500 tokens):")
         
-        # Round 2 & 3: FIXED - Use SUMMARY instead of full previous round
+        # Round 2 & 3: Use full previous round + internal results
         else:
             if self.full_previous_round:
                 prev_round = self.current_round - 1
-                # CRITICAL FIX: Summarize instead of including full responses
-                summary = self._summarize_round(self.full_previous_round)
-                context_parts.append(f"\n**Sammanfattning av Runda {prev_round}:**\n")
-                context_parts.append(summary)
+                context_parts.append(f"\n**Runda {prev_round} (fullständiga svar):**\n")
+                for resp in self.full_previous_round:
+                    if resp.get("error"):
+                        continue
+                    response_text = resp.get("response", "")
+                    context_parts.append(f"\n{resp.get('display_name', resp.get('model', 'Model'))}: {response_text}\n")
+                context_parts.append("\n")
+
+            internal_context = self._build_internal_context(self.current_round - 1)
+            if internal_context:
+                context_parts.append("\n**Interna resultat (faktakontroll + syntes):**\n")
+                context_parts.append(internal_context)
                 context_parts.append("\n")
             
             # FIXED: Limit chain_so_far to last 5 responses (increased from 3)
@@ -623,8 +682,11 @@ class DebateFlow:
         if token_count > 10000:
             logger.warning(f"⚠️ Voting context large: {token_count} tokens")
         
-        # Ask each model to vote (including OneSeek, per user request)
-        available_models = list(self.models.keys())
+        # Ask each external model to vote (exclude OneSeek)
+        available_models = [
+            key for key in self.models.keys()
+            if not DEBATE_MODELS.get(key, {}).get("is_oneseek")
+        ]
         
         for model_key in available_models:
             if model_key not in self.models:
