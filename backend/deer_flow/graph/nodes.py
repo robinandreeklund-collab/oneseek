@@ -267,7 +267,24 @@ def preserve_state_meta_fields(state: State) -> dict:
         "debate_max_rounds": state.get("debate_max_rounds", 3),
         "debate_error_count": state.get("debate_error_count", 0),
         "debate_complete": state.get("debate_complete", False),
+        "debate_model_index": state.get("debate_model_index", 0),
+        "debate_model_order": state.get("debate_model_order", []),
+        "debate_round_started": state.get("debate_round_started", False),
+        "external_ai_responses": state.get("external_ai_responses", ""),
+        "debate_pending_model": state.get("debate_pending_model"),
     }
+
+
+def get_thread_id_from_config(config: RunnableConfig | None) -> str:
+    """Extract thread_id from runnable config."""
+    if not config:
+        return "default"
+    if isinstance(config, dict) and config.get("thread_id"):
+        return str(config["thread_id"])
+    configurable = config.get("configurable") if isinstance(config, dict) else None
+    if isinstance(configurable, dict) and configurable.get("thread_id"):
+        return str(configurable["thread_id"])
+    return "default"
 
 
 def validate_and_fix_plan(plan: dict, enforce_web_search: bool = False, enable_web_search: bool = True) -> dict:
@@ -2675,17 +2692,6 @@ async def debate_orchestrator_node(
             goto="reporter"
         )
     
-    # Create debate_flow instance if this is round 1 (and it doesn't exist)
-    if current_round == 1 and "debate_flow" not in state:
-        from backend.debate_flow import get_debate_flow
-        debate_flow = get_debate_flow(
-            max_search_results=configurable.max_search_results,
-            resources=state.get("resources", [])
-        )
-        logger.info("Created debate_flow instance for round 1")
-    else:
-        debate_flow = state.get("debate_flow")
-    
     # Start new round - route to external_ai_caller to get real AI responses
     logger.info(f"Round {current_round}: Routing to external_ai_caller for real AI model responses")
     
@@ -2702,7 +2708,11 @@ async def debate_orchestrator_node(
         "debate_max_rounds": max_rounds,
         "debate_complete": False,
         "debate_error_count": error_count,
-        "debate_flow": debate_flow,  # ADD debate_flow to state!
+        "debate_round_started": False,
+        "debate_model_index": 0,
+        "debate_model_order": [],
+        "external_ai_responses": "",
+        "debate_pending_model": None,
     }
     logger.info(f"Orchestrator: Final state_update has debate_round={state_update.get('debate_round')}")
     
@@ -2728,130 +2738,187 @@ async def debate_team_node(state: State, config: RunnableConfig):
 
 async def external_ai_caller_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["fact_checker"]]:
+) -> Command[Literal["external_ai_caller", "fact_checker"]]:
     """
-    External AI Caller node - orchestrates sequential debate rounds DETERMINISTICALLY.
+    External AI Caller node - orchestrates debate rounds one model at a time.
     
-    NO LONGER uses an LLM agent (which was unreliable and caused infinite loops).
-    Instead, directly calls debate_flow methods in a predictable order:
-    1. Start the debate round
-    2. Query each model exactly once
-    3. Return
-    
-    This ensures each model is called EXACTLY once per round, no more, no less.
+    This enables near-real-time UI updates by emitting tool calls/results
+    after each model completes instead of after the full round.
     """
-    logger.info("External AI Caller - orchestrating debate round (DETERMINISTIC)")
+    logger.info("External AI Caller - orchestrating debate round (per-model)")
     configurable = Configuration.from_runnable_config(config)
+    thread_id = get_thread_id_from_config(config)
     
-    # Always recreate debate_flow instance (don't rely on state persistence)
-    # LangGraph doesn't properly pass complex Python objects through state
     from backend.debate_flow import get_debate_flow
+    # Reset debate_flow only when a new debate starts at round 1
+    round_num = state.get("debate_round", 1)
+    round_started = state.get("debate_round_started", False)
     debate_flow = get_debate_flow(
         max_search_results=configurable.max_search_results,
-        resources=state.get("resources", [])
+        resources=state.get("resources", []),
+        thread_id=thread_id,
+        reset=(round_num == 1 and not round_started),
     )
-    logger.info("Created debate_flow instance in external_ai_caller")
     
-    # Get current round number from state (1-based: 1, 2, 3)
-    round_num = state.get("debate_round", 1)
-    logger.info(f"Starting deterministic execution for Round {round_num}")
+    # Determine model order and index
+    model_order = state.get("debate_model_order") or []
+    model_index = state.get("debate_model_index", 0)
+    pending_model = state.get("debate_pending_model")
     
-    # DETERMINISTIC EXECUTION - no LLM making decisions!
     try:
-        # Create tool calls list to show progress in frontend
-        tool_calls = []
-        tool_results = []
+        tool_calls: list[dict[str, Any]] = []
+        tool_results: list[ToolMessage] = []
         import uuid
         
-        # Step 1: Start the debate round
-        # Emit tool call for starting round
-        start_round_id = f"call_{uuid.uuid4().hex[:24]}"
-        tool_calls.append({
-            "id": start_round_id,
-            "name": "start_debate_round",
-            "args": {"round_number": round_num}
-        })
-        
-        logger.info(f"Step 1: Starting debate round {round_num}")
-        debate_flow.start_new_round(round_num)
-        logger.info(f"Round {round_num} started")
-        tool_results.append(
-            ToolMessage(
-                content=f"Round {round_num} started",
-                tool_call_id=start_round_id,
-            )
-        )
-        
-        # Step 2: Query each model EXACTLY once
-        all_models = list(debate_flow.models.keys())
-        logger.info(f"Step 2: Querying {len(all_models)} models sequentially")
-        
-        responses = []
-        for i, model_key in enumerate(all_models, 1):
-            # Emit tool call for querying model
-            query_model_id = f"call_{uuid.uuid4().hex[:24]}"
-            tool_calls.append({
-                "id": query_model_id,
-                "name": "query_model_in_round",
-                "args": {
-                    "model_key": model_key,
-                    "round_number": round_num,
-                    "model_index": f"{i}/{len(all_models)}"
-                }
-            })
+        if pending_model:
+            model_key = pending_model.get("model_key")
+            query_model_id = pending_model.get("tool_call_id")
+            pending_index = pending_model.get("model_index", model_index)
             
-            logger.info(f"  Querying model {i}/{len(all_models)}: {model_key}")
-            # Build context and query model
-            # Get user's actual question from research_topic (clarified version takes precedence)
+            logger.info(f"Executing pending model {pending_index + 1}/{len(model_order)}: {model_key}")
             user_query = state.get("clarified_research_topic") or state.get("research_topic", "")
-            # Get locale from state (NOT round number!)
             locale = state.get("locale", "sv-SE")
-            # Query model with correct locale parameter
             response = await debate_flow.query_model_in_debate(model_key, user_query, locale)
             
-            # Extract only the actual response text, not the full metadata
             if isinstance(response, dict):
-                response_text = response.get('response', str(response))
+                response_text = response.get("response", str(response))
             else:
                 response_text = str(response)
             
-            responses.append(f"Model {model_key}: {response_text}")
-            logger.info(f"  ✓ Model {model_key} responded ({len(response_text)} chars)")
             tool_results.append(
                 ToolMessage(
                     content=f"{model_key}: {response_text}",
                     tool_call_id=query_model_id,
                 )
             )
+            
+            combined_response = state.get("external_ai_responses", "").strip()
+            if combined_response:
+                combined_response += "\n\n"
+            combined_response += f"Model {model_key}: {response_text}"
+            
+            is_last_model = (pending_index + 1) >= len(model_order)
+            messages_out: list[AIMessage | ToolMessage] = [*tool_results]
+            if is_last_model:
+                messages_out.append(
+                    AIMessage(
+                        content=combined_response,
+                        name="external_ai_caller",
+                        response_metadata={"finish_reason": "stop"},
+                        additional_kwargs={
+                            "round": round_num,
+                            "models_queried": len(model_order),
+                            "agent": "external_ai_caller",
+                        },
+                    )
+                )
+            
+            next_index = pending_index + 1
+            goto = "external_ai_caller" if next_index < len(model_order) else "fact_checker"
+            
+            return Command(
+                update={
+                    **preserve_state_meta_fields(state),
+                    "messages": messages_out,
+                    "external_ai_responses": combined_response,
+                    "debate_round_started": round_started,
+                    "debate_model_order": model_order,
+                    "debate_model_index": next_index,
+                    "debate_pending_model": None,
+                },
+                goto=goto,
+            )
         
-        # Step 3: Done! Combine all responses
-        combined_response = "\n\n".join(responses)
-        logger.info(f"Step 3: Round {round_num} complete - all {len(all_models)} models queried")
+        if not round_started:
+            # Initialize round and order
+            logger.info(f"Starting debate round {round_num} for thread {thread_id}")
+            debate_flow.start_new_round(round_num)
+            model_order = debate_flow.get_randomized_order()
+            model_index = 0
+            round_started = True
+            
+            start_round_id = f"call_{uuid.uuid4().hex[:24]}"
+            tool_calls.append({
+                "id": start_round_id,
+                "name": "start_debate_round",
+                "args": {"round_number": round_num},
+            })
+            tool_results.append(
+                ToolMessage(
+                    content=f"Round {round_num} started",
+                    tool_call_id=start_round_id,
+                )
+            )
         
-        # Create AIMessage with tool_calls to show progress in frontend
+        if not model_order:
+            logger.warning("No debate models available; skipping to fact_checker")
+            return Command(
+                update={
+                    **preserve_state_meta_fields(state),
+                    "debate_round_started": round_started,
+                    "debate_model_order": model_order,
+                    "debate_model_index": model_index,
+                    "debate_pending_model": None,
+                },
+                goto="fact_checker",
+            )
+        
+        if model_index >= len(model_order):
+            logger.info("All models already processed for this round")
+            return Command(
+                update={
+                    **preserve_state_meta_fields(state),
+                    "debate_round_started": round_started,
+                    "debate_model_order": model_order,
+                    "debate_model_index": model_index,
+                    "debate_pending_model": None,
+                },
+                goto="fact_checker",
+            )
+        
+        model_key = model_order[model_index]
+        query_model_id = f"call_{uuid.uuid4().hex[:24]}"
+        tool_calls.append({
+            "id": query_model_id,
+            "name": "query_model_in_round",
+            "args": {
+                "model_key": model_key,
+                "round_number": round_num,
+                "model_index": f"{model_index + 1}/{len(model_order)}",
+            },
+        })
+        
         response_message = AIMessage(
-            content=combined_response,
+            content="",
             name="external_ai_caller",
-            tool_calls=tool_calls,  # Show tool calls in frontend
+            tool_calls=tool_calls,
             response_metadata={"finish_reason": "stop"},
             additional_kwargs={
                 "round": round_num,
-                "models_queried": len(all_models),
-                "agent": "external_ai_caller"
-            }
+                "model_key": model_key,
+                "model_index": model_index + 1,
+                "models_total": len(model_order),
+                "agent": "external_ai_caller",
+            },
         )
         
         return Command(
             update={
                 **preserve_state_meta_fields(state),
                 "messages": [response_message, *tool_results],
-                "external_ai_responses": combined_response,
+                "debate_round_started": round_started,
+                "debate_model_order": model_order,
+                "debate_model_index": model_index,
+                "debate_pending_model": {
+                    "tool_call_id": query_model_id,
+                    "model_key": model_key,
+                    "model_index": model_index,
+                },
             },
-            goto="fact_checker"
+            goto="external_ai_caller",
         )
-        
     except Exception as e:
-        logger.error(f"Error in deterministic external_ai_caller: {e}", exc_info=True)
+        logger.error(f"Error in external_ai_caller per-model flow: {e}", exc_info=True)
         error_message = AIMessage(
             content=f"Error in debate round: {str(e)}",
             name="external_ai_caller",
@@ -2861,9 +2928,9 @@ async def external_ai_caller_node(
             update={
                 **preserve_state_meta_fields(state),
                 "messages": [error_message],
-                "external_ai_responses": "",
+                "debate_pending_model": None,
             },
-            goto="fact_checker"
+            goto="fact_checker",
         )
 
 

@@ -18,7 +18,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 def test_preserve_state_meta_fields():
-    """Test that preserve_state_meta_fields does NOT include debate fields."""
+    """Test that preserve_state_meta_fields includes debate fields."""
     from backend.deer_flow.graph.nodes import preserve_state_meta_fields
     
     print("=" * 80)
@@ -37,16 +37,26 @@ def test_preserve_state_meta_fields():
     print(f"Input state keys: {list(test_state.keys())}")
     print(f"Preserved keys: {list(preserved.keys())}")
     
-    # Check debate fields are NOT preserved
-    debate_fields = ["debate_round", "debate_scores", "debate_knockout", "debate_max_rounds", "debate_error_count", "debate_complete"]
-    has_debate_fields = any(field in preserved for field in debate_fields)
+    # Check debate fields ARE preserved
+    debate_fields = [
+        "debate_round",
+        "debate_scores",
+        "debate_knockout",
+        "debate_max_rounds",
+        "debate_error_count",
+        "debate_complete",
+        "debate_model_index",
+        "debate_model_order",
+        "debate_round_started",
+    ]
+    missing_debate_fields = [f for f in debate_fields if f not in preserved]
     
-    if has_debate_fields:
-        print("❌ FAIL: preserve_state_meta_fields includes debate fields (should NOT)")
-        print(f"   Found: {[f for f in debate_fields if f in preserved]}")
+    if missing_debate_fields:
+        print("❌ FAIL: preserve_state_meta_fields missing debate fields")
+        print(f"   Missing: {missing_debate_fields}")
         return False
     else:
-        print("✅ PASS: preserve_state_meta_fields does NOT include debate fields")
+        print("✅ PASS: preserve_state_meta_fields includes debate fields")
     
     # Check meta fields ARE preserved
     required_meta_fields = ["locale", "research_topic", "clarified_research_topic", "resources"]
@@ -163,7 +173,7 @@ def test_tool_calls_format():
     import uuid
     sample_tool_call = {
         "id": f"call_{uuid.uuid4().hex[:24]}",
-        "name": "query_model_in_debate",
+        "name": "query_model_in_round",
         "args": {
             "model_key": "gpt-3.5-turbo",
             "round_number": 1,
