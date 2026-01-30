@@ -431,7 +431,7 @@ class DebateFlow:
                     context_parts.append(f"\n{resp['display_name']}: {snippet}\n")
                 context_parts.append(f"\nDitt svar (på {language}, max 500 tokens):")
         
-        # Round 2 & 3: Use full previous round + internal results
+        # Round 2 & 3: Use full previous round + (internal results for OneSeek only)
         else:
             if self.full_previous_round:
                 prev_round = self.current_round - 1
@@ -443,11 +443,12 @@ class DebateFlow:
                     context_parts.append(f"\n{resp.get('display_name', resp.get('model', 'Model'))}: {response_text}\n")
                 context_parts.append("\n")
 
-            internal_context = self._build_internal_context(self.current_round - 1)
-            if internal_context:
-                context_parts.append("\n**Interna resultat (faktakontroll + syntes):**\n")
-                context_parts.append(internal_context)
-                context_parts.append("\n")
+            if model_key == "oneseek-local":
+                internal_context = self._build_internal_context(self.current_round - 1)
+                if internal_context:
+                    context_parts.append("\n**Interna resultat (faktakontroll + syntes):**\n")
+                    context_parts.append(internal_context)
+                    context_parts.append("\n")
             
             # FIXED: Limit chain_so_far to last 5 responses (increased from 3)
             if self.chain_so_far:
