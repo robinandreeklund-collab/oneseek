@@ -456,6 +456,7 @@ class OneSeekGraphAgent:
                     }
                     tool_calls_from_last_msg.append(tool_action)
                     tool_actions_list.append(tool_action)
+                    logger.info(f"Tool action STARTED - Round {iteration}: {display_name} (id: {tool_call_id})")
                     callback("tool_action", tool_action)
             
             # Execute tools
@@ -491,6 +492,7 @@ class OneSeekGraphAgent:
                         }
                     
                     # Update the tool action in the list
+                    logger.info(f"Tool action COMPLETED - Round {iteration}: {tool_action.get('display_name')} (duration: {tool_action['duration']:.2f}s)")
                     callback("tool_action", tool_action)
             
             # Add tool messages to state
@@ -630,6 +632,7 @@ class OneSeekGraphAgent:
                     }
                     tool_calls_from_last_msg.append(tool_action)
                     tool_actions_list.append(tool_action)
+                    logger.info(f"Tool action STARTED - Round {iteration}: {display_name} (id: {tool_call_id})")
                     callback("tool_action", tool_action)  # This triggers realtime_callback immediately!
             
             # Execute tools
@@ -665,6 +668,7 @@ class OneSeekGraphAgent:
                         }
                     
                     # Update the tool action in the list and trigger realtime callback
+                    logger.info(f"Tool action COMPLETED - Round {iteration}: {tool_action.get('display_name')} (duration: {tool_action['duration']:.2f}s)")
                     callback("tool_action", tool_action)  # This triggers realtime_callback immediately!
             
             # Add tool messages to state
