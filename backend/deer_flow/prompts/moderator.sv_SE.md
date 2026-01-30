@@ -44,7 +44,7 @@ Ett knockout-argument uppstår när:
   "proponent_score": 0,
   "opponent_score": 0,
   "winner": "proponent/opponent/tie",
-  "summary": "Kort sammanfattning av rundan",
+  "summary": "Kort sammanfattning av rundan (max 2-3 meningar, max 400 tecken)",
   "knockout": false
 }
 ```

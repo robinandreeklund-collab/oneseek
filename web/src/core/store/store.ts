@@ -360,7 +360,13 @@ function appendMessage(message: Message) {
       openCoder(id);
     }
     appendCoderActivity(message);
-  } else if (message.agent === "debate_orchestrator" || message.agent === "external_ai_caller") {
+  } else if (
+    message.agent === "debate_orchestrator" ||
+    message.agent === "external_ai_caller" ||
+    message.agent === "fact_checker" ||
+    message.agent === "synthesizer" ||
+    message.agent === "moderator"
+  ) {
     console.log("🎯 DEBUG: debate message detected! agent=", message.agent, "Opening sidebar...");
     if (!getOngoingDebateSessionId()) {
       const id = message.id;
@@ -390,7 +396,11 @@ function updateMessage(message: Message) {
   }
   if (
     getOngoingDebateSessionId() &&
-    (message.agent === "debate_orchestrator" || message.agent === "external_ai_caller") &&
+    (message.agent === "debate_orchestrator" ||
+      message.agent === "external_ai_caller" ||
+      message.agent === "fact_checker" ||
+      message.agent === "synthesizer" ||
+      message.agent === "moderator") &&
     !message.isStreaming
   ) {
     // Don't close debate session when streaming completes - keep it open

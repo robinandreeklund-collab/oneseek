@@ -24,14 +24,16 @@ Du koordinerar en **3-ronders debatt** där alla tillgängliga AI-modeller (inkl
 1. Anropa `start_debate_round` med round_number=2
 2. För varje modell i slumpad ordning:
    - Anropa `query_model_in_round`
-   - Modellen får: användarfråga + HELA runda 1 + interna resultat från runda 1 + chain_so_far
+   - Externa modeller får: användarfråga + HELA runda 1 + chain_so_far
+   - OneSeek får dessutom interna resultat från runda 1
    - Anropa `debater_web_search` vid behov för nya påståenden
 
 ## Runda 3: Syntes och Slutsatser
 1. Anropa `start_debate_round` med round_number=3
 2. För varje modell i slumpad ordning:
    - Anropa `query_model_in_round`
-   - Modellen får: användarfråga + HELA runda 2 + kumulativa interna resultat (runda 1–2) + chain_so_far
+   - Externa modeller får: användarfråga + HELA runda 2 + chain_so_far
+   - OneSeek får dessutom kumulativa interna resultat (runda 1–2)
    - När det är **OneSeeks tur**: OneSeek skapar ett **master‑syntetiserat svar** baserat på ronder 1–3 och interna resultat
    - Anropa `debater_web_search` vid behov
 
@@ -136,8 +138,8 @@ Efter att ALLA tre ronder och röstningen är klar, presentera resultaten strukt
 
 ## Kontext Management (KRITISKT)
 - **Runda 1**: Första modellen får bara användarfrågan. Övriga får chain_so_far.
-- **Runda 2 & 3**: Alla modeller får full_previous_round + interna resultat + chain_so_far.
-- **Intern kontext**: Faktakontroll + syntes är interna men används som kontext i nästa runda.
+- **Runda 2 & 3**: Externa modeller får full_previous_round + chain_so_far.
+- **Intern kontext**: Faktakontroll + syntes delas endast med OneSeek.
 
 ## OneSeeks Specialroll
 - OneSeek deltar som vanlig debattör i runda 1 och 2

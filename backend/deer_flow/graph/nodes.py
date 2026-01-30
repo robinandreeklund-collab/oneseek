@@ -2895,6 +2895,8 @@ async def external_ai_caller_node(
         tool_calls: list[dict[str, Any]] = []
         tool_results: list[ToolMessage] = []
         import uuid
+        user_query = state.get("clarified_research_topic") or state.get("research_topic", "")
+        locale = state.get("locale", "sv-SE")
         
         if pending_model:
             model_key = pending_model.get("model_key")
@@ -2902,18 +2904,23 @@ async def external_ai_caller_node(
             pending_index = pending_model.get("model_index", model_index)
             
             logger.info(f"Executing pending model {pending_index + 1}/{len(model_order)}: {model_key}")
-            user_query = state.get("clarified_research_topic") or state.get("research_topic", "")
-            locale = state.get("locale", "sv-SE")
             response = await debate_flow.query_model_in_debate(model_key, user_query, locale)
             
             if isinstance(response, dict):
                 response_text = response.get("response", str(response))
+                context_used = response.get("context_used", "")
             else:
                 response_text = str(response)
+                context_used = ""
             
+            tool_result_text = f"### {model_key} svar\n\n{response_text}"
+            if context_used:
+                tool_result_text += "\n\n### Kontext skickad till modellen\n```text\n"
+                tool_result_text += context_used
+                tool_result_text += "\n```\n"
             tool_results.append(
                 ToolMessage(
-                    content=f"{model_key}: {response_text}",
+                    content=tool_result_text,
                     tool_call_id=query_model_id,
                 )
             )
@@ -2967,7 +2974,7 @@ async def external_ai_caller_node(
             tool_calls.append({
                 "id": start_round_id,
                 "name": "start_debate_round",
-                "args": {"round_number": round_num},
+                "args": {"round_number": round_num, "user_query": user_query, "locale": locale},
             })
             tool_results.append(
                 ToolMessage(
@@ -3011,6 +3018,8 @@ async def external_ai_caller_node(
                 "model_key": model_key,
                 "round_number": round_num,
                 "model_index": f"{model_index + 1}/{len(model_order)}",
+                "user_query": user_query,
+                "locale": locale,
             },
         })
         
@@ -3245,6 +3254,11 @@ Svara INTE med vanlig text eller markdown. Endast ren JSON!"""
             cleaned_response = '\n'.join(lines).strip()
         
         moderator_result = json.loads(cleaned_response)
+
+        # Enforce concise summary to keep UI readable
+        summary_text = moderator_result.get("summary", "")
+        if isinstance(summary_text, str) and len(summary_text) > 400:
+            moderator_result["summary"] = summary_text[:400] + "... [trunkerat]"
         
         # Update scores
         round_proponent_score = moderator_result.get("proponent_score", 0)

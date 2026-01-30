@@ -37,7 +37,7 @@ You MUST create a plan with EXACTLY 4 steps that orchestrate a multi-model debat
 For debate mode:
 - ALWAYS set `has_enough_context` to false (the debate itself will generate the context)
 - The debate tools will handle all model interactions, not web search
-- Internal fact-check + synthesis run after every round and are carried forward cumulatively
+- Internal fact-check + synthesis run after every round and are carried forward cumulatively **only for OneSeek**
 - This process is internal to OneSeek and should not be shared externally
 
 ## Required Planning Structure
@@ -85,7 +85,7 @@ You MUST create a plan with EXACTLY 4 steps following this JSON schema:
 - Adjust the language (Swedish/English) based on the locale
 - The researcher will execute these steps using specialized debate tools
 - Each AI model will be queried as a separate tool call during execution
-- Internal fact-check + synthesis run after every round and are carried forward cumulatively
+- Internal fact-check + synthesis run after every round and are carried forward cumulatively **only for OneSeek**
 - This is an internal OneSeek process and should not be shared externally
 - **DO NOT** create additional research steps or modify the 4-step structure
 

@@ -429,6 +429,7 @@ class DebateFlow:
                     if len(resp['response']) > 500:
                         snippet += "..."
                     context_parts.append(f"\n{resp['display_name']}: {snippet}\n")
+                context_parts.append(f"\nBemöt minst ett av ovanstående svar.")
                 context_parts.append(f"\nDitt svar (på {language}, max 500 tokens):")
         
         # Round 2 & 3: Use full previous round + (internal results for OneSeek only)
@@ -460,6 +461,7 @@ class DebateFlow:
                     if len(resp['response']) > 500:
                         snippet += "..."
                     context_parts.append(f"\n{resp['display_name']}: {snippet}\n")
+                context_parts.append("\nBemöt minst ett svar från aktuell runda.")
             
             # Round 3 specific instructions for OneSeek
             if self.current_round == 3 and model_key == "oneseek-local":
@@ -467,6 +469,7 @@ class DebateFlow:
                 context_parts.append(f"Du har tillgång till sammanfattningar av tidigare argument och dina interna analyser.")
                 context_parts.append(f"Skapa ditt bästa, mest genomtänkta svar som väger alla perspektiv.")
             else:
+                context_parts.append("Om relevant: referera till minst ett argument från föregående runda.")
                 context_parts.append(f"\nDitt svar för runda {self.current_round} (på {language}, max 500 tokens):")
         
         context = "\n".join(context_parts)

@@ -11,7 +11,7 @@ Du hanterar en **fast 3-rundors debatt** med följande ansvar:
 1. **Rundor**: Initiera Runda 1–3 i tur och ordning
 2. **Sekventiell ordning**: Varje runda körs i slumpad ordning och modellerna svarar en i taget
 3. **Efter-runda-processer**: fact_checker + synthesizer körs efter varje runda
-4. **Kumulativ kontext**: interna resultat sparas och injiceras i nästa runda
+4. **Kumulativ kontext**: interna resultat sparas och injiceras **endast för OneSeek** i nästa runda
 5. **Röstning**: Efter runda 3 röstar endast externa modeller
 6. **Rapport**: Gå till reporter med rundor + röster
 

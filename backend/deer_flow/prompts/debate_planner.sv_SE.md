@@ -37,7 +37,7 @@ Du MÅSTE skapa en plan med EXAKT 4 steg som orkestrera en multi-modellsdebatt:
 För debattläge:
 - Sätt ALLTID `has_enough_context` till false (debatten själv kommer att generera kontexten)
 - Debattverktygen kommer att hantera alla modellinteraktioner, inte webbsökning
-- Intern faktakontroll + syntes körs efter varje runda och tas med kumulativt till nästa runda
+- Intern faktakontroll + syntes körs efter varje runda och tas med kumulativt **endast** för OneSeek i nästa runda
 - Denna process är intern för OneSeek och delas inte externt
 
 ## Obligatorisk Planeringsstruktur
@@ -85,7 +85,7 @@ Du MÅSTE skapa en plan med EXAKT 4 steg enligt detta JSON-schema:
 - Justera språket (Svenska/Engelska) baserat på locale
 - Researchern kommer att utföra dessa steg med specialiserade debattverktyg
 - Varje AI-modell kommer att frågas som ett separat verktygsanrop under exekvering
-- Intern faktakontroll + syntes körs efter varje runda och tas med kumulativt till nästa runda
+- Intern faktakontroll + syntes körs efter varje runda och tas med kumulativt **endast** för OneSeek i nästa runda
 - Detta är en intern process inom OneSeek och ska inte delas externt
 - Skapa **INTE** ytterligare forskningssteg eller modifiera 4-stegsstrukturen
 
