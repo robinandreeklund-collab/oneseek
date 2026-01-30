@@ -2642,10 +2642,14 @@ async def external_ai_caller_node(
     
     if not debate_flow:
         logger.error("No debate_flow found in state!")
+        error_message = AIMessage(
+            content="Error: No debate flow found",
+            name="external_ai_caller"
+        )
         return Command(
             update={
                 **preserve_state_meta_fields(state),
-                "messages": [{"role": "assistant", "content": "Error: No debate flow found"}],
+                "messages": [error_message],
                 "external_ai_responses": "",
             },
             goto="fact_checker"
@@ -2677,10 +2681,21 @@ async def external_ai_caller_node(
         combined_response = "\n\n".join(responses)
         logger.info(f"Step 3: Round {round_num} complete - all {len(all_models)} models queried")
         
+        # Create AIMessage with proper metadata to trigger sidebar
+        response_message = AIMessage(
+            content=combined_response,
+            name="external_ai_caller",
+            additional_kwargs={
+                "round": round_num,
+                "models_queried": len(all_models),
+                "agent": "external_ai_caller"
+            }
+        )
+        
         return Command(
             update={
                 **preserve_state_meta_fields(state),
-                "messages": [{"role": "assistant", "content": combined_response}],
+                "messages": [response_message],
                 "external_ai_responses": combined_response,
             },
             goto="fact_checker"
@@ -2688,10 +2703,14 @@ async def external_ai_caller_node(
         
     except Exception as e:
         logger.error(f"Error in deterministic external_ai_caller: {e}", exc_info=True)
+        error_message = AIMessage(
+            content=f"Error in debate round: {str(e)}",
+            name="external_ai_caller"
+        )
         return Command(
             update={
                 **preserve_state_meta_fields(state),
-                "messages": [{"role": "assistant", "content": f"Error: {str(e)}"}],
+                "messages": [error_message],
                 "external_ai_responses": "",
             },
             goto="fact_checker"
