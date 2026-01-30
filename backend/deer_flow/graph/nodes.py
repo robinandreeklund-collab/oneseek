@@ -2623,61 +2623,79 @@ async def external_ai_caller_node(
     state: State, config: RunnableConfig
 ) -> Command[Literal["fact_checker"]]:
     """
-    External AI Caller node - orchestrates sequential debate rounds.
+    External AI Caller node - orchestrates sequential debate rounds DETERMINISTICALLY.
     
-    Uses debate_tools to call models ONE AT A TIME in randomized order:
-    - start_debate_round() to initialize and randomize
-    - query_model_in_round() for each model sequentially
-    - debater_web_search() for fact verification
+    NO LONGER uses an LLM agent (which was unreliable and caused infinite loops).
+    Instead, directly calls debate_flow methods in a predictable order:
+    1. Start the debate round
+    2. Query each model exactly once
+    3. Return
+    
+    This ensures each model is called EXACTLY once per round, no more, no less.
     """
-    logger.info("External AI Caller - orchestrating sequential debate round")
+    logger.info("External AI Caller - orchestrating debate round (DETERMINISTIC)")
     configurable = Configuration.from_runnable_config(config)
-    locale = state.get("locale", "en-US")
     
-    # Import debate tools for sequential execution
-    from backend.deer_flow.tools.debate_tools import get_debate_tools
+    # Get debate flow instance from state
+    from backend.debate_flow import DebateFlow
+    debate_flow = state.get("debate_flow")
     
-    # Get debate tools (includes start_debate_round, query_model_in_round, etc.)
-    tools = get_debate_tools()
+    if not debate_flow:
+        logger.error("No debate_flow found in state!")
+        return Command(
+            update={
+                **preserve_state_meta_fields(state),
+                "messages": [{"role": "assistant", "content": "Error: No debate flow found"}],
+                "external_ai_responses": "",
+            },
+            goto="fact_checker"
+        )
     
-    logger.info(f"External AI Caller using {len(tools)} debate tools for sequential execution")
+    # Get current round number from debate_flow
+    round_num = debate_flow.current_round
+    logger.info(f"Starting deterministic execution for Round {round_num}")
     
-    # Build prompt for external_ai_caller
-    messages = apply_prompt_template("external_ai_caller", state, configurable, locale)
-    
-    # Create agent for external_ai_caller
-    llm_token_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["external_ai_caller"])
-    pre_model_hook = partial(ContextManager(llm_token_limit, 3).compress_messages)
-    agent = create_agent(
-        "external_ai_caller",
-        "external_ai_caller",
-        tools,
-        "external_ai_caller",
-        pre_model_hook,
-        interrupt_before_tools=configurable.interrupt_before_tools,
-        locale=locale,
-    )
-    
-    # Execute agent - it will orchestrate sequential debate using debate_tools
-    result = await agent.ainvoke(state, config)
-    
-    # Extract response - agent returns dict with "messages" key
-    response_content = ""
-    if result and "messages" in result and len(result["messages"]) > 0:
-        last_msg = result["messages"][-1]
-        if hasattr(last_msg, 'content'):
-            response_content = last_msg.content
-    
-    logger.info(f"Debate round completed, response length: {len(response_content)}")
-    
-    return Command(
-        update={
-            **preserve_state_meta_fields(state),
-            "messages": result.get("messages", []),
-            "external_ai_responses": response_content,  # Store debate round responses
-        },
-        goto="fact_checker"  # Route to fact_checker to verify the external AI claims
-    )
+    # DETERMINISTIC EXECUTION - no LLM making decisions!
+    try:
+        # Step 1: Start the debate round
+        logger.info(f"Step 1: Starting debate round {round_num}")
+        round_start_msg = debate_flow.start_debate_round(round_num)
+        logger.info(f"Round started: {round_start_msg}")
+        
+        # Step 2: Query each model EXACTLY once
+        all_models = list(debate_flow.models.keys())
+        logger.info(f"Step 2: Querying {len(all_models)} models sequentially")
+        
+        responses = []
+        for i, model_key in enumerate(all_models, 1):
+            logger.info(f"  Querying model {i}/{len(all_models)}: {model_key}")
+            response = debate_flow.query_model_in_round(model_key, round_num)
+            responses.append(f"Model {model_key}: {response}")
+            logger.info(f"  ✓ Model {model_key} responded ({len(response)} chars)")
+        
+        # Step 3: Done! Combine all responses
+        combined_response = "\n\n".join(responses)
+        logger.info(f"Step 3: Round {round_num} complete - all {len(all_models)} models queried")
+        
+        return Command(
+            update={
+                **preserve_state_meta_fields(state),
+                "messages": [{"role": "assistant", "content": combined_response}],
+                "external_ai_responses": combined_response,
+            },
+            goto="fact_checker"
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in deterministic external_ai_caller: {e}", exc_info=True)
+        return Command(
+            update={
+                **preserve_state_meta_fields(state),
+                "messages": [{"role": "assistant", "content": f"Error: {str(e)}"}],
+                "external_ai_responses": "",
+            },
+            goto="fact_checker"
+        )
 
 
 async def fact_checker_node(
