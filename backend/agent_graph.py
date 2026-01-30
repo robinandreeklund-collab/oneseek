@@ -28,6 +28,7 @@ class AgentState(TypedDict):
     tool_actions: List[Dict[str, Any]]  # Track tool invocations for ActionBlock
     system_prompt: Optional[str]
     enable_thinking: Optional[bool]
+    current_iteration: Optional[int]  # Track current round/iteration number for persistence
 
 
 class OneSeekGraphAgent:
@@ -324,7 +325,8 @@ class OneSeekGraphAgent:
             "steps": [],
             "tool_actions": [],  # Initialize tool_actions
             "system_prompt": system_prompt,
-            "enable_thinking": enable_thinking
+            "enable_thinking": enable_thinking,
+            "current_iteration": 0  # Initialize iteration counter in state for persistence
         }
         
         # Execute the graph
@@ -395,15 +397,17 @@ class OneSeekGraphAgent:
             "steps": [],
             "tool_actions": [],  # Initialize tool_actions
             "system_prompt": system_prompt,
-            "enable_thinking": enable_thinking
+            "enable_thinking": enable_thinking,
+            "current_iteration": 0  # Initialize iteration counter in state for persistence
         }
         
         max_iterations = 5  # Prevent infinite loops
-        iteration = 0
         
-        while iteration < max_iterations:
-            iteration += 1
-            logger.info(f"Iteration {iteration}")
+        # Use state-based iteration to track rounds persistently
+        while current_state.get("current_iteration", 0) < max_iterations:
+            current_state["current_iteration"] = current_state.get("current_iteration", 0) + 1
+            iteration = current_state["current_iteration"]
+            logger.info(f"Round {iteration} (state-based iteration tracking)")
             
             # Run agent node
             agent_result = self._agent_node_streaming(current_state, callback)
@@ -567,15 +571,17 @@ class OneSeekGraphAgent:
             "steps": [],
             "tool_actions": [],
             "system_prompt": system_prompt,
-            "enable_thinking": enable_thinking
+            "enable_thinking": enable_thinking,
+            "current_iteration": 0  # Initialize iteration counter in state for persistence
         }
         
         max_iterations = 5
-        iteration = 0
         
-        while iteration < max_iterations:
-            iteration += 1
-            logger.info(f"Iteration {iteration}")
+        # Use state-based iteration to track rounds persistently
+        while current_state.get("current_iteration", 0) < max_iterations:
+            current_state["current_iteration"] = current_state.get("current_iteration", 0) + 1
+            iteration = current_state["current_iteration"]
+            logger.info(f"Round {iteration} (state-based iteration tracking)")
             
             # Run agent node
             agent_result = self._agent_node_streaming(current_state, callback)
