@@ -10,10 +10,11 @@ import { Tooltip } from "~/components/deer-flow/tooltip";
 import { Button } from "~/components/ui/button";
 import { Card } from "~/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
-import { closeDebate } from "~/core/store";
+import { closeDebate, useStore } from "~/core/store";
 import { cn } from "~/lib/utils";
 
 import { DebateActivitiesBlock } from "./debate-activities-block";
+import { DebateReportBlock } from "./debate-report-block";
 
 export function DebateSidebar({
   className,
@@ -24,6 +25,12 @@ export function DebateSidebar({
 }) {
   const t = useTranslations("chat.debate");
   const [activeTab, setActiveTab] = useState("activities");
+  const [editing, setEditing] = useState(false);
+  
+  // Find report message (agent="reporter")
+  const messages = Array.from(useStore(state => state.messages).values());
+  const reportMessage = messages.find(m => m.agent === "reporter");
+  const reportId = reportMessage?.id;
 
   return (
     <div className={cn("h-full w-full", className)}>
@@ -49,6 +56,9 @@ export function DebateSidebar({
         >
           <div className="flex w-full justify-center">
             <TabsList className="">
+              <TabsTrigger className="px-8" value="reporter">
+                {t("reporter")}
+              </TabsTrigger>
               <TabsTrigger className="px-8" value="activities">
                 {t("activities")}
               </TabsTrigger>
@@ -60,6 +70,27 @@ export function DebateSidebar({
               </TabsTrigger>
             </TabsList>
           </div>
+          <TabsContent
+            className="h-full min-h-0 flex-grow px-8"
+            value="reporter"
+            forceMount
+            hidden={activeTab !== "reporter"}
+          >
+            <ScrollContainer
+              className="h-full px-5 pb-20"
+              scrollShadowColor="var(--card)"
+              autoScrollToBottom={!reportId}
+            >
+              {reportId && sessionId && (
+                <DebateReportBlock
+                  className="mt-4"
+                  debateId={sessionId}
+                  messageId={reportId}
+                  editing={editing}
+                />
+              )}
+            </ScrollContainer>
+          </TabsContent>
           <TabsContent
             className="h-full min-h-0 flex-grow px-8"
             value="activities"

@@ -248,7 +248,8 @@
       "rounds": "Rundor",
       "voting": "Omröstning",
       "roundsComingSoon": "Rundor vy kommer snart",
-      "votingComingSoon": "Omröstningsresultat kommer snart"
+      "votingComingSoon": "Omröstningsresultat kommer snart",
+      "reporter": "Rapport"
     }
   },
   "landing": {
