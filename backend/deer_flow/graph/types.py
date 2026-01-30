@@ -61,3 +61,8 @@ class State(MessagesState):
     debate_max_rounds: int = 3
     debate_error_count: int = 0
     debate_complete: bool = False
+    debate_model_index: int = 0
+    debate_model_order: list[str] = field(default_factory=list)
+    debate_round_started: bool = False
+    external_ai_responses: str = ""
+    debate_pending_model: dict[str, Any] | None = None

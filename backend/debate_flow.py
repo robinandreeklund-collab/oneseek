@@ -274,6 +274,16 @@ class DebateFlow:
         logger.info(f"Starting Round {round_number}")
         logger.info(f"Previous round had {len(self.full_previous_round)} responses")
 
+    def reset(self):
+        """Reset debate state for a new session."""
+        self.current_round = 0
+        self.chain_so_far = []
+        self.full_previous_round = []
+        self.debate_history = []
+        self.oneseek_analyses = []
+        self.facts = []
+        logger.info("DebateFlow state reset")
+
     def add_fact(self, fact: str, source: str = "web_search"):
         """
         Add a verified fact to the debate context.
@@ -698,13 +708,28 @@ class DebateFlow:
         }
 
 
-# Global instance (will be created when needed)
-_debate_flow_instance = None
+# Global instances per thread/session
+_debate_flow_instances: Dict[str, DebateFlow] = {}
 
 
-def get_debate_flow(max_search_results: int = 3, resources: List[Any] = None) -> DebateFlow:
-    """Get or create the global debate flow instance."""
-    global _debate_flow_instance
-    if _debate_flow_instance is None:
-        _debate_flow_instance = DebateFlow(max_search_results, resources)
-    return _debate_flow_instance
+def get_debate_flow(
+    max_search_results: int = 3,
+    resources: List[Any] = None,
+    thread_id: str | None = None,
+    reset: bool = False,
+) -> DebateFlow:
+    """Get or create a debate flow instance scoped to a thread/session."""
+    global _debate_flow_instances
+    thread_key = str(thread_id) if thread_id else "default"
+    if thread_key not in _debate_flow_instances:
+        _debate_flow_instances[thread_key] = DebateFlow(max_search_results, resources)
+    elif reset:
+        _debate_flow_instances[thread_key].reset()
+    return _debate_flow_instances[thread_key]
+
+
+def clear_debate_flow(thread_id: str | None = None) -> None:
+    """Remove a debate flow instance (cleanup)."""
+    global _debate_flow_instances
+    thread_key = str(thread_id) if thread_id else "default"
+    _debate_flow_instances.pop(thread_key, None)
