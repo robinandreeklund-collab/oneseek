@@ -234,10 +234,15 @@ Nuvarande runda: {debate_flow.current_round}
 
 def get_debate_tools() -> List[Any]:
     """
-    Get all debate tools for the debate agent.
+    Get debate tools for external_ai_caller agent.
+    
+    NOTE: external_ai_caller is called ONCE PER ROUND by debate_orchestrator.
+    It should ONLY orchestrate that single round, not handle voting or summary.
+    
+    Voting and summary are handled automatically by debate_orchestrator and reporter.
     
     Returns:
-        List of debate tools
+        List of debate tools for round orchestration
     """
     # Import web search tool directly
     from backend.deer_flow.tools import get_web_search_tool
@@ -279,11 +284,14 @@ def get_debate_tools() -> List[Any]:
             logger.error(f"Error in debater web search: {e}")
             return f"Sökfel: {str(e)}"
 
+    # REMOVED: collect_debate_votes and get_debate_summary
+    # These are handled by debate_orchestrator and reporter automatically
+    # external_ai_caller should ONLY orchestrate ONE ROUND at a time
     return [
         start_debate_round,
         query_model_in_round,
         run_internal_analysis,
-        collect_debate_votes,
-        get_debate_summary,
-        debater_web_search, # Added granular tool
+        # Removed: collect_debate_votes - handled by debate_orchestrator
+        # Removed: get_debate_summary - handled by reporter
+        debater_web_search,
     ]
