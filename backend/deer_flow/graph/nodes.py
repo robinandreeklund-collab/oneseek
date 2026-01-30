@@ -2739,8 +2739,15 @@ async def external_ai_caller_node(
             locale = state.get("locale", "sv-SE")
             # Query model with correct locale parameter
             response = await debate_flow.query_model_in_debate(model_key, user_query, locale)
-            responses.append(f"Model {model_key}: {response}")
-            logger.info(f"  ✓ Model {model_key} responded ({len(response)} chars)")
+            
+            # Extract only the actual response text, not the full metadata
+            if isinstance(response, dict):
+                response_text = response.get('response', str(response))
+            else:
+                response_text = str(response)
+            
+            responses.append(f"Model {model_key}: {response_text}")
+            logger.info(f"  ✓ Model {model_key} responded ({len(response_text)} chars)")
         
         # Step 3: Done! Combine all responses
         combined_response = "\n\n".join(responses)
@@ -2970,6 +2977,7 @@ Svara INTE med vanlig text eller markdown. Endast ren JSON!"""
                 "messages": [summary_msg],
                 "debate_scores": scores,
                 "debate_knockout": knockout,
+                "debate_round": current_round,  # CRITICAL: Preserve round number!
             },
             goto="debate_orchestrator"  # Route back for next round
         )
@@ -2990,6 +2998,7 @@ Svara INTE med vanlig text eller markdown. Endast ren JSON!"""
                 "messages": [summary_msg],
                 "debate_scores": scores,
                 "debate_knockout": False,
+                "debate_round": current_round,  # CRITICAL: Preserve round number even on error!
             },
             goto="debate_orchestrator"  # Route back for next round
         )
