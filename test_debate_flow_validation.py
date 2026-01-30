@@ -48,6 +48,7 @@ def test_preserve_state_meta_fields():
         "debate_model_index",
         "debate_model_order",
         "debate_round_started",
+        "debate_pending_model",
     ]
     missing_debate_fields = [f for f in debate_fields if f not in preserved]
     

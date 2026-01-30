@@ -94,8 +94,8 @@ def _build_debate_team_subgraph():
     debate_builder.add_node("moderator", moderator_node)
     
     # Wire them in sequence: external_ai_caller → fact_checker → synthesizer → moderator
+    # external_ai_caller routes dynamically via Command (can loop), so we don't add a static edge
     debate_builder.add_edge(START, "external_ai_caller")
-    debate_builder.add_edge("external_ai_caller", "fact_checker")
     debate_builder.add_edge("fact_checker", "synthesizer")
     debate_builder.add_edge("synthesizer", "moderator")
     # moderator routes back to debate_orchestrator via Command
@@ -151,7 +151,7 @@ def _build_base_graph():
     # debate_orchestrator dispatches to parallel nodes (proponent, opponent, fact_checker) and synthesizer
     # Debate chain edges - enforce correct flow after EACH round
     # Flow: orchestrator → external_ai_caller → fact_checker → synthesizer → moderator → orchestrator (loop)
-    builder.add_edge("external_ai_caller", "fact_checker")
+    # external_ai_caller routes dynamically via Command (can loop), so we don't add a static edge
     builder.add_edge("fact_checker", "synthesizer")
     builder.add_edge("synthesizer", "moderator")
     builder.add_edge("moderator", "debate_orchestrator")
