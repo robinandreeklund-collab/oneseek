@@ -2733,8 +2733,10 @@ async def external_ai_caller_node(
             logger.info(f"  Querying model {i}/{len(all_models)}: {model_key}")
             # Build context and query model
             user_query = state.get("user_query", "")
-            # Convert round_num to string as debate_flow expects string
-            response = await debate_flow.query_model_in_debate(model_key, user_query, str(round_num))
+            # Get locale from state (NOT round number!)
+            locale = state.get("locale", "sv-SE")
+            # Query model with correct locale parameter
+            response = await debate_flow.query_model_in_debate(model_key, user_query, locale)
             responses.append(f"Model {model_key}: {response}")
             logger.info(f"  ✓ Model {model_key} responded ({len(response)} chars)")
         
