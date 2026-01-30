@@ -1557,6 +1557,9 @@ def _format_debate_results_for_report(debate_results: dict) -> str:
                 voter = detail.get("voter", "okänd")
                 vote = detail.get("vote", "okänd")
                 parts.append(f"- {voter} → {vote}")
+                reasons = detail.get("reasons") or []
+                for reason in reasons[:3]:
+                    parts.append(f"  - {reason}")
 
     return "\n".join(parts)
 

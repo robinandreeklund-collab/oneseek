@@ -867,10 +867,11 @@ async def _stream_graph_events(
                 # After each event, check if we have new tool actions to emit
                 current_actions = tool_tracker.get_tool_actions()
                 if len(current_actions) > prev_action_count:
+                    new_actions = current_actions[prev_action_count:]
                     # Emit tool_actions event for frontend (only new actions)
-                    logger.debug(f"[{safe_thread_id}] Emitting {len(current_actions)} tool_actions to frontend")
+                    logger.debug(f"[{safe_thread_id}] Emitting {len(new_actions)} tool_actions to frontend")
                     yield _make_event("data", {
-                        "tool_actions": current_actions,
+                        "tool_actions": new_actions,
                         "live_update": True
                     })
                     prev_action_count = len(current_actions)

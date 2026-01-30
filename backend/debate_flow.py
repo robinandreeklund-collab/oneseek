@@ -774,7 +774,10 @@ class DebateFlow:
                 voting_context += f"\n[{idx}] {resp['display_name']}: {response_text}\n"
         
         voting_context += "\n\nRösta på det bästa svaret genom att ange numret [0-" + str(len(round_3_responses)-1) + "]. "
-        voting_context += "Du får INTE rösta på ditt eget svar. Ge endast nummret."
+        voting_context += "Du får INTE rösta på ditt eget svar.\n"
+        voting_context += "Svara i formatet:\n"
+        voting_context += "Vote: [N]\n"
+        voting_context += "Reasons:\n- punkt 1\n- punkt 2\n- punkt 3\n"
         
         # Log voting context size for monitoring
         token_count = self._count_tokens(voting_context)
@@ -815,7 +818,7 @@ class DebateFlow:
                 response = await model.ainvoke(messages, config={"callbacks": []})
                 vote_text = response.content if hasattr(response, "content") else str(response)
                 
-                # Extract vote number (enhanced regex to handle various formats like "Jag röstar på [3]", "Vote: 2", etc.)
+                # Extract vote number (enhanced regex to handle various formats)
                 import re
                 vote_match = re.search(r'(?:\[|\b)(\d+)(?:\]|\b)', vote_text)
                 
@@ -842,10 +845,20 @@ class DebateFlow:
                     logger.warning(f"{display_name} vote could not be parsed: {vote_text[:50]}")
                     vote_parsed = "Parse Error"
                 
+                # Extract up to 3 bullet-point reasons
+                reasons = []
+                for line in vote_text.splitlines():
+                    cleaned = line.strip()
+                    if cleaned.startswith(("-", "*")):
+                        reasons.append(cleaned.lstrip("-* ").strip())
+                    if len(reasons) >= 3:
+                        break
+
                 vote_details.append({
                     "voter": display_name,
                     "vote": vote_parsed,
-                    "raw_response": vote_text[:100]
+                    "reasons": reasons,
+                    "raw_response": vote_text[:200]
                 })
                     
             except Exception as e:

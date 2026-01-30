@@ -48,7 +48,7 @@ export function DebateSidebar({
     vote_results?: {
       winner?: string;
       votes?: Record<string, number>;
-      vote_details?: Array<{ voter?: string; vote?: string }>;
+      vote_details?: Array<{ voter?: string; vote?: string; reasons?: string[] }>;
     };
   };
 
@@ -207,12 +207,21 @@ export function DebateSidebar({
                   {debateSummary.vote_results.vote_details?.length ? (
                     <div className="rounded-lg border border-border/60 bg-muted/30 p-4">
                       <div className="text-sm font-semibold">Detaljer</div>
-                      <div className="mt-2 space-y-2 text-sm">
+                      <div className="mt-2 space-y-3 text-sm">
                         {debateSummary.vote_results.vote_details.map((detail, idx) => (
-                          <div key={`${detail.voter}-${idx}`} className="flex items-center gap-2">
-                            <span className="flex-1">
-                              {detail.voter ?? "Okänd"} → {detail.vote ?? "Okänd"}
-                            </span>
+                          <div key={`${detail.voter}-${idx}`} className="rounded-md border border-border/50 p-2">
+                            <div className="flex items-center gap-2">
+                              <span className="flex-1">
+                                {detail.voter ?? "Okänd"} → {detail.vote ?? "Okänd"}
+                              </span>
+                            </div>
+                            {Array.isArray(detail.reasons) && detail.reasons.length > 0 && (
+                              <ul className="mt-2 list-disc pl-5 text-xs text-muted-foreground">
+                                {detail.reasons.slice(0, 3).map((reason, reasonIdx) => (
+                                  <li key={`${detail.voter}-${reasonIdx}`}>{reason}</li>
+                                ))}
+                              </ul>
+                            )}
                           </div>
                         ))}
                       </div>
