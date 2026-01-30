@@ -257,6 +257,13 @@ def preserve_state_meta_fields(state: State) -> dict:
         "max_clarification_rounds": state.get("max_clarification_rounds", 3),
         "clarification_rounds": state.get("clarification_rounds", 0),
         "resources": state.get("resources", []),
+        # Debate state fields (CRITICAL: preserve across all transitions!)
+        "debate_round": state.get("debate_round", 0),
+        "debate_scores": state.get("debate_scores", {"proponent": 0, "opponent": 0}),
+        "debate_knockout": state.get("debate_knockout", False),
+        "debate_max_rounds": state.get("debate_max_rounds", 3),
+        "debate_error_count": state.get("debate_error_count", 0),
+        "debate_complete": state.get("debate_complete", False),
     }
 
 
