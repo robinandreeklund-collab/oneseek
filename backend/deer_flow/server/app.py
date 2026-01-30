@@ -550,6 +550,12 @@ async def _process_message_chunk(message_chunk, message_metadata, thread_id, age
         tool_call_id = message_chunk.tool_call_id
         event_stream_message["tool_call_id"] = tool_call_id
         
+        max_tool_chars = int(os.getenv("STREAM_TOOL_OUTPUT_MAX_CHARS", "8000"))
+        content = event_stream_message.get("content", "")
+        if isinstance(content, str) and len(content) > max_tool_chars:
+            event_stream_message["content"] = content[:max_tool_chars] + "... [truncated]"
+            event_stream_message["truncated"] = True
+        
         # Validate tool_call_id for debugging
         if tool_call_id:
             safe_tool_id = sanitize_log_input(tool_call_id, max_length=100)
@@ -723,14 +729,25 @@ class ToolActionTracker:
         self.tool_calls = {}  # tool_call_id -> {tool_name, tool_input, timestamp}
         self.tool_actions = []  # List of completed tool actions
         self.pending_calls = set()  # Set of tool_call_ids waiting for results
+        self.max_input_chars = int(os.getenv("TOOL_ACTION_INPUT_MAX_CHARS", "2000"))
+        self.max_output_chars = int(os.getenv("TOOL_ACTION_OUTPUT_MAX_CHARS", "4000"))
+    
+    def _truncate(self, text: str, max_chars: int) -> str:
+        if text is None:
+            return ""
+        if len(text) > max_chars:
+            return text[:max_chars] + "... [truncated]"
+        return text
         
     def add_tool_call(self, tool_call_id: str, tool_name: str, tool_input: Any):
         """Record a new tool call."""
         if tool_call_id not in self.tool_calls:
+            tool_input_text = json.dumps(tool_input) if isinstance(tool_input, dict) else str(tool_input)
+            tool_input_text = self._truncate(tool_input_text, self.max_input_chars)
             self.tool_calls[tool_call_id] = {
                 "tool_call_id": tool_call_id,
                 "tool_name": tool_name,
-                "tool_input": json.dumps(tool_input) if isinstance(tool_input, dict) else str(tool_input),
+                "tool_input": tool_input_text,
                 "tool_output": None,
                 "status": "running"
             }
@@ -740,7 +757,9 @@ class ToolActionTracker:
     def add_tool_result(self, tool_call_id: str, tool_output: Any):
         """Record the result for a tool call."""
         if tool_call_id in self.tool_calls:
-            self.tool_calls[tool_call_id]["tool_output"] = str(tool_output) if tool_output else ""
+            tool_output_text = str(tool_output) if tool_output else ""
+            tool_output_text = self._truncate(tool_output_text, self.max_output_chars)
+            self.tool_calls[tool_call_id]["tool_output"] = tool_output_text
             self.tool_calls[tool_call_id]["status"] = "complete"
             if tool_call_id in self.pending_calls:
                 self.pending_calls.remove(tool_call_id)
