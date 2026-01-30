@@ -2594,12 +2594,24 @@ async def debate_orchestrator_node(
             goto="reporter"
         )
     
+    # Create debate_flow instance if this is round 1 (and it doesn't exist)
+    if current_round == 1 and "debate_flow" not in state:
+        from backend.debate_flow import get_debate_flow
+        debate_flow = get_debate_flow(
+            max_search_results=configurable.max_search_results,
+            resources=state.get("resources", [])
+        )
+        logger.info("Created debate_flow instance for round 1")
+    else:
+        debate_flow = state.get("debate_flow")
+    
     # Start new round - route to external_ai_caller to get real AI responses
     logger.info(f"Round {current_round}: Routing to external_ai_caller for real AI model responses")
     return Command(
         update={
             **preserve_state_meta_fields(state),
             "debate_round": current_round,
+            "debate_flow": debate_flow,  # ADD debate_flow to state!
         },
         goto="external_ai_caller"  # Calls Grok, Gemini, ChatGPT, DeepSeek
     )
