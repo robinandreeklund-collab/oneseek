@@ -2546,6 +2546,46 @@ async def debate_orchestrator_node(
     scores = state.get("debate_scores", {"external_ai": 0, "consensus": 0})  # Simplified scoring
     knockout = state.get("debate_knockout", False)
     
+    # 🚨 CIRCUIT BREAKER: Track consecutive errors to prevent GPU burn
+    error_count = state.get("debate_error_count", 0)
+    MAX_CONSECUTIVE_ERRORS = 3
+    
+    # Check if last message from external_ai_caller or moderator was an error
+    messages = state.get("messages", [])
+    if messages and len(messages) > 0:
+        last_msg = messages[-1]
+        if hasattr(last_msg, 'name') and last_msg.name in ["external_ai_caller", "moderator", "fact_checker", "synthesizer"]:
+            content = last_msg.content if isinstance(last_msg.content, str) else str(last_msg.content)
+            if "Error" in content or "ERROR" in content or "error" in content:
+                error_count += 1
+                logger.error(f"🚨 CIRCUIT BREAKER: Error detected in {last_msg.name} (count: {error_count}/{MAX_CONSECUTIVE_ERRORS})")
+                
+                if error_count >= MAX_CONSECUTIVE_ERRORS:
+                    logger.error(f"🚨 CIRCUIT BREAKER TRIGGERED: {error_count} consecutive errors - ABORTING DEBATE TO PREVENT GPU BURN")
+                    error_msg = AIMessage(
+                        content=json.dumps({
+                            "error": "Circuit breaker triggered",
+                            "reason": f"Debatten avbröts automatiskt efter {error_count} sammanhängande fel",
+                            "final_round": current_round,
+                            "exit_reason": "🚨 SÄKERHETSBRYTARE AKTIVERAD - För många fel, avbryter för att förhindra GPU-bränning",
+                            "node_with_error": last_msg.name
+                        }, ensure_ascii=False, indent=2),
+                        name="debate_orchestrator"
+                    )
+                    return Command(
+                        update={
+                            **preserve_state_meta_fields(state),
+                            "messages": [error_msg],
+                            "debate_complete": True,
+                            "debate_error_count": error_count,
+                        },
+                        goto="reporter"
+                    )
+            else:
+                # Successful response - reset error counter
+                error_count = 0
+                logger.info(f"✅ Circuit breaker reset - successful response from {last_msg.name}")
+    
     # Increment round
     current_round += 1
     logger.info(f"Starting debate round {current_round}/{max_rounds}")
@@ -2569,6 +2609,7 @@ async def debate_orchestrator_node(
                 **preserve_state_meta_fields(state),
                 "messages": [summary_msg],
                 "debate_complete": True,
+                "debate_error_count": 0,  # Reset on successful completion
             },
             goto="reporter"
         )
@@ -2590,6 +2631,7 @@ async def debate_orchestrator_node(
                 **preserve_state_meta_fields(state),
                 "messages": [summary_msg],
                 "debate_complete": True,
+                "debate_error_count": 0,  # Reset on successful completion
             },
             goto="reporter"
         )
@@ -2612,6 +2654,7 @@ async def debate_orchestrator_node(
             **preserve_state_meta_fields(state),
             "debate_round": current_round,
             "debate_flow": debate_flow,  # ADD debate_flow to state!
+            "debate_error_count": error_count,  # Track errors for circuit breaker
         },
         goto="external_ai_caller"  # Calls Grok, Gemini, ChatGPT, DeepSeek
     )
