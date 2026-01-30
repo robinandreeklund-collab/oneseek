@@ -67,7 +67,43 @@ END (aldrig via research_team!)
 
 ---
 
-### 2. debate_orchestrator
+### 2. oneseek_debater
+**Fil:** `backend/deer_flow/prompts/oneseek_debater.sv_SE.md`
+
+**Roll:** Oneseek's dedikerade debate-strategi - definiera hur Oneseek deltar som aggressiv, faktabaserad debattör
+
+**Huvudinstruktioner:**
+- Tänk 10 steg före motståndarna med kritiskt resonemang i `<thinking>`
+- Använd web_search och crawl_tool aggressivt för att hitta källor
+- Citera ALLTID minst en källa per huvudargument `[källa: URL/namn]`
+- Knäck motargument med fakta, logik och verifierbara källor
+- Var charmig, vass och övertygande med retorik och starka formuleringar
+- Avsluta varje runda med knockout-argument
+- Analysera historiska paralleller och skapa framtidsvisioner
+- Integrera det bästa från alla modeller och källor till överlägsen syntes
+- Aldrig backa eller säga "jag vet inte" - vänd allt till din fördel
+- Vinn med sanning - aldrig osanningar eller bluff
+
+**Kontext som Oneseek får:**
+- Alla externa AI-modellers argument från aktuell runda
+- Verifierade fakta från fact_checker (web_search + crawl resultat)
+- Syntetiserade insikter från synthesizer
+- Poäng från tidigare rundor (via moderator)
+
+**Verktyg:**
+- `web_search(query)` - Hitta verifierande källor och motbevis
+- `crawl_tool(url)` - Läs specifika källor för djupare kontext
+
+**Output:** Konkurrensdrivet, faktabaserat argument på elegant svenska med källor
+
+**Rundstruktur:**
+- Runda 1: Etablera dominans med starkaste öppningsargument
+- Runda 2: Krossa motståndarargument med fact_checker's verifiering
+- Runda 3: Knockout-argument som ger överlägsenhet i omröstningen
+
+---
+
+### 3. debate_orchestrator
 **Fil:** `backend/deer_flow/prompts/debate_orchestrator.sv_SE.md`
 
 **Roll:** Dirigent som hanterar debattflödet
@@ -91,7 +127,7 @@ END (aldrig via research_team!)
 
 ---
 
-### 3. external_ai_caller
+### 4. external_ai_caller
 **Fil:** `backend/deer_flow/prompts/external_ai_caller.sv_SE.md`
 
 **Roll:** Orchestrerar sekventiella anrop till alla AI-modeller
@@ -118,7 +154,7 @@ END (aldrig via research_team!)
 
 ---
 
-### 4. fact_checker
+### 5. fact_checker
 **Fil:** `backend/deer_flow/prompts/fact_checker.sv_SE.md`
 
 **Roll:** Verifierar fakta från ALLA externa AI-modeller
@@ -142,7 +178,7 @@ END (aldrig via research_team!)
 
 ---
 
-### 5. synthesizer
+### 6. synthesizer
 **Fil:** `backend/deer_flow/prompts/synthesizer.sv_SE.md`
 
 **Roll:** Integrerar alla AI-perspektiv till överlägsen syntes
@@ -163,7 +199,7 @@ END (aldrig via research_team!)
 
 ---
 
-### 6. moderator
+### 7. moderator
 **Fil:** `backend/deer_flow/prompts/moderator.sv_SE.md`
 
 **Roll:** Neutral bedömare av rundan
@@ -210,6 +246,8 @@ END (aldrig via research_team!)
 ## OneSeek:s Roll i Debatten
 
 **OBS:** OneSeek deltar SOM EN AV DEBATTÖRERNA, inte som neutral part!
+
+**Prompt:** `oneseek_debater.sv_SE.md` definierar Oneseek's konkurrensstrategi och debatt-instruktioner
 
 **När OneSeek svarar:**
 - OneSeek anropas via `query_model_in_round(model_key="oneseek-local", ...)`
@@ -314,12 +352,15 @@ debate_orchestrator → reporter
 | Prompt-fil | Nod i builder.py | Verktyg | Routing |
 |------------|------------------|---------|---------|
 | `debate_planner.sv_SE.md` | `debate_planner` | Inga | → human_feedback |
+| `oneseek_debater.sv_SE.md` | Oneseek (via external_ai_caller) | web_search, crawl_tool | N/A (används som instruktioner) |
 | `debate_orchestrator.sv_SE.md` | `debate_orchestrator` | Inga | → external_ai_caller ELLER reporter |
 | `external_ai_caller.sv_SE.md` | `external_ai_caller` | debate_tools | → fact_checker |
 | `fact_checker.sv_SE.md` | `fact_checker` | web_search, crawl_tool | → synthesizer |
 | `synthesizer.sv_SE.md` | `synthesizer` | web_search, crawl_tool | → moderator |
 | `moderator.sv_SE.md` | `moderator` | Inga | → debate_orchestrator |
 | `reporter.sv_SE.md` | `reporter` | Inga | → human_feedback |
+
+**OBS:** `oneseek_debater.sv_SE.md` används av Oneseek när den agerar som debattör (anropas av external_ai_caller tillsammans med externa modeller)
 
 ---
 
@@ -328,7 +369,7 @@ debate_orchestrator → reporter
 1. **Separat kedja:** Debatt använder ALDRIG research_team noder (researcher, analyst, coder, tester)
 2. **Sekventiell AI-anrop:** Modeller anropas EN I TAGET för chain-of-thought
 3. **Verktygsnamn:** Använd `web_search`, INTE `debater_web_search`
-4. **OneSeek deltar:** OneSeek är EN AV debattörerna, inte neutral observatör
+4. **OneSeek deltar:** OneSeek är EN AV debattörerna med egen prompt (oneseek_debater.sv_SE.md)
 5. **Faktakoll varje runda:** fact_checker körs EFTER VARJE RUNDA, inte efter alla rundor
 6. **Syntes varje runda:** synthesizer integrerar EFTER VARJE RUNDA
 7. **Poäng ackumuleras:** moderator ger poäng varje runda, slutpoäng är summan av alla rundor
