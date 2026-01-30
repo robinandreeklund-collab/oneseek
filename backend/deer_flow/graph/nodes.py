@@ -242,6 +242,9 @@ def preserve_state_meta_fields(state: State) -> dict:
     These fields are critical for workflow continuity and should be explicitly
     included in all Command.update dicts to prevent them from reverting to defaults.
     
+    NOTE: Debate state fields (debate_round, debate_scores, etc.) are NOT included here.
+    They are managed explicitly by debate_orchestrator and moderator nodes to avoid conflicts.
+    
     Args:
         state: Current state object
         
@@ -257,13 +260,7 @@ def preserve_state_meta_fields(state: State) -> dict:
         "max_clarification_rounds": state.get("max_clarification_rounds", 3),
         "clarification_rounds": state.get("clarification_rounds", 0),
         "resources": state.get("resources", []),
-        # Debate state fields (CRITICAL: preserve across all transitions!)
-        "debate_round": state.get("debate_round", 0),
-        "debate_scores": state.get("debate_scores", {"proponent": 0, "opponent": 0}),
-        "debate_knockout": state.get("debate_knockout", False),
-        "debate_max_rounds": state.get("debate_max_rounds", 3),
-        "debate_error_count": state.get("debate_error_count", 0),
-        "debate_complete": state.get("debate_complete", False),
+        # Debate state fields are NOT auto-preserved - managed explicitly by debate nodes
     }
 
 
@@ -2599,6 +2596,10 @@ async def debate_orchestrator_node(
                         **preserve_state_meta_fields(state),
                         "messages": [error_msg],
                         "debate_complete": True,
+                        "debate_round": current_round,
+                        "debate_scores": scores,
+                        "debate_knockout": knockout,
+                        "debate_max_rounds": max_rounds,
                         "debate_error_count": error_count,
                     },
                     goto="reporter"
@@ -2633,6 +2634,10 @@ async def debate_orchestrator_node(
                 **preserve_state_meta_fields(state),
                 "messages": [summary_msg],
                 "debate_complete": True,
+                "debate_round": current_round,
+                "debate_scores": scores,
+                "debate_knockout": knockout,
+                "debate_max_rounds": max_rounds,
                 "debate_error_count": 0,  # Reset on successful completion
             },
             goto="reporter"
@@ -2655,6 +2660,10 @@ async def debate_orchestrator_node(
                 **preserve_state_meta_fields(state),
                 "messages": [summary_msg],
                 "debate_complete": True,
+                "debate_round": current_round,
+                "debate_scores": scores,
+                "debate_knockout": knockout,
+                "debate_max_rounds": max_rounds,
                 "debate_error_count": 0,  # Reset on successful completion
             },
             goto="reporter"
@@ -2682,8 +2691,12 @@ async def debate_orchestrator_node(
     state_update = {
         **preserved_fields,
         "debate_round": current_round,
+        "debate_scores": scores,
+        "debate_knockout": knockout,
+        "debate_max_rounds": max_rounds,
+        "debate_complete": False,
+        "debate_error_count": error_count,
         "debate_flow": debate_flow,  # ADD debate_flow to state!
-        "debate_error_count": error_count,  # Track errors for circuit breaker
     }
     logger.info(f"Orchestrator: Final state_update has debate_round={state_update.get('debate_round')}")
     
@@ -2776,7 +2789,8 @@ async def external_ai_caller_node(
             
             logger.info(f"  Querying model {i}/{len(all_models)}: {model_key}")
             # Build context and query model
-            user_query = state.get("user_query", "")
+            # Get user's actual question from research_topic (clarified version takes precedence)
+            user_query = state.get("clarified_research_topic") or state.get("research_topic", "")
             # Get locale from state (NOT round number!)
             locale = state.get("locale", "sv-SE")
             # Query model with correct locale parameter
