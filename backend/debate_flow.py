@@ -85,6 +85,7 @@ class DebateFlow:
         self.facts = []  # Shared facts accumulated from tools
         self.internal_fact_checks = []  # Internal fact-check summaries per round
         self.internal_summaries = []  # Internal synthesis summaries per round
+        self.oneseek_round1_presearch_done = False
         
         # Token counting for context monitoring
         self.token_encoder = None
@@ -281,6 +282,39 @@ class DebateFlow:
         if len(self.internal_summaries) > 6:
             self.internal_summaries = self.internal_summaries[-6:]
 
+    def _format_search_results(self, results: Any, max_items: int = 3) -> str:
+        """Format search results into short bullets."""
+        if not results:
+            return ""
+        items = results if isinstance(results, list) else [results]
+        bullets = []
+        for item in items[:max_items]:
+            if isinstance(item, dict):
+                title = item.get("title") or item.get("name") or "Källa"
+                url = item.get("url") or item.get("link") or ""
+                snippet = item.get("content") or item.get("snippet") or ""
+                snippet = snippet[:200] + "..." if len(snippet) > 200 else snippet
+                bullet = f"- {title} ({url}) {snippet}".strip()
+            else:
+                bullet = str(item)[:240]
+            bullets.append(bullet)
+        return "\n".join(bullets)
+
+    async def run_oneseek_round1_presearch(self, user_query: str) -> str:
+        """Run a lightweight internal web search before OneSeek's first response."""
+        if not self.search_tool:
+            return ""
+        try:
+            search_results = await asyncio.wait_for(
+                asyncio.to_thread(self.search_tool.invoke, user_query),
+                timeout=5.0,
+            )
+            formatted = self._format_search_results(search_results, max_items=3)
+            return self._truncate_internal(formatted, max_chars=900)
+        except Exception as e:
+            logger.warning(f"Round 1 presearch failed: {e}")
+            return ""
+
     def _build_internal_context(self, up_to_round: int) -> str:
         """Build cumulative internal context up to a given round."""
         if up_to_round < 1:
@@ -333,6 +367,7 @@ class DebateFlow:
         self.facts = []
         self.internal_fact_checks = []
         self.internal_summaries = []
+        self.oneseek_round1_presearch_done = False
         logger.info("DebateFlow state reset")
 
     def add_fact(self, fact: str, source: str = "web_search"):
@@ -410,7 +445,10 @@ class DebateFlow:
                 context_parts.append(f"- {fact['content']}\n")
         
         # Add instruction to include name
-        context_parts.append(f"\nVIKTIGT: Inled ditt svar med ditt namn: **{model_key}** (eller ditt displaynamn).\n")
+        display_name = DEBATE_MODELS.get(model_key, {}).get("display_name", model_key)
+        context_parts.append(f"\nVIKTIGT: Inled ditt svar med ditt namn: **{display_name}**.\n")
+        if model_key == "oneseek-local":
+            context_parts.append("Du är OneSeek. Var medveten om din roll som OneSeek-debattör.\n")
         
         # Round 1: First model gets minimal context
         if self.current_round == 1:
@@ -513,6 +551,18 @@ class DebateFlow:
             
             # Build context for this model
             context = self.build_context_for_model(model_key, user_query, locale)
+
+            # Round 1: OneSeek performs an internal pre-search before its first response
+            if model_key == "oneseek-local" and self.current_round == 1 and not self.oneseek_round1_presearch_done:
+                presearch = await self.run_oneseek_round1_presearch(user_query)
+                if presearch:
+                    context += (
+                        "\n\n**Intern webbsökning (endast OneSeek):**\n"
+                        + presearch
+                        + "\n"
+                    )
+                    self.add_internal_fact_check(1, presearch)
+                self.oneseek_round1_presearch_done = True
             token_count = self._count_tokens(context)
             
             # Hard limit to prevent VLLM crashes (adjusted for 95K token model)

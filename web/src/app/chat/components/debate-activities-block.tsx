@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Bytedance Ltd. and/or its affiliates
 // SPDX-License-Identifier: MIT
 
-import { PencilRuler } from "lucide-react";
+import { CheckCircle2, Loader2, PencilRuler } from "lucide-react";
 import { motion } from "framer-motion";
 import { useTheme } from "next-themes";
 import { useTranslations } from "next-intl";
@@ -26,6 +26,7 @@ import type { Message, ToolCallRuntime } from "~/core/messages";
 import { useMessage, useStore } from "~/core/store";
 import { cn } from "~/lib/utils";
 
+import { DebateModelIcon } from "./debate-model-icon";
 // Performance optimization constants
 const MAX_ANIMATED_ITEMS = 10; // Only animate first 10 items
 const ANIMATION_DELAY_MULTIPLIER = 0.05; // Reduced delay between animations
@@ -100,8 +101,19 @@ const ActivityMessage = React.memo(({ messageId }: { messageId: string }) => {
     }
     // Show debate agent messages with markdown formatting
     if (message.content) {
+      const agentLabelMap: Record<string, string> = {
+        external_ai_caller: "Modellerna svarar",
+        fact_checker: "Faktakontroll",
+        synthesizer: "Syntes",
+        moderator: "Moderator",
+        debate_orchestrator: "Orkestrator",
+      };
+      const agentLabel = agentLabelMap[message.agent] ?? message.agent;
       return (
         <div className="px-4 py-2">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {agentLabel}
+          </div>
           <Markdown animated checkLinkCredibility>
             {message.content}
           </Markdown>
@@ -163,6 +175,11 @@ ActivityListItem.displayName = "ActivityListItem";
 function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
   const tool = useMemo(() => findMCPTool(toolCall.name), [toolCall.name]);
   const { resolvedTheme } = useTheme();
+  const modelKey = useMemo(() => {
+    if (toolCall.name !== "query_model_in_round") return undefined;
+    const args = toolCall.args as { model_key?: string };
+    return args.model_key;
+  }, [toolCall.args, toolCall.name]);
   
   // Custom display name for debate tools
   const displayName = useMemo(() => {
@@ -177,10 +194,10 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
       if (model.includes("(ID:")) {
         model = model.split("(ID:")[0]?.trim() || model;
       }
-      return `Waiting for ${model}...`;
+      return model;
     } else if (toolCall.name === "start_debate_round") {
         const args = toolCall.args as { round_number?: number };
-        return `Starting Round ${args.round_number ?? ""}...`;
+        return `Round ${args.round_number ?? ""}`;
     } else if (toolCall.name === "collect_debate_votes") {
         return "Collecting votes from all models...";
     }
@@ -193,20 +210,20 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
   // If so, we might want to change the text from "Waiting..." to "Responded"
   const statusText = useMemo(() => {
     if (toolCall.result !== undefined) {
-       if (toolCall.name === "query_model_in_round") {
-           const args = toolCall.args as { model_key?: string };
-           let model = args.model_key ?? "model";
-           if (model.includes("(ID:")) {
-             model = model.split("(ID:")[0]?.trim() || model;
-           }
-           return `${model} responded`;
-       }
-       if (toolCall.name === "start_debate_round") return "Round started";
-       if (toolCall.name === "collect_debate_votes") return "Votes collected";
-       return `Executed ${toolCall.name}()`;
+      if (toolCall.name === "query_model_in_round") {
+        return `${displayName} responded`;
+      }
+      if (toolCall.name === "start_debate_round") return "Round started";
+      if (toolCall.name === "collect_debate_votes") return "Votes collected";
+      return `Executed ${toolCall.name}()`;
+    }
+    if (toolCall.name === "query_model_in_round") {
+      return `Waiting for ${displayName}`;
     }
     return `Running ${displayName}`;
-  }, [displayName, toolCall.name, toolCall.result, toolCall.args]);
+  }, [displayName, toolCall.name, toolCall.result]);
+  
+  const isRunning = toolCall.result === undefined;
 
   return (
     <section className="mt-4 pl-4">
@@ -215,11 +232,20 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
           <AccordionItem value="item-1">
             <AccordionTrigger>
               <Tooltip title={tool?.description}>
-                <div className="flex items-center font-medium italic">
-                  <PencilRuler size={16} className={"mr-2"} />
+                <div className="flex items-center gap-2 font-medium italic">
+                  {toolCall.name === "query_model_in_round" ? (
+                    <DebateModelIcon modelKey={modelKey} />
+                  ) : (
+                    <PencilRuler size={16} />
+                  )}
+                  {isRunning ? (
+                    <Loader2 size={14} className="animate-spin text-muted-foreground" />
+                  ) : (
+                    <CheckCircle2 size={14} className="text-emerald-500" />
+                  )}
                   <RainbowText
                     className="pr-0.5 text-base font-medium italic"
-                    animated={toolCall.result === undefined}
+                    animated={isRunning}
                   >
                     {statusText}
                   </RainbowText>

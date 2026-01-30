@@ -4,6 +4,7 @@
 import json
 import logging
 import os
+import re
 from functools import partial
 from typing import Annotated, Any, Literal
 
@@ -272,6 +273,7 @@ def preserve_state_meta_fields(state: State) -> dict:
         "debate_round_started": state.get("debate_round_started", False),
         "external_ai_responses": state.get("external_ai_responses", ""),
         "debate_pending_model": state.get("debate_pending_model"),
+        "debate_model_ids": state.get("debate_model_ids", []),
     }
 
 
@@ -285,6 +287,43 @@ def get_thread_id_from_config(config: RunnableConfig | None) -> str:
     if isinstance(configurable, dict) and configurable.get("thread_id"):
         return str(configurable["thread_id"])
     return "default"
+
+
+def parse_debate_model_selection(feedback: str) -> list[str]:
+    """Extract selected debate model IDs from interrupt feedback."""
+    if not feedback:
+        return []
+    try:
+        match = re.search(r"models=([^\]]+)", feedback, re.IGNORECASE)
+        if not match:
+            return []
+        raw = match.group(1)
+        return [model.strip() for model in raw.split(",") if model.strip()]
+    except Exception:
+        return []
+
+
+def build_rounds_preview(rounds: list[dict], max_chars: int = 400) -> list[dict]:
+    """Trim debate round data for UI display."""
+    preview: list[dict] = []
+    for round_data in rounds:
+        responses_preview = []
+        for resp in round_data.get("responses", []):
+            if resp.get("error"):
+                continue
+            response_text = resp.get("response", "")
+            if isinstance(response_text, str) and len(response_text) > max_chars:
+                response_text = response_text[:max_chars] + "... [trunkerat]"
+            responses_preview.append({
+                "model": resp.get("model"),
+                "display_name": resp.get("display_name"),
+                "response": response_text,
+            })
+        preview.append({
+            "round": round_data.get("round"),
+            "responses": responses_preview,
+        })
+    return preview
 
 
 def validate_and_fix_plan(plan: dict, enforce_web_search: bool = False, enable_web_search: bool = True) -> dict:
@@ -932,6 +971,7 @@ def human_feedback_node(
     current_plan = state.get("current_plan", "")
     # check if the plan is auto accepted
     auto_accepted_plan = state.get("auto_accepted_plan", False)
+    selected_models: list[str] = state.get("debate_model_ids", [])
     if not auto_accepted_plan:
         feedback = interrupt("Please Review the Plan.")
 
@@ -944,7 +984,9 @@ def human_feedback_node(
             )
 
         # Normalize feedback string
-        feedback_normalized = str(feedback).strip().upper()
+        feedback_raw = str(feedback).strip()
+        feedback_normalized = feedback_raw.upper()
+        selected_models = parse_debate_model_selection(feedback_raw)
 
         # if the feedback is not accepted, return the planner node
         if feedback_normalized.startswith("[EDIT_PLAN]"):
@@ -958,7 +1000,7 @@ def human_feedback_node(
                 },
                 goto="planner",
             )
-        elif feedback_normalized.startswith("[ACCEPTED]"):
+        elif feedback_normalized.startswith("[ACCEPTED"):
             logger.info("Plan is accepted by user.")
         else:
             logger.warning(f"Unsupported feedback format: {feedback}. Please use '[ACCEPTED]' to accept or '[EDIT_PLAN]' to edit.")
@@ -1001,6 +1043,19 @@ def human_feedback_node(
         # Validate and fix plan to ensure web search requirements are met
         configurable = Configuration.from_runnable_config(config)
         new_plan = validate_and_fix_plan(new_plan, configurable.enforce_web_search, configurable.enable_web_search)
+        
+        if selected_models:
+            from backend.debate_flow import DEBATE_MODELS
+            model_names = [
+                DEBATE_MODELS.get(model_id, {}).get("display_name", model_id)
+                for model_id in selected_models
+            ]
+            locale = state.get("locale", "en-US")
+            if locale.startswith("sv"):
+                selection_note = f"Valda modeller: {', '.join(model_names)}"
+            else:
+                selection_note = f"Selected models: {', '.join(model_names)}"
+            new_plan["thought"] = f"{new_plan.get('thought', '')} ({selection_note})"
     except (json.JSONDecodeError, AttributeError) as e:
         logger.warning(f"Failed to parse plan: {str(e)}. Plan data type: {type(current_plan).__name__}")
         if isinstance(current_plan, dict) and "content" in original_plan:
@@ -1034,6 +1089,7 @@ def human_feedback_node(
             "debate_max_rounds": 3,
             "debate_scores": {"proponent": 0, "opponent": 0},
             "debate_knockout": False,
+            "debate_model_ids": selected_models or state.get("debate_model_ids", []),
         })
     
     return Command(
@@ -2730,6 +2786,7 @@ async def debate_orchestrator_node(
             internal_summaries = list(getattr(debate_flow, "internal_summaries", []))
         except Exception as e:
             logger.warning(f"Failed to collect debate votes or history: {e}")
+        rounds_preview = build_rounds_preview(debate_rounds)
         summary_msg = AIMessage(
             content=json.dumps({
                 "final_round": current_round - 1,
@@ -2737,6 +2794,7 @@ async def debate_orchestrator_node(
                 "exit_reason": exit_reason,
                 "external_ai_models": ["Grok", "Gemini", "ChatGPT", "DeepSeek"],
                 "vote_results": vote_results,
+                "rounds": rounds_preview,
             }, ensure_ascii=False, indent=2),
             name="debate_orchestrator"
         )
@@ -2785,12 +2843,14 @@ async def debate_orchestrator_node(
             internal_summaries = list(getattr(debate_flow, "internal_summaries", []))
         except Exception as e:
             logger.warning(f"Failed to collect debate history for knockout: {e}")
+        rounds_preview = build_rounds_preview(debate_rounds)
         summary_msg = AIMessage(
             content=json.dumps({
                 "final_round": current_round - 1,
                 "final_scores": scores,
                 "exit_reason": exit_reason,
-                "external_ai_models": ["Grok", "Gemini", "ChatGPT", "DeepSeek"]
+                "external_ai_models": ["Grok", "Gemini", "ChatGPT", "DeepSeek"],
+                "rounds": rounds_preview,
             }, ensure_ascii=False, indent=2),
             name="debate_orchestrator"
         )
@@ -2897,7 +2957,8 @@ async def external_ai_caller_node(
         import uuid
         user_query = state.get("clarified_research_topic") or state.get("research_topic", "")
         locale = state.get("locale", "sv-SE")
-        max_context_chars = int(os.getenv("DEBATE_TOOL_CONTEXT_MAX_CHARS", "8000"))
+        max_context_chars = int(os.getenv("DEBATE_TOOL_CONTEXT_MAX_CHARS", "4000"))
+        max_tool_result_chars = int(os.getenv("DEBATE_TOOL_RESULT_MAX_CHARS", "12000"))
         
         if pending_model:
             model_key = pending_model.get("model_key")
@@ -2924,6 +2985,11 @@ async def external_ai_caller_node(
                 tool_result_text += "\n\n### Kontext skickad till modellen\n```text\n"
                 tool_result_text += context_used
                 tool_result_text += "\n```\n"
+            if len(tool_result_text) > max_tool_result_chars:
+                tool_result_text = (
+                    tool_result_text[:max_tool_result_chars]
+                    + f"... [trunkerat till {max_tool_result_chars} tecken]"
+                )
             tool_results.append(
                 ToolMessage(
                     content=tool_result_text,
@@ -2973,6 +3039,11 @@ async def external_ai_caller_node(
             logger.info(f"Starting debate round {round_num} for thread {thread_id}")
             debate_flow.start_new_round(round_num)
             model_order = debate_flow.get_randomized_order()
+            selected_models = state.get("debate_model_ids") or []
+            if selected_models:
+                allowed = set(selected_models)
+                allowed.add("oneseek-local")
+                model_order = [model for model in model_order if model in allowed]
             model_index = 0
             round_started = True
             

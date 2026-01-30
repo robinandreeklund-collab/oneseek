@@ -11,10 +11,12 @@ import { Button } from "~/components/ui/button";
 import { Card } from "~/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { closeDebate, useStore } from "~/core/store";
+import { parseJSON } from "~/core/utils";
 import { cn } from "~/lib/utils";
 
 import { DebateActivitiesBlock } from "./debate-activities-block";
 import { DebateReportBlock } from "./debate-report-block";
+import { DebateModelIcon } from "./debate-model-icon";
 
 export function DebateSidebar({
   className,
@@ -31,6 +33,24 @@ export function DebateSidebar({
   const messages = Array.from(useStore(state => state.messages).values());
   const reportMessage = messages.find(m => m.agent === "reporter");
   const reportId = reportMessage?.id;
+  
+  const debateSummary = parseJSON(
+    messages
+      .filter((m) => m.agent === "debate_orchestrator" && m.content)
+      .map((m) => m.content)
+      .reverse()[0],
+    {},
+  ) as {
+    rounds?: Array<{
+      round?: number;
+      responses?: Array<{ model?: string; display_name?: string; response?: string }>;
+    }>;
+    vote_results?: {
+      winner?: string;
+      votes?: Record<string, number>;
+      vote_details?: Array<{ voter?: string; vote?: string }>;
+    };
+  };
 
   return (
     <div className={cn("h-full w-full", className)}>
@@ -115,9 +135,40 @@ export function DebateSidebar({
               className="h-full"
               scrollShadowColor="var(--card)"
             >
-              <div className="text-muted-foreground py-8 text-center">
-                {t("roundsComingSoon")}
-              </div>
+              {debateSummary.rounds?.length ? (
+                <div className="space-y-6 py-4">
+                  {debateSummary.rounds.map((round) => (
+                    <div
+                      key={`round-${round.round}`}
+                      className="rounded-lg border border-border/60 bg-muted/30 p-4"
+                    >
+                      <div className="text-sm font-semibold">
+                        Runda {round.round}
+                      </div>
+                      <div className="mt-3 space-y-3">
+                        {(round.responses ?? []).map((resp, idx) => (
+                          <div
+                            key={`${round.round}-${resp.model ?? idx}`}
+                            className="rounded-md border border-border/40 bg-background/60 p-3"
+                          >
+                            <div className="flex items-center gap-2 text-sm font-medium">
+                              <DebateModelIcon modelKey={resp.model} />
+                              <span>{resp.display_name ?? resp.model ?? "Model"}</span>
+                            </div>
+                            <div className="mt-2 text-sm text-foreground/80">
+                              {resp.response}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-muted-foreground py-8 text-center">
+                  {t("roundsComingSoon")}
+                </div>
+              )}
             </ScrollContainer>
           </TabsContent>
           <TabsContent
@@ -130,9 +181,49 @@ export function DebateSidebar({
               className="h-full"
               scrollShadowColor="var(--card)"
             >
-              <div className="text-muted-foreground py-8 text-center">
-                {t("votingComingSoon")}
-              </div>
+              {debateSummary.vote_results ? (
+                <div className="space-y-4 py-4">
+                  <div className="rounded-lg border border-border/60 bg-muted/30 p-4">
+                    <div className="text-sm font-semibold">Vinnare</div>
+                    <div className="mt-2 text-base">
+                      {debateSummary.vote_results.winner ?? "Ingen vinnare"}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-border/60 bg-muted/30 p-4">
+                    <div className="text-sm font-semibold">Röstfördelning</div>
+                    <div className="mt-2 space-y-2 text-sm">
+                      {debateSummary.vote_results.votes &&
+                        Object.entries(debateSummary.vote_results.votes).map(
+                          ([model, count]) => (
+                            <div key={model} className="flex items-center gap-2">
+                              <DebateModelIcon modelKey={model} />
+                              <span className="flex-1">{model}</span>
+                              <span className="font-semibold">{count}</span>
+                            </div>
+                          ),
+                        )}
+                    </div>
+                  </div>
+                  {debateSummary.vote_results.vote_details?.length ? (
+                    <div className="rounded-lg border border-border/60 bg-muted/30 p-4">
+                      <div className="text-sm font-semibold">Detaljer</div>
+                      <div className="mt-2 space-y-2 text-sm">
+                        {debateSummary.vote_results.vote_details.map((detail, idx) => (
+                          <div key={`${detail.voter}-${idx}`} className="flex items-center gap-2">
+                            <span className="flex-1">
+                              {detail.voter ?? "Okänd"} → {detail.vote ?? "Okänd"}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="text-muted-foreground py-8 text-center">
+                  {t("votingComingSoon")}
+                </div>
+              )}
             </ScrollContainer>
           </TabsContent>
         </Tabs>

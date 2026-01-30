@@ -550,7 +550,7 @@ async def _process_message_chunk(message_chunk, message_metadata, thread_id, age
         tool_call_id = message_chunk.tool_call_id
         event_stream_message["tool_call_id"] = tool_call_id
         
-        max_tool_chars = int(os.getenv("STREAM_TOOL_OUTPUT_MAX_CHARS", "8000"))
+        max_tool_chars = int(os.getenv("STREAM_TOOL_OUTPUT_MAX_CHARS", "6000"))
         content = event_stream_message.get("content", "")
         if isinstance(content, str) and len(content) > max_tool_chars:
             event_stream_message["content"] = content[:max_tool_chars] + "... [truncated]"

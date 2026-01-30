@@ -66,3 +66,4 @@ class State(MessagesState):
     debate_round_started: bool = False
     external_ai_responses: str = ""
     debate_pending_model: dict[str, Any] | None = None
+    debate_model_ids: list[str] = field(default_factory=list)
