@@ -3223,10 +3223,12 @@ async def fact_checker_node(
 
     @tool("web_search")
     def cached_web_search(query: str) -> str:
+        """Search the web using the cached debate flow results for this round."""
         return debate_flow.cached_web_search(query, current_round)
 
     @tool("crawl_tool")
     def cached_crawl(url: str) -> str:
+        """Fetch a URL using cached debate flow results for this round."""
         return debate_flow.cached_crawl(url, current_round)
 
     tools = [cached_web_search, cached_crawl]
