@@ -2673,15 +2673,22 @@ async def debate_orchestrator_node(
     
     # Start new round - route to external_ai_caller to get real AI responses
     logger.info(f"Round {current_round}: Routing to external_ai_caller for real AI model responses")
-    logger.info(f"Orchestrator: Setting debate_round={current_round} in state update")
+    
+    # Build state update explicitly to debug
+    preserved_fields = preserve_state_meta_fields(state)
+    logger.info(f"Orchestrator: preserved_fields has debate_round={preserved_fields.get('debate_round')}")
+    logger.info(f"Orchestrator: Setting debate_round={current_round} in state update (should override preserved value)")
+    
+    state_update = {
+        **preserved_fields,
+        "debate_round": current_round,
+        "debate_flow": debate_flow,  # ADD debate_flow to state!
+        "debate_error_count": error_count,  # Track errors for circuit breaker
+    }
+    logger.info(f"Orchestrator: Final state_update has debate_round={state_update.get('debate_round')}")
     
     return Command(
-        update={
-            **preserve_state_meta_fields(state),
-            "debate_round": current_round,
-            "debate_flow": debate_flow,  # ADD debate_flow to state!
-            "debate_error_count": error_count,  # Track errors for circuit breaker
-        },
+        update=state_update,
         goto="external_ai_caller"  # Calls Grok, Gemini, ChatGPT, DeepSeek
     )
 
