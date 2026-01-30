@@ -2550,41 +2550,54 @@ async def debate_orchestrator_node(
     error_count = state.get("debate_error_count", 0)
     MAX_CONSECUTIVE_ERRORS = 3
     
-    # Check if last message from external_ai_caller or moderator was an error
+    # Check recent messages (not just last one!) for error indicators
     messages = state.get("messages", [])
     if messages and len(messages) > 0:
-        last_msg = messages[-1]
-        if hasattr(last_msg, 'name') and last_msg.name in ["external_ai_caller", "moderator", "fact_checker", "synthesizer"]:
-            content = last_msg.content if isinstance(last_msg.content, str) else str(last_msg.content)
-            if "Error" in content or "ERROR" in content or "error" in content:
-                error_count += 1
-                logger.error(f"🚨 CIRCUIT BREAKER: Error detected in {last_msg.name} (count: {error_count}/{MAX_CONSECUTIVE_ERRORS})")
-                
-                if error_count >= MAX_CONSECUTIVE_ERRORS:
-                    logger.error(f"🚨 CIRCUIT BREAKER TRIGGERED: {error_count} consecutive errors - ABORTING DEBATE TO PREVENT GPU BURN")
-                    error_msg = AIMessage(
-                        content=json.dumps({
-                            "error": "Circuit breaker triggered",
-                            "reason": f"Debatten avbröts automatiskt efter {error_count} sammanhängande fel",
-                            "final_round": current_round,
-                            "exit_reason": "🚨 SÄKERHETSBRYTARE AKTIVERAD - För många fel, avbryter för att förhindra GPU-bränning",
-                            "node_with_error": last_msg.name
-                        }, ensure_ascii=False, indent=2),
-                        name="debate_orchestrator"
-                    )
-                    return Command(
-                        update={
-                            **preserve_state_meta_fields(state),
-                            "messages": [error_msg],
-                            "debate_complete": True,
-                            "debate_error_count": error_count,
-                        },
-                        goto="reporter"
-                    )
-            else:
-                # Successful response - reset error counter
+        # Check last 10 messages for errors from any debate node
+        recent_messages = messages[-10:] if len(messages) >= 10 else messages
+        error_indicators = ["Error querying", "ERROR", "error", "AttributeError", "Exception", "Traceback"]
+        
+        # Check if there are errors in recent messages
+        error_in_recent = False
+        error_node = None
+        for msg in reversed(recent_messages):
+            if hasattr(msg, 'name') and msg.name in ["external_ai_caller", "moderator", "fact_checker", "synthesizer"]:
+                content = msg.content if isinstance(msg.content, str) else str(msg.content)
+                if any(indicator in content for indicator in error_indicators):
+                    error_in_recent = True
+                    error_node = msg.name
+                    break
+        
+        if error_in_recent:
+            error_count += 1
+            logger.error(f"🚨 CIRCUIT BREAKER: Error detected in {error_node} (count: {error_count}/{MAX_CONSECUTIVE_ERRORS})")
+            
+            if error_count >= MAX_CONSECUTIVE_ERRORS:
+                logger.error(f"🚨 CIRCUIT BREAKER TRIGGERED: {error_count} consecutive errors - ABORTING DEBATE TO PREVENT GPU BURN")
+                error_msg = AIMessage(
+                    content=json.dumps({
+                        "error": "Circuit breaker triggered",
+                        "reason": f"Debatten avbröts automatiskt efter {error_count} sammanhängande fel",
+                        "final_round": current_round,
+                        "exit_reason": "🚨 SÄKERHETSBRYTARE AKTIVERAD - För många fel, avbryter för att förhindra GPU-bränning",
+                        "node_with_error": error_node
+                    }, ensure_ascii=False, indent=2),
+                    name="debate_orchestrator"
+                )
+                return Command(
+                    update={
+                        **preserve_state_meta_fields(state),
+                        "messages": [error_msg],
+                        "debate_complete": True,
+                        "debate_error_count": error_count,
+                    },
+                    goto="reporter"
+                )
+        else:
+            # No errors in recent messages - reset counter
+            if error_count > 0:
+                logger.info(f"✅ Circuit breaker reset - no errors in recent messages (was at {error_count})")
                 error_count = 0
-                logger.info(f"✅ Circuit breaker reset - successful response from {last_msg.name}")
     
     # Increment round
     current_round += 1
@@ -2700,8 +2713,8 @@ async def external_ai_caller_node(
     )
     logger.info("Created debate_flow instance in external_ai_caller")
     
-    # Get current round number from debate_flow
-    round_num = debate_flow.current_round
+    # Get current round number from state (1-based: 1, 2, 3)
+    round_num = state.get("debate_round", 1)
     logger.info(f"Starting deterministic execution for Round {round_num}")
     
     # DETERMINISTIC EXECUTION - no LLM making decisions!
@@ -2720,7 +2733,8 @@ async def external_ai_caller_node(
             logger.info(f"  Querying model {i}/{len(all_models)}: {model_key}")
             # Build context and query model
             user_query = state.get("user_query", "")
-            response = await debate_flow.query_model_in_debate(model_key, user_query, round_num)
+            # Convert round_num to string as debate_flow expects string
+            response = await debate_flow.query_model_in_debate(model_key, user_query, str(round_num))
             responses.append(f"Model {model_key}: {response}")
             logger.info(f"  ✓ Model {model_key} responded ({len(response)} chars)")
         
