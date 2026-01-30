@@ -2552,6 +2552,7 @@ async def debate_orchestrator_node(
     max_rounds = state.get("debate_max_rounds", 3)
     scores = state.get("debate_scores", {"external_ai": 0, "consensus": 0})  # Simplified scoring
     knockout = state.get("debate_knockout", False)
+    logger.info(f"Orchestrator: Read debate_round={current_round} from state (before increment)")
     
     # 🚨 CIRCUIT BREAKER: Track consecutive errors to prevent GPU burn
     error_count = state.get("debate_error_count", 0)
@@ -2610,6 +2611,7 @@ async def debate_orchestrator_node(
     
     # Increment round
     current_round += 1
+    logger.info(f"Orchestrator: Incremented to debate_round={current_round}")
     logger.info(f"Starting debate round {current_round}/{max_rounds}")
     
     # Check exit criteria before starting new round
@@ -2671,6 +2673,8 @@ async def debate_orchestrator_node(
     
     # Start new round - route to external_ai_caller to get real AI responses
     logger.info(f"Round {current_round}: Routing to external_ai_caller for real AI model responses")
+    logger.info(f"Orchestrator: Setting debate_round={current_round} in state update")
+    
     return Command(
         update={
             **preserve_state_meta_fields(state),
@@ -2940,6 +2944,7 @@ async def moderator_node(
     # Get debate state
     current_round = state.get("debate_round", 1)
     scores = state.get("debate_scores", {"proponent": 0, "opponent": 0})
+    logger.info(f"Moderator: Read debate_round={current_round} from state")
     
     # Build prompt for moderator
     messages = apply_prompt_template("moderator", state, configurable, locale)
@@ -2996,6 +3001,7 @@ Svara INTE med vanlig text eller markdown. Endast ren JSON!"""
         logger.info(f"Round {current_round} scores: Proponent +{round_proponent_score}, Opponent +{round_opponent_score}")
         logger.info(f"Total scores: Proponent {scores['proponent']}, Opponent {scores['opponent']}")
         logger.info(f"Knockout: {knockout}")
+        logger.info(f"Moderator: Setting debate_round={current_round} in state update")
         
         # Create summary message
         summary_msg = AIMessage(
@@ -3003,14 +3009,22 @@ Svara INTE med vanlig text eller markdown. Endast ren JSON!"""
             name="moderator"
         )
         
+        # Build state update - explicitly set all debate fields
+        state_update = {
+            "messages": [summary_msg],
+            "debate_scores": scores,
+            "debate_knockout": knockout,
+            "debate_round": current_round,  # CRITICAL: Preserve round number!
+        }
+        # Add meta fields but let debate fields from above take precedence
+        for key, value in preserve_state_meta_fields(state).items():
+            if key not in state_update:
+                state_update[key] = value
+        
+        logger.info(f"Moderator: State update keys: {list(state_update.keys())}, debate_round in update: {state_update.get('debate_round')}")
+        
         return Command(
-            update={
-                **preserve_state_meta_fields(state),
-                "messages": [summary_msg],
-                "debate_scores": scores,
-                "debate_knockout": knockout,
-                "debate_round": current_round,  # CRITICAL: Preserve round number!
-            },
+            update=state_update,
             goto="debate_orchestrator"  # Route back for next round
         )
         
