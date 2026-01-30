@@ -682,11 +682,8 @@ class DebateFlow:
         if token_count > 10000:
             logger.warning(f"⚠️ Voting context large: {token_count} tokens")
         
-        # Ask each external model to vote (exclude OneSeek)
-        available_models = [
-            key for key in self.models.keys()
-            if not DEBATE_MODELS.get(key, {}).get("is_oneseek")
-        ]
+        # Ask each model to vote (including OneSeek)
+        available_models = list(self.models.keys())
         
         for model_key in available_models:
             if model_key not in self.models:

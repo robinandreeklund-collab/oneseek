@@ -28,7 +28,7 @@ Du MÅSTE skapa en plan med EXAKT 4 steg som orkestrera en multi-modellsdebatt:
 
 ## Steg 4: Demokratisk röstning
 - Titel: "Röstning: Demokratiskt val"
-- Beskrivning: Externa AI-modeller (exkl. OneSeek) röstar på det bästa svaret från runda 3. Röster räknas samman och en vinnare utses baserat på majoritetsröst.
+- Beskrivning: Alla AI-modeller (inkl. OneSeek) röstar på det bästa svaret från runda 3. Röster räknas samman och en vinnare utses baserat på majoritetsröst. Självröstning är inte tillåten.
 - step_type: "research"
 - need_search: false
 
@@ -72,7 +72,7 @@ Du MÅSTE skapa en plan med EXAKT 4 steg enligt detta JSON-schema:
     {
       "need_search": false,
       "title": "Röstning: Demokratiskt val",
-      "description": "Externa AI-modeller (exkl. OneSeek) röstar på det bästa svaret från runda 3. Röster räknas samman och en vinnare utses baserat på majoritetsröst.",
+      "description": "Alla AI-modeller (inkl. OneSeek) röstar på det bästa svaret från runda 3. Röster räknas samman och en vinnare utses baserat på majoritetsröst. Självröstning är inte tillåten.",
       "step_type": "research"
     }
   ]

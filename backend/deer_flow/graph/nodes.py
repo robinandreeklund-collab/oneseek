@@ -1473,7 +1473,7 @@ def _format_debate_results_for_report(debate_results: dict) -> str:
             parts.append(f"- Runda {round_number}: {truncate(entry.get('content', ''), 700)}")
 
     if vote_results:
-        parts.append("\n## Röstningsresultat (endast externa modeller)")
+        parts.append("\n## Röstningsresultat (alla modeller, självröstning ej tillåten)")
         parts.append(f"Vinnare: {vote_results.get('winner')}")
         parts.append(f"Röster: {vote_results.get('votes')}")
         details = vote_results.get("vote_details", [])

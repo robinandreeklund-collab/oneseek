@@ -36,7 +36,7 @@ You coordinate a **3-round debate** where all available AI models (including One
 
 ## Voting (After Round 3)
 1. Call `collect_debate_votes` with the user question
-2. External models (not OneSeek) vote for the best answer
+2. All models (including OneSeek) vote for the best answer
 3. Models may NOT vote for themselves
 4. Tool compiles votes and declares a winner
 
@@ -141,7 +141,7 @@ After ALL three rounds and voting are complete, present results in structured fo
   - Internal fact-checks and synthesis results
 
 ## Voting Rules
-- Only **external models** vote (not OneSeek)
+- **All models** vote (including OneSeek)
 - Models may **NOT** vote for themselves
 - Voting based on **round 3 answers**
 

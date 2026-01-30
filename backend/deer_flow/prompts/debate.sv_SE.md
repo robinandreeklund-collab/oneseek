@@ -37,7 +37,7 @@ Du koordinerar en **3-ronders debatt** där alla tillgängliga AI-modeller (inkl
 
 ## Röstning (Efter Runda 3)
 1. Anropa `collect_debate_votes` med användarfrågan
-2. Externa modeller (inte OneSeek) röstar på bästa svaret
+2. Alla modeller (inkl. OneSeek) röstar på bästa svaret
 3. Modeller får INTE rösta på sig själva
 4. Verktyget sammanställer röster och deklarerar en vinnare
 
@@ -148,7 +148,7 @@ Efter att ALLA tre ronder och röstningen är klar, presentera resultaten strukt
   - Källreferenser från faktakollar
 
 ## Röstningsregler
-- Endast **externa modeller** röstar (inte OneSeek)
+- **Alla modeller** röstar (inklusive OneSeek)
 - Modeller får **INTE** rösta på sig själva
 - Röstning baseras på **runda 3 svar**
 

@@ -25,7 +25,7 @@ För varje runda:
 3. Interna resultat sparas för nästa runda
 
 Efter runda 3:
-1. Samla röster från externa modeller (ingen självröstning)
+1. Samla röster från alla modeller (ingen självröstning)
 2. Skicka allt till reporter för slutlig rapport
 
 # Exit-kriterier

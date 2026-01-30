@@ -28,7 +28,7 @@ You MUST create a plan with EXACTLY 4 steps that orchestrate a multi-model debat
 
 ## Step 4: Democratic Voting
 - Title: "Voting: Democratic Selection"
-- Description: External AI models (excluding OneSeek) vote on the best answer from round 3. Votes are tallied and a winner is declared based on majority vote.
+- Description: All AI models (including OneSeek) vote on the best answer from round 3. Votes are tallied and a winner is declared based on majority vote. Self-voting is not allowed.
 - step_type: "research"
 - need_search: false
 
@@ -72,7 +72,7 @@ You MUST create a plan with EXACTLY 4 steps following this JSON schema:
     {
       "need_search": false,
       "title": "Röstning: Demokratiskt val",
-      "description": "Externa AI-modeller (exkl. OneSeek) röstar på det bästa svaret från runda 3. Röster räknas samman och en vinnare utses baserat på majoritetsröst.",
+      "description": "Alla AI-modeller (inkl. OneSeek) röstar på det bästa svaret från runda 3. Röster räknas samman och en vinnare utses baserat på majoritetsröst. Självröstning är inte tillåten.",
       "step_type": "research"
     }
   ]

@@ -16,6 +16,7 @@ Efter varje runda får du **intern kontext** (faktakontroll + syntes) som ska an
 - Bemöta motargument och visa nyanser
 - Integrera interna resultat och konsensus
 - I runda 3 leverera **den bästa sammanvägda syntesen**
+- Efter runda 3 deltar du i omröstningen (självröstning är förbjuden)
 
 ## Stilkrav
 - Svara på **svenska**
