@@ -44,6 +44,13 @@ import type { ToolCallRuntime, WorkspaceFile } from "~/core/messages";
 import { closeCoder, useMessage, useStore } from "~/core/store";
 import { cn } from "~/lib/utils";
 
+function isToolCallError(result?: string) {
+  return (
+    typeof result === "string" &&
+    (result.trim().startsWith("Error:") || result.trim().startsWith("ERROR:"))
+  );
+}
+
 export function CoderSidebar({
   className,
   sessionId = null,
@@ -223,7 +230,7 @@ function PythonToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
   const { resolvedTheme } = useTheme();
   const statusLabel = useMemo(() => {
     if (toolCall.result) {
-      return toolCall.result.trim().startsWith("Error:")
+      return isToolCallError(toolCall.result)
         ? t("statusError")
         : t("statusSuccess");
     }
@@ -309,7 +316,7 @@ function FileSystemToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
   }, [toolCall.args, toolCall.argsChunks]);
   const statusLabel = useMemo(() => {
     if (toolCall.result) {
-      return toolCall.result.trim().startsWith("Error:")
+      return isToolCallError(toolCall.result)
         ? t("statusError")
         : t("statusSuccess");
     }
@@ -346,7 +353,7 @@ function ReactSandboxToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
   const t = useTranslations("chat.coder");
   const statusLabel = useMemo(() => {
     if (toolCall.result) {
-      return toolCall.result.trim().startsWith("Error:")
+      return isToolCallError(toolCall.result)
         ? t("statusError")
         : t("statusSuccess");
     }
@@ -522,7 +529,7 @@ function CoderPreviewBlock({ sessionId }: { sessionId: string }) {
       if (!message?.toolCalls) continue;
       for (const toolCall of message.toolCalls) {
         if (toolCall.name !== "react_sandbox_tool") continue;
-        if (toolCall.result?.trim().startsWith("Error:")) {
+        if (isToolCallError(toolCall.result)) {
           return true;
         }
       }

@@ -297,7 +297,7 @@ export async function sendMessage(
       if (type === "data") {
         const metadata = data as { tool_actions?: ToolAction[]; live_update?: boolean };
         const actions = Array.isArray(metadata.tool_actions)
-          ? metadata.tool_actions ?? []
+          ? metadata.tool_actions
           : [];
         if (actions.length > 0) {
           useStore.getState().updateToolActions(
