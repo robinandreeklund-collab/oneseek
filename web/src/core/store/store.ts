@@ -184,8 +184,72 @@ export const useStore = create<{
     const updatedWorkspaceFiles = new Map(useStore.getState().coderWorkspaceFiles);
 
     toolActions.forEach((action) => {
-      const targetMessage = findMessageByToolCallId(action.tool_call_id);
-      if (!targetMessage) return;
+      let targetMessage = findMessageByToolCallId(action.tool_call_id);
+      if (!targetMessage) {
+        const toolName = action.tool_name ?? "unknown";
+        const fallbackAgent =
+          toolName === "query_gpt35" ||
+          toolName === "query_gemini_flash" ||
+          toolName === "query_deepseek" ||
+          toolName === "query_grok4"
+            ? "ai_compare_query"
+            : toolName === "fact_check_responses"
+              ? "ai_compare_fact_check"
+              : toolName === "run_meta_analysis"
+                ? "ai_compare_meta"
+                : toolName === "synthesize_optimal_answer"
+                  ? "ai_compare_synth"
+                  : "researcher";
+        const toolInput = action.tool_input;
+        let args: Record<string, unknown> = {};
+        if (typeof toolInput === "string" && toolInput.trim()) {
+          const trimmed = toolInput.trim();
+          if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+            try {
+              const parsed = JSON.parse(trimmed);
+              args = typeof parsed === "object" && parsed ? (parsed as Record<string, unknown>) : {};
+            } catch {
+              args = { raw: toolInput };
+            }
+          } else {
+            args = { raw: toolInput };
+          }
+        }
+        const result =
+          action.tool_output !== undefined
+            ? typeof action.tool_output === "string"
+              ? action.tool_output
+              : JSON.stringify(action.tool_output, null, 2)
+            : undefined;
+        const toolCallMessageId = `tool-${action.tool_call_id}`;
+        if (!existsMessage(toolCallMessageId)) {
+          const message: Message = {
+            id: toolCallMessageId,
+            threadId: useStore.getState().threadId,
+            agent: fallbackAgent,
+            role: "assistant",
+            content: "",
+            contentChunks: [],
+            reasoningContent: "",
+            reasoningContentChunks: [],
+            isStreaming: action.status === "running",
+            toolCalls: [
+              {
+                id: action.tool_call_id,
+                name: toolName,
+                args,
+                result,
+                status: action.status,
+              },
+            ],
+          };
+          appendMessage(message);
+          updatedMessages.set(message.id, message);
+          updatedMessageIds.add(message.id);
+        }
+        targetMessage = findMessageByToolCallId(action.tool_call_id);
+        if (!targetMessage) return;
+      }
       const toolCalls = targetMessage.toolCalls ?? [];
       const updatedToolCalls = toolCalls.map((toolCall) => {
         if (toolCall.id !== action.tool_call_id) return toolCall;
