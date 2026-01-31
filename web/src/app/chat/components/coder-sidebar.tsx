@@ -195,6 +195,7 @@ function CoderActivityItem({ messageId }: { messageId: string }) {
     const toolCallComponents = message.toolCalls
       .slice()
       .sort((a, b) => {
+        // Keep in-progress tool calls visible before completed ones.
         if (a.result && !b.result) return 1;
         if (!a.result && b.result) return -1;
         return 0;

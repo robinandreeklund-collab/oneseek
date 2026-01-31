@@ -271,7 +271,6 @@ export async function sendMessage(
 
   setResponding(true);
   let messageId: string | undefined;
-  let lastEvent: unknown;
   let lastMessage: Message | undefined;
   const pendingUpdates = new Map<string, Message>();
   let updateTimer: NodeJS.Timeout | undefined;
@@ -289,7 +288,6 @@ export async function sendMessage(
 
   try {
     for await (const event of stream) {
-      lastEvent = event;
       const { type, data } = event;
       let message: Message | undefined;
       
@@ -360,7 +358,6 @@ export async function sendMessage(
     }
   } catch (error) {
     console.error("[Store] Error processing chat event:", error);
-    console.error("[Store] Event that caused error:", lastEvent);
     console.error("[Store] Current message:", lastMessage);
     console.error("[Store] Message ID:", messageId);
     toast("An error occurred while generating the response. Please try again.");
