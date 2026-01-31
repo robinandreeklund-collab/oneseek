@@ -3047,7 +3047,7 @@ async def ai_compare_query_node(
 
     query = state.get("research_topic", "")
     tool_call_id = uuid4().hex
-    tool_args = {"query": query}
+    tool_args = {"query": query, "model_key": selected_model}
     try:
         tool_output = await selected_tool.ainvoke(tool_args)
     except Exception as exc:
@@ -3076,6 +3076,22 @@ async def ai_compare_query_node(
     if current_step:
         display = selected_model or current_step.title
         current_step.execution_res = f"Completed: {display}"
+    display_name = None
+    if responses and isinstance(responses[0], dict):
+        display_name = responses[0].get("display_name")
+        if display_name:
+            tool_args["display_name"] = display_name
+    ui_text = ""
+    if responses and isinstance(responses[0], dict):
+        response = responses[0].get("response")
+        error = responses[0].get("error")
+        name = display_name or selected_model or "Model"
+        if response:
+            ui_text = f"### {name}\n\n{response}"
+        elif error:
+            ui_text = f"### {name}\n\nError: {error}"
+        else:
+            ui_text = f"### {name}\n\n(No response)"
     messages = [
         AIMessage(
             content="",
@@ -3089,7 +3105,7 @@ async def ai_compare_query_node(
             ],
         ),
         ToolMessage(
-            content=str(tool_output),
+            content=ui_text or str(tool_output),
             tool_call_id=tool_call_id,
             name=getattr(selected_tool, "name", "unknown"),
         ),

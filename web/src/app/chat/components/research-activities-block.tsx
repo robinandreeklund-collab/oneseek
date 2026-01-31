@@ -596,6 +596,10 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
       const args = toolCall.args as { model_key?: string };
       return args.model_key;
     }
+    if (toolCall.args && typeof toolCall.args === "object") {
+      const args = toolCall.args as { model_key?: string };
+      if (args.model_key) return args.model_key;
+    }
     if (toolCall.name === "query_gpt35") return "gpt-3.5-turbo";
     if (toolCall.name === "query_gemini_flash") return "gemini-2.5-flash";
     if (toolCall.name === "query_deepseek") return "deepseek-chat";
@@ -640,6 +644,10 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
     if (aiComparePayload && typeof aiComparePayload === "object" && "display_name" in aiComparePayload) {
       const name = (aiComparePayload as Record<string, unknown>).display_name;
       if (typeof name === "string" && name.trim()) return name;
+    }
+    if (toolCall.args && typeof toolCall.args === "object") {
+      const args = toolCall.args as { display_name?: string };
+      if (args.display_name) return args.display_name;
     }
     return modelLabelFromKey || undefined;
   }, [aiComparePayload, modelLabelFromKey]);
