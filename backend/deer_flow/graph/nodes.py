@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+from uuid import uuid4
 from functools import partial
 from typing import Annotated, Any, Literal
 
@@ -3033,42 +3034,38 @@ async def ai_compare_query_node(
         "grok-4-fast-reasoning": query_grok4,
     }
     selected_tool = None
+    selected_model = None
     if current_step:
         step_text = f"{current_step.title} {current_step.description}".lower()
         for model_key, tool in model_tool_map.items():
             if model_key in step_text or model_key.replace("-", " ") in step_text:
                 selected_tool = tool
+                selected_model = model_key
                 break
+    if not selected_tool:
+        return Command(update=preserve_state_meta_fields(state), goto="ai_compare_team")
 
-    tools = [selected_tool] if selected_tool else list(model_tool_map.values())
-    result = await _setup_and_execute_agent_step(
-        state,
-        config,
-        "ai_compare_query",
-        tools,
-    )
-    responses = []
-    for message in result.update.get("messages", []):
-        if isinstance(message, ToolMessage) and message.name in {
-            "query_gpt35",
-            "query_gemini_flash",
-            "query_deepseek",
-            "query_grok4",
-        }:
-            payload = _parse_json_content(message.content or "")
-            if payload:
-                responses.append(payload)
-    if not responses:
-        payload = _parse_json_content(
-            result.update.get("messages", [])[-1].content
-            if result.update.get("messages")
-            else ""
+    query = state.get("research_topic", "")
+    tool_call_id = uuid4().hex
+    tool_args = {"query": query}
+    try:
+        tool_output = await selected_tool.ainvoke(tool_args)
+    except Exception as exc:
+        tool_output = json.dumps(
+            {
+                "model": selected_model or "unknown",
+                "display_name": selected_model or "Unknown",
+                "response": None,
+                "success": False,
+                "error": str(exc),
+            },
+            ensure_ascii=False,
         )
-        if isinstance(payload, dict):
-            if payload.get("responses"):
-                responses = payload.get("responses", [])
-            elif payload.get("response"):
-                responses = [payload.get("response")]
+
+    payload = _parse_json_content(str(tool_output))
+    responses = []
+    if isinstance(payload, dict) and payload:
+        responses = [payload]
     existing = state.get("ai_compare_responses", [])
     merged = {resp.get("model"): resp for resp in existing if isinstance(resp, dict)}
     for resp in responses:
@@ -3076,14 +3073,36 @@ async def ai_compare_query_node(
             merged[resp.get("model")] = resp
     merged_responses = [resp for resp in merged.values() if resp]
     responses_json = json.dumps(merged_responses, ensure_ascii=False)
+    if current_step:
+        display = selected_model or current_step.title
+        current_step.execution_res = f"Completed: {display}"
+    messages = [
+        AIMessage(
+            content="",
+            name="ai_compare_query",
+            tool_calls=[
+                {
+                    "id": tool_call_id,
+                    "name": getattr(selected_tool, "name", "unknown"),
+                    "args": tool_args,
+                }
+            ],
+        ),
+        ToolMessage(
+            content=str(tool_output),
+            tool_call_id=tool_call_id,
+            name=getattr(selected_tool, "name", "unknown"),
+        ),
+    ]
     return Command(
         update={
             **preserve_state_meta_fields(state),
-            **result.update,
             "ai_compare_responses": merged_responses,
             "ai_compare_responses_json": responses_json,
+            "messages": messages,
+            "current_plan": current_plan,
         },
-        goto=result.goto,
+        goto="ai_compare_team",
     )
 
 
