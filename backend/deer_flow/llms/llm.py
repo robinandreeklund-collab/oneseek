@@ -321,13 +321,13 @@ def _get_model_token_limit_defaults() -> dict[str, int]:
         "gemini-2": 180000,
         "gemini-1.5-pro": 180000,
         "gemini-1.5-flash": 180000,
-        "gemini-pro": 30000,
+        "gemini-pro": 128000,  # Increased from 30000 to support larger context models
         # Bytedance Doubao
         "doubao": 200000,
         # DeepSeek
         "deepseek": 100000,
         # Ollama/local
-        "qwen": 30000,
+        "qwen": 128000,  # Increased from 30000 for Qwen3-8B-AWQ (65-128k context)
         "llama": 4000,
         # Default fallback for unknown models
         "default": 100000,

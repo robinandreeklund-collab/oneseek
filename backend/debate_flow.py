@@ -83,6 +83,12 @@ class DebateFlow:
         self.debate_history = []  # All rounds history
         self.oneseek_analyses = []  # OneSeek internal analyses
         self.facts = []  # Shared facts accumulated from tools
+        self.internal_fact_checks = []  # Internal fact-check summaries per round
+        self.internal_summaries = []  # Internal synthesis summaries per round
+        self.oneseek_round1_presearch_done = False
+        self.search_cache = {}
+        self.crawl_cache = {}
+        self.context_by_tool_call_id = {}
         
         # Token counting for context monitoring
         self.token_encoder = None
@@ -251,6 +257,120 @@ class DebateFlow:
         
         return summary
 
+    def _truncate_internal(self, content: str, max_chars: int = 1400) -> str:
+        """Truncate internal context to keep prompts bounded."""
+        cleaned = content.strip() if isinstance(content, str) else str(content)
+        if len(cleaned) > max_chars:
+            return cleaned[:max_chars] + "... [trunkerat]"
+        return cleaned
+
+    def add_internal_fact_check(self, round_number: int, content: str) -> None:
+        """Store internal fact-check results for a round."""
+        entry = {
+            "round": round_number,
+            "content": self._truncate_internal(content, max_chars=1400),
+        }
+        self.internal_fact_checks.append(entry)
+        # Keep last few entries
+        if len(self.internal_fact_checks) > 6:
+            self.internal_fact_checks = self.internal_fact_checks[-6:]
+
+    def add_internal_summary(self, round_number: int, content: str) -> None:
+        """Store internal synthesis summary for a round."""
+        entry = {
+            "round": round_number,
+            "content": self._truncate_internal(content, max_chars=1400),
+        }
+        self.internal_summaries.append(entry)
+        if len(self.internal_summaries) > 6:
+            self.internal_summaries = self.internal_summaries[-6:]
+
+    def _format_search_results(self, results: Any, max_items: int = 3) -> str:
+        """Format search results into short bullets."""
+        if not results:
+            return ""
+        items = results if isinstance(results, list) else [results]
+        bullets = []
+        for item in items[:max_items]:
+            if isinstance(item, dict):
+                title = item.get("title") or item.get("name") or "Källa"
+                url = item.get("url") or item.get("link") or ""
+                snippet = item.get("content") or item.get("snippet") or ""
+                snippet = snippet[:200] + "..." if len(snippet) > 200 else snippet
+                bullet = f"- {title} ({url}) {snippet}".strip()
+            else:
+                bullet = str(item)[:240]
+            bullets.append(bullet)
+        return "\n".join(bullets)
+
+    async def run_oneseek_round1_presearch(self, user_query: str) -> str:
+        """Run a lightweight internal web search before OneSeek's first response."""
+        if not self.search_tool:
+            return ""
+        try:
+            search_results = await asyncio.wait_for(
+                asyncio.to_thread(self.cached_web_search, user_query, self.current_round),
+                timeout=5.0,
+            )
+            formatted = self._format_search_results(search_results, max_items=3)
+            return self._truncate_internal(formatted, max_chars=900)
+        except Exception as e:
+            logger.warning(f"Round 1 presearch failed: {e}")
+            return ""
+
+    def cached_web_search(self, query: str, round_number: int) -> Any:
+        """Cache web search results per round/query."""
+        cache_key = f"{round_number}:{query.strip().lower()}"
+        if cache_key in self.search_cache:
+            return self.search_cache[cache_key]
+        if not self.search_tool:
+            return []
+        result = self.search_tool.invoke(query)
+        self.search_cache[cache_key] = result
+        return result
+
+    def cached_crawl(self, url: str, round_number: int) -> Any:
+        """Cache crawl results per round/url."""
+        cache_key = f"{round_number}:{url.strip().lower()}"
+        if cache_key in self.crawl_cache:
+            return self.crawl_cache[cache_key]
+        from backend.deer_flow.tools import crawl_tool
+        result = crawl_tool.invoke(url)
+        self.crawl_cache[cache_key] = result
+        return result
+
+    def store_tool_context(self, tool_call_id: str, context: str, max_chars: int = 120000) -> None:
+        """Store full context for later retrieval."""
+        if not tool_call_id:
+            return
+        context_text = context or ""
+        if len(context_text) > max_chars:
+            context_text = context_text[:max_chars] + "... [trunkerat]"
+        self.context_by_tool_call_id[tool_call_id] = context_text
+
+    def get_tool_context(self, tool_call_id: str) -> str:
+        """Retrieve stored tool context by tool_call_id."""
+        return self.context_by_tool_call_id.get(tool_call_id, "")
+
+    def _build_internal_context(self, up_to_round: int) -> str:
+        """Build cumulative internal context up to a given round."""
+        if up_to_round < 1:
+            return ""
+
+        parts: list[str] = []
+        for round_number in range(1, up_to_round + 1):
+            round_parts: list[str] = []
+            for entry in self.internal_fact_checks:
+                if entry.get("round") == round_number:
+                    round_parts.append(f"Faktakontroll Runda {round_number}:\n{entry.get('content', '')}")
+            for entry in self.internal_summaries:
+                if entry.get("round") == round_number:
+                    round_parts.append(f"Syntes Runda {round_number}:\n{entry.get('content', '')}")
+            if round_parts:
+                parts.append("\n".join(round_parts))
+
+        return "\n\n".join(parts)
+
     def start_new_round(self, round_number: int):
         """
         Start a new debate round with clean state.
@@ -273,6 +393,22 @@ class DebateFlow:
         
         logger.info(f"Starting Round {round_number}")
         logger.info(f"Previous round had {len(self.full_previous_round)} responses")
+
+    def reset(self):
+        """Reset debate state for a new session."""
+        self.current_round = 0
+        self.chain_so_far = []
+        self.full_previous_round = []
+        self.debate_history = []
+        self.oneseek_analyses = []
+        self.facts = []
+        self.internal_fact_checks = []
+        self.internal_summaries = []
+        self.oneseek_round1_presearch_done = False
+        self.search_cache = {}
+        self.crawl_cache = {}
+        self.context_by_tool_call_id = {}
+        logger.info("DebateFlow state reset")
 
     def add_fact(self, fact: str, source: str = "web_search"):
         """
@@ -327,6 +463,16 @@ class DebateFlow:
         
         context_parts = []
         
+        # Load OneSeek's dedicated debate prompt
+        if model_key == "oneseek-local":
+            from backend.deer_flow.prompts.template import get_prompt_template
+            try:
+                oneseek_system = get_prompt_template("oneseek_debater", locale)
+                context_parts.append(f"\n### Din Strategi och Regler:\n{oneseek_system}\n\n")
+                logger.info(f"Loaded oneseek_debater prompt for {model_key}")
+            except FileNotFoundError:
+                logger.warning(f"oneseek_debater prompt not found for locale {locale}")
+        
         # Add user query
         context_parts.append(f"Användares fråga: {user_query}\n")
         
@@ -339,7 +485,11 @@ class DebateFlow:
                 context_parts.append(f"- {fact['content']}\n")
         
         # Add instruction to include name
-        context_parts.append(f"\nVIKTIGT: Inled ditt svar med ditt namn: **{model_key}** (eller ditt displaynamn).\n")
+        display_name = DEBATE_MODELS.get(model_key, {}).get("display_name", model_key)
+        context_parts.append(f"\nVIKTIGT: Inled ditt svar med ditt namn: **{display_name}**.\n")
+        if model_key == "oneseek-local":
+            context_parts.append("Du är OneSeek. Var medveten om din roll som OneSeek-debattör.\n")
+            context_parts.append("Du ska alltid ge ditt bästa möjliga svar i varje runda.\n")
         
         # Round 1: First model gets minimal context
         if self.current_round == 1:
@@ -358,17 +508,27 @@ class DebateFlow:
                     if len(resp['response']) > 500:
                         snippet += "..."
                     context_parts.append(f"\n{resp['display_name']}: {snippet}\n")
+                context_parts.append(f"\nBemöt minst ett av ovanstående svar.")
                 context_parts.append(f"\nDitt svar (på {language}, max 500 tokens):")
         
-        # Round 2 & 3: FIXED - Use SUMMARY instead of full previous round
+        # Round 2 & 3: Use full previous round + (internal results for OneSeek only)
         else:
             if self.full_previous_round:
                 prev_round = self.current_round - 1
-                # CRITICAL FIX: Summarize instead of including full responses
-                summary = self._summarize_round(self.full_previous_round)
-                context_parts.append(f"\n**Sammanfattning av Runda {prev_round}:**\n")
-                context_parts.append(summary)
+                context_parts.append(f"\n**Runda {prev_round} (fullständiga svar):**\n")
+                for resp in self.full_previous_round:
+                    if resp.get("error"):
+                        continue
+                    response_text = resp.get("response", "")
+                    context_parts.append(f"\n{resp.get('display_name', resp.get('model', 'Model'))}: {response_text}\n")
                 context_parts.append("\n")
+
+            if model_key == "oneseek-local":
+                internal_context = self._build_internal_context(self.current_round - 1)
+                if internal_context:
+                    context_parts.append("\n**Interna resultat (faktakontroll + syntes):**\n")
+                    context_parts.append(internal_context)
+                    context_parts.append("\n")
             
             # FIXED: Limit chain_so_far to last 5 responses (increased from 3)
             if self.chain_so_far:
@@ -380,6 +540,7 @@ class DebateFlow:
                     if len(resp['response']) > 500:
                         snippet += "..."
                     context_parts.append(f"\n{resp['display_name']}: {snippet}\n")
+                context_parts.append("\nBemöt minst ett svar från aktuell runda.")
             
             # Round 3 specific instructions for OneSeek
             if self.current_round == 3 and model_key == "oneseek-local":
@@ -387,6 +548,7 @@ class DebateFlow:
                 context_parts.append(f"Du har tillgång till sammanfattningar av tidigare argument och dina interna analyser.")
                 context_parts.append(f"Skapa ditt bästa, mest genomtänkta svar som väger alla perspektiv.")
             else:
+                context_parts.append("Om relevant: referera till minst ett argument från föregående runda.")
                 context_parts.append(f"\nDitt svar för runda {self.current_round} (på {language}, max 500 tokens):")
         
         context = "\n".join(context_parts)
@@ -430,6 +592,18 @@ class DebateFlow:
             
             # Build context for this model
             context = self.build_context_for_model(model_key, user_query, locale)
+
+            # Round 1: OneSeek performs an internal pre-search before its first response
+            if model_key == "oneseek-local" and self.current_round == 1 and not self.oneseek_round1_presearch_done:
+                presearch = await self.run_oneseek_round1_presearch(user_query)
+                if presearch:
+                    context += (
+                        "\n\n**Intern webbsökning (endast OneSeek):**\n"
+                        + presearch
+                        + "\n"
+                    )
+                    self.add_internal_fact_check(1, presearch)
+                self.oneseek_round1_presearch_done = True
             token_count = self._count_tokens(context)
             
             # Hard limit to prevent VLLM crashes (adjusted for 95K token model)
@@ -447,8 +621,11 @@ class DebateFlow:
             logger.info(f"Querying {display_name} in round {self.current_round} (context: {token_count} tokens)")
             
             # Query the model
+            import time
+            start_time = time.monotonic()
             messages = [HumanMessage(content=context)]
             response = await model.ainvoke(messages)
+            latency_ms = int((time.monotonic() - start_time) * 1000)
             
             response_text = response.content if hasattr(response, "content") else str(response)
             
@@ -463,7 +640,10 @@ class DebateFlow:
                 "round": self.current_round,
                 "position": len(self.chain_so_far),
                 "error": False,
-                "context_used": context
+                "context_used": context,
+                "latency_ms": latency_ms,
+                "tokens_in": token_count,
+                "tokens_out": self._count_tokens(response_text),
             }
             
             # Add to chain_so_far
@@ -537,7 +717,7 @@ class DebateFlow:
                     
                     # Quick web search
                     search_results = await asyncio.wait_for(
-                        asyncio.to_thread(self.search_tool.invoke, search_query),
+                        asyncio.to_thread(self.cached_web_search, search_query, self.current_round),
                         timeout=5.0
                     )
                     
@@ -594,7 +774,10 @@ class DebateFlow:
                 voting_context += f"\n[{idx}] {resp['display_name']}: {response_text}\n"
         
         voting_context += "\n\nRösta på det bästa svaret genom att ange numret [0-" + str(len(round_3_responses)-1) + "]. "
-        voting_context += "Du får INTE rösta på ditt eget svar. Ge endast nummret."
+        voting_context += "Du får INTE rösta på ditt eget svar.\n"
+        voting_context += "Svara i formatet:\n"
+        voting_context += "Vote: [N]\n"
+        voting_context += "Reasons:\n- punkt 1\n- punkt 2\n- punkt 3\n"
         
         # Log voting context size for monitoring
         token_count = self._count_tokens(voting_context)
@@ -603,7 +786,7 @@ class DebateFlow:
         if token_count > 10000:
             logger.warning(f"⚠️ Voting context large: {token_count} tokens")
         
-        # Ask each model to vote (including OneSeek, per user request)
+        # Ask each model to vote (including OneSeek)
         available_models = list(self.models.keys())
         
         for model_key in available_models:
@@ -635,7 +818,7 @@ class DebateFlow:
                 response = await model.ainvoke(messages, config={"callbacks": []})
                 vote_text = response.content if hasattr(response, "content") else str(response)
                 
-                # Extract vote number (enhanced regex to handle various formats like "Jag röstar på [3]", "Vote: 2", etc.)
+                # Extract vote number (enhanced regex to handle various formats)
                 import re
                 vote_match = re.search(r'(?:\[|\b)(\d+)(?:\]|\b)', vote_text)
                 
@@ -662,10 +845,20 @@ class DebateFlow:
                     logger.warning(f"{display_name} vote could not be parsed: {vote_text[:50]}")
                     vote_parsed = "Parse Error"
                 
+                # Extract up to 3 bullet-point reasons
+                reasons = []
+                for line in vote_text.splitlines():
+                    cleaned = line.strip()
+                    if cleaned.startswith(("-", "*")):
+                        reasons.append(cleaned.lstrip("-* ").strip())
+                    if len(reasons) >= 3:
+                        break
+
                 vote_details.append({
                     "voter": display_name,
                     "vote": vote_parsed,
-                    "raw_response": vote_text[:100]
+                    "reasons": reasons,
+                    "raw_response": vote_text[:200]
                 })
                     
             except Exception as e:
@@ -688,13 +881,28 @@ class DebateFlow:
         }
 
 
-# Global instance (will be created when needed)
-_debate_flow_instance = None
+# Global instances per thread/session
+_debate_flow_instances: Dict[str, DebateFlow] = {}
 
 
-def get_debate_flow(max_search_results: int = 3, resources: List[Any] = None) -> DebateFlow:
-    """Get or create the global debate flow instance."""
-    global _debate_flow_instance
-    if _debate_flow_instance is None:
-        _debate_flow_instance = DebateFlow(max_search_results, resources)
-    return _debate_flow_instance
+def get_debate_flow(
+    max_search_results: int = 3,
+    resources: List[Any] = None,
+    thread_id: str | None = None,
+    reset: bool = False,
+) -> DebateFlow:
+    """Get or create a debate flow instance scoped to a thread/session."""
+    global _debate_flow_instances
+    thread_key = str(thread_id) if thread_id else "default"
+    if thread_key not in _debate_flow_instances:
+        _debate_flow_instances[thread_key] = DebateFlow(max_search_results, resources)
+    elif reset:
+        _debate_flow_instances[thread_key].reset()
+    return _debate_flow_instances[thread_key]
+
+
+def clear_debate_flow(thread_id: str | None = None) -> None:
+    """Remove a debate flow instance (cleanup)."""
+    global _debate_flow_instances
+    thread_key = str(thread_id) if thread_id else "default"
+    _debate_flow_instances.pop(thread_key, None)

@@ -15,7 +15,12 @@ logger = logging.getLogger(__name__)
 
 
 @tool
-async def start_debate_round(round_number: int, user_query: str, locale: str = "sv-SE") -> str:
+async def start_debate_round(
+    round_number: int,
+    user_query: str,
+    locale: str = "sv-SE",
+    thread_id: str | None = None,
+) -> str:
     """
     Start a new debate round and get the randomized order of models.
     
@@ -28,7 +33,7 @@ async def start_debate_round(round_number: int, user_query: str, locale: str = "
         Information about the round and model order
     """
     try:
-        debate_flow = get_debate_flow(max_search_results=3, resources=[])
+        debate_flow = get_debate_flow(max_search_results=3, resources=[], thread_id=thread_id)
         debate_flow.start_new_round(round_number)
         
         order = debate_flow.get_randomized_order()
@@ -49,7 +54,12 @@ _Föregående runda: {len(debate_flow.full_previous_round)} svar_
 
 
 @tool
-async def query_model_in_round(model_key: str, user_query: str, locale: str = "sv-SE") -> str:
+async def query_model_in_round(
+    model_key: str,
+    user_query: str,
+    locale: str = "sv-SE",
+    thread_id: str | None = None,
+) -> str:
     """
     Query a specific model in the current debate round.
     The model will receive context based on:
@@ -74,7 +84,7 @@ async def query_model_in_round(model_key: str, user_query: str, locale: str = "s
             logger.info(f"Extracted model ID '{actual_key}' from '{model_key}'")
             model_key = actual_key
             
-        debate_flow = get_debate_flow()
+        debate_flow = get_debate_flow(thread_id=thread_id)
         
         result = await debate_flow.query_model_in_debate(model_key, user_query, locale)
         
@@ -104,7 +114,7 @@ async def query_model_in_round(model_key: str, user_query: str, locale: str = "s
 
 
 @tool
-async def run_internal_analysis(user_query: str) -> str:
+async def run_internal_analysis(user_query: str, thread_id: str | None = None) -> str:
     """
     Run OneSeek's internal analysis of responses so far.
     This performs fact-checking and identifies counterarguments.
@@ -117,7 +127,7 @@ async def run_internal_analysis(user_query: str) -> str:
         Summary of internal analysis
     """
     try:
-        debate_flow = get_debate_flow()
+        debate_flow = get_debate_flow(thread_id=thread_id)
         
         if not debate_flow.chain_so_far:
             return "⚠️ Ingen analys att köra - inga svar ännu i denna runda."
@@ -140,7 +150,7 @@ Detta används internt av OneSeek för att förbättra sitt syntetiserade svar.
 
 
 @tool
-async def collect_debate_votes(user_query: str) -> str:
+async def collect_debate_votes(user_query: str, thread_id: str | None = None) -> str:
     """
     Collect votes from external models on the best answer from round 3.
     Models cannot vote for themselves.
@@ -152,7 +162,7 @@ async def collect_debate_votes(user_query: str) -> str:
         Voting results with winner
     """
     try:
-        debate_flow = get_debate_flow()
+        debate_flow = get_debate_flow(thread_id=thread_id)
         
         if debate_flow.current_round != 3:
             return f"⚠️ Röstning kan endast ske efter runda 3. Nuvarande runda: {debate_flow.current_round}"
@@ -194,7 +204,7 @@ async def collect_debate_votes(user_query: str) -> str:
 
 
 @tool
-async def get_debate_summary() -> str:
+async def get_debate_summary(thread_id: str | None = None) -> str:
     """
     Get a summary of the entire debate including all rounds and voting results.
     
@@ -202,7 +212,7 @@ async def get_debate_summary() -> str:
         Complete debate summary
     """
     try:
-        debate_flow = get_debate_flow()
+        debate_flow = get_debate_flow(thread_id=thread_id)
         
         summary = f"""📊 **Debattsammanfattning**
 
@@ -234,17 +244,22 @@ Nuvarande runda: {debate_flow.current_round}
 
 def get_debate_tools() -> List[Any]:
     """
-    Get all debate tools for the debate agent.
+    Get debate tools for external_ai_caller agent.
+    
+    NOTE: external_ai_caller is called ONCE PER ROUND by debate_orchestrator.
+    It should ONLY orchestrate that single round, not handle voting or summary.
+    
+    Voting and summary are handled automatically by debate_orchestrator and reporter.
     
     Returns:
-        List of debate tools
+        List of debate tools for round orchestration
     """
     # Import web search tool directly
     from backend.deer_flow.tools import get_web_search_tool
     
     # Create debater_web_search tool wrapper
     @tool
-    async def debater_web_search(query: str) -> str:
+    async def debater_web_search(query: str, thread_id: str | None = None) -> str:
         """
         Perform a web search to verify facts or gather information for the debate.
         The results are added to the debate context and visible to OneSeek.
@@ -256,7 +271,7 @@ def get_debate_tools() -> List[Any]:
             Search results summary
         """
         try:
-            debate_flow = get_debate_flow()
+            debate_flow = get_debate_flow(thread_id=thread_id)
             search_tool = get_web_search_tool(max_search_results=3)
             
             logger.info(f"Debater performing web search: {query}")
@@ -279,11 +294,14 @@ def get_debate_tools() -> List[Any]:
             logger.error(f"Error in debater web search: {e}")
             return f"Sökfel: {str(e)}"
 
+    # REMOVED: collect_debate_votes and get_debate_summary
+    # These are handled by debate_orchestrator and reporter automatically
+    # external_ai_caller should ONLY orchestrate ONE ROUND at a time
     return [
         start_debate_round,
         query_model_in_round,
         run_internal_analysis,
-        collect_debate_votes,
-        get_debate_summary,
-        debater_web_search, # Added granular tool
+        # Removed: collect_debate_votes - handled by debate_orchestrator
+        # Removed: get_debate_summary - handled by reporter
+        debater_web_search,
     ]

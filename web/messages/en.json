@@ -237,6 +237,19 @@
       "playPause": "Play / Pause",
       "moveToNext": "Move to the next step",
       "toggleFullscreen": "Toggle fullscreen"
+    },
+    "debate": {
+      "debateSession": "Debate Session",
+      "runningDebate": "Debate in progress...",
+      "debateComplete": "Debate complete",
+      "open": "Open",
+      "close": "Close",
+      "activities": "Activities",
+      "rounds": "Rounds",
+      "voting": "Voting",
+      "roundsComingSoon": "Rounds view coming soon",
+      "votingComingSoon": "Voting results coming soon",
+      "reporter": "Report"
     }
   },
   "landing": {

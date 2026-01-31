@@ -55,3 +55,15 @@ class State(MessagesState):
     # Multi-Round Debate Engine mode
     enable_debate_mode: bool = False  # Enable multi-round debate mode
     debate_results: dict[str, Any] | None = None  # Results from debate (all rounds + voting)
+    debate_round: int = 0
+    debate_scores: dict[str, int] = field(default_factory=lambda: {"proponent": 0, "opponent": 0})
+    debate_knockout: bool = False
+    debate_max_rounds: int = 3
+    debate_error_count: int = 0
+    debate_complete: bool = False
+    debate_model_index: int = 0
+    debate_model_order: list[str] = field(default_factory=list)
+    debate_round_started: bool = False
+    external_ai_responses: str = ""
+    debate_pending_model: dict[str, Any] | None = None
+    debate_model_ids: list[str] = field(default_factory=list)

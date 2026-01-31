@@ -52,6 +52,8 @@ import { parseJSON } from "~/core/utils";
 import { cn } from "~/lib/utils";
 
 import { CoderCard } from "./coder-card";
+import { DebateCard } from "./debate-card";
+import { DebateModelIcon } from "./debate-model-icon";
 
 export function MessageListView({
   className,
@@ -142,12 +144,16 @@ function MessageListItem({
   const message = useMessage(messageId);
   const researchIds = useStore((state) => state.researchIds);
   const coderSessionIds = useStore((state) => state.coderSessionIds);
+  const debateSessionIds = useStore((state) => state.debateSessionIds);
   const startOfResearch = useMemo(() => {
     return researchIds.includes(messageId);
   }, [researchIds, messageId]);
   const startOfCoderSession = useMemo(() => {
     return coderSessionIds.includes(messageId);
   }, [coderSessionIds, messageId]);
+  const startOfDebateSession = useMemo(() => {
+    return debateSessionIds.includes(messageId);
+  }, [debateSessionIds, messageId]);
   if (message) {
     if (
       message.role === "user" ||
@@ -155,7 +161,8 @@ function MessageListItem({
       isPlannerAgent(message.agent) ||
       message.agent === "podcast" ||
       startOfResearch ||
-      startOfCoderSession
+      startOfCoderSession ||
+      startOfDebateSession
     ) {
       let content: React.ReactNode;
       if (isPlannerAgent(message.agent)) {
@@ -191,6 +198,15 @@ function MessageListItem({
             <CoderCard
               sessionId={message.id}
               onToggleCoder={onToggleSidebar}
+            />
+          </div>
+        );
+      } else if (startOfDebateSession) {
+        content = (
+          <div className="w-full px-4">
+            <DebateCard
+              sessionId={message.id}
+              onToggleDebate={onToggleSidebar}
             />
           </div>
         );
@@ -469,6 +485,17 @@ function ThoughtBlock({
 }
 
 const GREETINGS = ["Cool", "Sounds great", "Looks good", "Great", "Awesome"];
+const DEBATE_MODEL_OPTIONS = [
+  { id: "gpt-3.5-turbo", label: "ChatGPT" },
+  { id: "gemini-2.5-flash", label: "Gemini" },
+  { id: "deepseek-chat", label: "DeepSeek" },
+  { id: "grok-4-fast-reasoning", label: "Grok-4" },
+];
+const DEFAULT_DEBATE_MODELS = [
+  "gpt-3.5-turbo",
+  "gemini-2.5-flash",
+  "deepseek-chat",
+];
 function formatPlannerName(agent?: string) {
   if (!agent || agent === "planner") {
     return null;
@@ -513,8 +540,20 @@ function PlanCard({
   const hasMainContent = Boolean(
     message.content && message.content.trim() !== "",
   );
+  const isDebatePlan = useMemo(() => {
+    const title = plan.title ?? "";
+    const thought = plan.thought ?? "";
+    const hasRoundSteps = (plan.steps || []).some((step) =>
+      /runda|round/i.test(step?.title ?? ""),
+    );
+    return /debatt|debate/i.test(title) || /debatt|debate/i.test(thought) || hasRoundSteps;
+  }, [plan]);
+  const [selectedModels, setSelectedModels] = useState<string[]>(
+    DEFAULT_DEBATE_MODELS,
+  );
+  const canAcceptDebate = selectedModels.length > 0;
   const startActionLabel = useMemo(() => {
-    if (message.agent === "debate_planner") {
+    if (isDebatePlan) {
       return t("startDebate");
     }
     const plannerName = formatPlannerName(message.agent);
@@ -522,7 +561,7 @@ function PlanCard({
       return `Start ${plannerName}`;
     }
     return t("startResearch");
-  }, [message.agent, t]);
+  }, [isDebatePlan, message.agent, t]);
 
   // Check if thinking: has reasoning content but no main content yet
   const isThinking = Boolean(reasoningContent && !hasMainContent);
@@ -531,14 +570,17 @@ function PlanCard({
   const shouldShowPlan = hasMainContent || message.isStreaming;
   const handleAccept = useCallback(async () => {
     if (onSendMessage) {
+      const feedback = isDebatePlan
+        ? `accepted|models=${selectedModels.join(",")}`
+        : "accepted";
       onSendMessage(
         `${GREETINGS[Math.floor(Math.random() * GREETINGS.length)]}! ${Math.random() > 0.5 ? "Let's get started." : "Let's start."}`,
         {
-          interruptFeedback: "accepted",
+          interruptFeedback: feedback,
         },
       );
     }
-  }, [onSendMessage]);
+  }, [isDebatePlan, onSendMessage, selectedModels]);
   return (
     <div className={cn("w-full", className)}>
       {reasoningContent && (
@@ -579,6 +621,47 @@ function PlanCard({
                   <Markdown className="opacity-80" animated={false}>
                     {plan.thought}
                   </Markdown>
+                  {isDebatePlan && (
+                    <div className="mt-4 rounded-md border border-border/60 bg-muted/40 p-3">
+                      <div className="text-sm font-semibold">
+                        Välj modeller som ska delta
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {DEBATE_MODEL_OPTIONS.map((model) => {
+                          const isSelected = selectedModels.includes(model.id);
+                          return (
+                            <Button
+                              key={model.id}
+                              type="button"
+                              size="sm"
+                              variant={isSelected ? "default" : "outline"}
+                              className="gap-2"
+                              onClick={() => {
+                                setSelectedModels((prev) => {
+                                  if (prev.includes(model.id)) {
+                                    return prev.filter((id) => id !== model.id);
+                                  }
+                                  return [...prev, model.id];
+                                });
+                              }}
+                            >
+                              <DebateModelIcon modelKey={model.id} />
+                              {model.label}
+                            </Button>
+                          );
+                        })}
+                        <div className="flex items-center gap-2 rounded-md border border-border/60 px-2 py-1 text-xs text-muted-foreground">
+                          <DebateModelIcon modelKey="oneseek-local" />
+                          OneSeek (alltid)
+                        </div>
+                      </div>
+                      {!canAcceptDebate && (
+                        <div className="mt-2 text-xs text-destructive">
+                          Välj minst en extern modell för att starta debatten.
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {plan.steps && (
                     <ul className="my-2 flex list-decimal flex-col gap-4 border-l-[2px] pl-8">
                       {plan.steps.map((step, i) => (
@@ -632,7 +715,12 @@ function PlanCard({
                       variant={
                         option.value === "accepted" ? "default" : "outline"
                       }
-                      disabled={!waitForFeedback}
+                      disabled={
+                        !waitForFeedback ||
+                        (option.value === "accepted" &&
+                          isDebatePlan &&
+                          !canAcceptDebate)
+                      }
                       onClick={() => {
                         if (option.value === "accepted") {
                           void handleAccept();

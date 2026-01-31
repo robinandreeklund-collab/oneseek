@@ -35,6 +35,7 @@ from backend.deer_flow.config.report_style import ReportStyle
 from backend.deer_flow.config.tools import SELECTED_RAG_PROVIDER
 from backend.deer_flow.citations import merge_citations
 from backend.deer_flow.graph.builder import build_graph_with_memory
+from backend.debate_flow import get_debate_flow
 from backend.deer_flow.graph.checkpoint import chat_stream_message
 from backend.deer_flow.graph.utils import (
     build_clarified_topic_from_history,
@@ -443,6 +444,11 @@ def _get_agent_name(agent, message_metadata):
         agent_name = agent[0].split(":")[0] if ":" in agent[0] else agent[0]
     else:
         agent_name = message_metadata.get("langgraph_node", "unknown")
+    
+    # DEBUG: Log agent names for debate-related nodes
+    if "debate" in agent_name.lower():
+        logger.info(f"🔍 DEBUG _get_agent_name: agent={agent}, agent_name={agent_name}")
+    
     # Keep debate planner output compatible with planner UI rendering.
     if agent_name == "debate_planner":
         return "planner"
@@ -456,6 +462,9 @@ def _create_event_stream_message(
     content = message_chunk.content
     if not isinstance(content, str):
         content = json.dumps(content, ensure_ascii=False)
+    max_message_chars = int(os.getenv("STREAM_MESSAGE_MAX_CHARS", "12000"))
+    if isinstance(content, str) and len(content) > max_message_chars:
+        content = content[:max_message_chars] + "... [truncated]"
 
     event_stream_message = {
         "thread_id": thread_id,
@@ -525,7 +534,7 @@ def _process_initial_messages(message, thread_id):
     )
 
 
-async def _process_message_chunk(message_chunk, message_metadata, thread_id, agent):
+async def _process_message_chunk(message_chunk, message_metadata, thread_id, agent, tool_tracker=None):
     """Process a single message chunk and yield appropriate events."""
 
     agent_name = _get_agent_name(agent, message_metadata)
@@ -545,10 +554,20 @@ async def _process_message_chunk(message_chunk, message_metadata, thread_id, age
         tool_call_id = message_chunk.tool_call_id
         event_stream_message["tool_call_id"] = tool_call_id
         
+        max_tool_chars = int(os.getenv("STREAM_TOOL_OUTPUT_MAX_CHARS", "6000"))
+        content = event_stream_message.get("content", "")
+        if isinstance(content, str) and len(content) > max_tool_chars:
+            event_stream_message["content"] = content[:max_tool_chars] + "... [truncated]"
+            event_stream_message["truncated"] = True
+        
         # Validate tool_call_id for debugging
         if tool_call_id:
             safe_tool_id = sanitize_log_input(tool_call_id, max_length=100)
             logger.debug(f"[{safe_thread_id}] ToolMessage with tool_call_id: {safe_tool_id}")
+            
+            # Track tool result for sidebar
+            if tool_tracker:
+                tool_tracker.add_tool_result(tool_call_id, message_chunk.content)
         else:
             logger.warning(f"[{safe_thread_id}] ToolMessage received without tool_call_id")
         
@@ -563,6 +582,16 @@ async def _process_message_chunk(message_chunk, message_metadata, thread_id, age
         if message_chunk.tool_calls:
             event_stream_message["tool_calls"] = message_chunk.tool_calls
             event_stream_message["tool_call_chunks"] = []
+            
+            # Track tool calls for sidebar
+            if tool_tracker:
+                for tc in message_chunk.tool_calls:
+                    tool_tracker.add_tool_call(
+                        tc.get("id", ""),
+                        tc.get("name", "unknown"),
+                        tc.get("args", {})
+                    )
+            
             logger.debug(
                 f"[{safe_thread_id}] AIMessage has tool_calls, yielding tool_calls event"
             )
@@ -580,6 +609,15 @@ async def _process_message_chunk(message_chunk, message_metadata, thread_id, age
             safe_tool_names = [sanitize_tool_name(tc.get('name', 'unknown')) for tc in message_chunk.tool_calls]
             logger.debug(f"[{safe_thread_id}] AIMessageChunk has complete tool_calls: {safe_tool_names}")
             event_stream_message["tool_calls"] = message_chunk.tool_calls
+            
+            # Track tool calls for sidebar
+            if tool_tracker:
+                for tc in message_chunk.tool_calls:
+                    tool_tracker.add_tool_call(
+                        tc.get("id", ""),
+                        tc.get("name", "unknown"),
+                        tc.get("args", {})
+                    )
             
             # Process tool_call_chunks with proper index-based grouping
             processed_chunks = _process_tool_call_chunks(
@@ -687,6 +725,62 @@ def extract_citations_from_event(event: Any, safe_thread_id: str = "unknown") ->
     return citations
 
 
+class ToolActionTracker:
+    """Tracks tool calls and results to emit tool_actions in frontend format."""
+    
+    def __init__(self, thread_id: str):
+        self.thread_id = thread_id
+        self.tool_calls = {}  # tool_call_id -> {tool_name, tool_input, timestamp}
+        self.tool_actions = []  # List of completed tool actions
+        self.pending_calls = set()  # Set of tool_call_ids waiting for results
+        self.max_input_chars = int(os.getenv("TOOL_ACTION_INPUT_MAX_CHARS", "2000"))
+        self.max_output_chars = int(os.getenv("TOOL_ACTION_OUTPUT_MAX_CHARS", "4000"))
+    
+    def _truncate(self, text: str, max_chars: int) -> str:
+        if text is None:
+            return ""
+        if len(text) > max_chars:
+            return text[:max_chars] + "... [truncated]"
+        return text
+        
+    def add_tool_call(self, tool_call_id: str, tool_name: str, tool_input: Any):
+        """Record a new tool call."""
+        if tool_call_id not in self.tool_calls:
+            tool_input_text = json.dumps(tool_input) if isinstance(tool_input, dict) else str(tool_input)
+            tool_input_text = self._truncate(tool_input_text, self.max_input_chars)
+            self.tool_calls[tool_call_id] = {
+                "tool_call_id": tool_call_id,
+                "tool_name": tool_name,
+                "tool_input": tool_input_text,
+                "tool_output": None,
+                "status": "running"
+            }
+            self.pending_calls.add(tool_call_id)
+            logger.debug(f"[{self.thread_id}] ToolActionTracker: Added tool call {tool_call_id} ({tool_name})")
+    
+    def add_tool_result(self, tool_call_id: str, tool_output: Any):
+        """Record the result for a tool call."""
+        if tool_call_id in self.tool_calls:
+            tool_output_text = str(tool_output) if tool_output else ""
+            tool_output_text = self._truncate(tool_output_text, self.max_output_chars)
+            self.tool_calls[tool_call_id]["tool_output"] = tool_output_text
+            self.tool_calls[tool_call_id]["status"] = "complete"
+            if tool_call_id in self.pending_calls:
+                self.pending_calls.remove(tool_call_id)
+            
+            # Add to completed actions
+            self.tool_actions.append(self.tool_calls[tool_call_id])
+            logger.debug(f"[{self.thread_id}] ToolActionTracker: Completed tool call {tool_call_id}")
+            return True
+        else:
+            logger.warning(f"[{self.thread_id}] ToolActionTracker: Received result for unknown tool_call_id: {tool_call_id}")
+            return False
+    
+    def get_tool_actions(self) -> List[dict]:
+        """Get all tool actions in frontend format."""
+        return self.tool_actions.copy()
+
+
 async def _stream_graph_events(
     graph_instance, workflow_input, workflow_config, thread_id
 ):
@@ -696,6 +790,9 @@ async def _stream_graph_events(
     
     # Track citations collected during research
     collected_citations = []
+    
+    # Track tool actions for real-time sidebar
+    tool_tracker = ToolActionTracker(safe_thread_id)
     
     try:
         event_count = 0
@@ -761,10 +858,23 @@ async def _stream_graph_events(
                 f"step={safe_step}"
             )
 
+            prev_action_count = 0
             async for event in _process_message_chunk(
-                message_chunk, message_metadata, thread_id, agent
+                message_chunk, message_metadata, thread_id, agent, tool_tracker
             ):
                 yield event
+                
+                # After each event, check if we have new tool actions to emit
+                current_actions = tool_tracker.get_tool_actions()
+                if len(current_actions) > prev_action_count:
+                    new_actions = current_actions[prev_action_count:]
+                    # Emit tool_actions event for frontend (only new actions)
+                    logger.debug(f"[{safe_thread_id}] Emitting {len(new_actions)} tool_actions to frontend")
+                    yield _make_event("data", {
+                        "tool_actions": new_actions,
+                        "live_update": True
+                    })
+                    prev_action_count = len(current_actions)
         
         # After streaming completes, try to get citations
         # First check if we collected any during streaming
@@ -799,6 +909,15 @@ async def _stream_graph_events(
             })
         else:
             logger.debug(f"[{safe_thread_id}] No citations to send")
+        
+        # Send final tool_actions summary
+        final_actions = tool_tracker.get_tool_actions()
+        if final_actions:
+            logger.info(f"[{safe_thread_id}] Sending final {len(final_actions)} tool_actions to client")
+            yield _make_event("data", {
+                "tool_actions": final_actions,
+                "live_update": False
+            })
         
         logger.debug(f"[{safe_thread_id}] Graph event stream completed. Total events: {event_count}")
     except asyncio.CancelledError:
@@ -1034,7 +1153,24 @@ def _make_event(event_type: str, data: dict[str, any]):
         data.pop("content")
     # Ensure JSON serialization with proper encoding
     try:
+        max_event_bytes = int(os.getenv("STREAM_EVENT_MAX_BYTES", "900000"))
         json_data = json.dumps(data, ensure_ascii=False)
+        if len(json_data.encode("utf-8")) > max_event_bytes:
+            trimmed = dict(data)
+            if isinstance(trimmed.get("content"), str):
+                trimmed["content"] = trimmed["content"][:2000] + "... [truncated]"
+            if "tool_calls" in trimmed:
+                trimmed["tool_calls"] = trimmed.get("tool_calls", [])[:3]
+            if "tool_call_chunks" in trimmed:
+                trimmed["tool_call_chunks"] = []
+            if "tool_actions" in trimmed:
+                trimmed["tool_actions"] = trimmed.get("tool_actions", [])[-3:]
+            json_data = json.dumps(trimmed, ensure_ascii=False)
+            if len(json_data.encode("utf-8")) > max_event_bytes:
+                json_data = json.dumps(
+                    {"thread_id": data.get("thread_id", ""), "error": "event_too_large"},
+                    ensure_ascii=False,
+                )
 
         finish_reason = data.get("finish_reason", "")
         chat_stream_message(
@@ -1049,6 +1185,22 @@ def _make_event(event_type: str, data: dict[str, any]):
         # Return a safe error event
         error_data = json.dumps({"error": "Serialization failed"}, ensure_ascii=False)
         return f"event: error\ndata: {error_data}\n\n"
+
+
+@app.get("/api/debate/tool-context")
+async def get_debate_tool_context(
+    thread_id: str,
+    tool_call_id: str,
+    max_chars: int = 50000,
+):
+    """Return full model prompt context on demand (not streamed)."""
+    debate_flow = get_debate_flow(thread_id=thread_id)
+    context = debate_flow.get_tool_context(tool_call_id)
+    if not context:
+        raise HTTPException(status_code=404, detail="Context not found")
+    if max_chars and len(context) > max_chars:
+        context = context[:max_chars] + "... [truncated]"
+    return {"tool_call_id": tool_call_id, "context": context}
 
 
 @app.post("/api/tts")

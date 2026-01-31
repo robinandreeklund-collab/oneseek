@@ -84,6 +84,24 @@ export default function ChatList({ messages, isLoading, messageSources, messageT
     console.log("ChatList messageToolActions:", messageToolActions);
   }, [messageSources, messageToolActions]);
 
+  // Auto-open tool detail sidebar when tool actions first appear for the latest message
+  useEffect(() => {
+    if (!messageToolActions || !messages || messages.length === 0) return;
+    
+    // Get the latest assistant message
+    const lastAssistantMessage = messages.filter(m => m.role === 'assistant').slice(-1)[0];
+    if (!lastAssistantMessage) return;
+    
+    // Check if this message has tool actions
+    const toolActions = messageToolActions[lastAssistantMessage.id];
+    if (toolActions && toolActions.length > 0 && !toolDetailSidebarOpen) {
+      // Auto-select the first tool action and open sidebar
+      console.log("Auto-opening tool detail sidebar for new tool actions");
+      setSelectedToolAction(toolActions[0]);
+      setToolDetailSidebarOpen(true);
+    }
+  }, [messageToolActions, messages, toolDetailSidebarOpen]);
+
   // Auto-minimize sources sidebar when tool detail sidebar opens
   // This ensures when coder sidebar opens, research sidebar automatically closes
   useEffect(() => {

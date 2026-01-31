@@ -1,9 +1,11 @@
 # Copyright (c) 2025 Bytedance Ltd. and/or its affiliates
 # SPDX-License-Identifier: MIT
 
+import asyncio
 import json
 import logging
 import os
+import re
 from functools import partial
 from typing import Annotated, Any, Literal
 
@@ -242,6 +244,9 @@ def preserve_state_meta_fields(state: State) -> dict:
     These fields are critical for workflow continuity and should be explicitly
     included in all Command.update dicts to prevent them from reverting to defaults.
     
+    Debate state fields ARE included to ensure they persist across node transitions.
+    Orchestrator can explicitly override these values when needed.
+    
     Args:
         state: Current state object
         
@@ -257,7 +262,86 @@ def preserve_state_meta_fields(state: State) -> dict:
         "max_clarification_rounds": state.get("max_clarification_rounds", 3),
         "clarification_rounds": state.get("clarification_rounds", 0),
         "resources": state.get("resources", []),
+        # Debate state fields - preserve across transitions so orchestrator can read them
+        "debate_round": state.get("debate_round", 0),
+        "debate_scores": state.get("debate_scores", {"proponent": 0, "opponent": 0}),
+        "debate_knockout": state.get("debate_knockout", False),
+        "debate_max_rounds": state.get("debate_max_rounds", 3),
+        "debate_error_count": state.get("debate_error_count", 0),
+        "debate_complete": state.get("debate_complete", False),
+        "debate_model_index": state.get("debate_model_index", 0),
+        "debate_model_order": state.get("debate_model_order", []),
+        "debate_round_started": state.get("debate_round_started", False),
+        "external_ai_responses": state.get("external_ai_responses", ""),
+        "debate_pending_model": state.get("debate_pending_model"),
+        "debate_model_ids": state.get("debate_model_ids", []),
     }
+
+
+def get_thread_id_from_config(config: RunnableConfig | None) -> str:
+    """Extract thread_id from runnable config."""
+    if not config:
+        return "default"
+    if isinstance(config, dict) and config.get("thread_id"):
+        return str(config["thread_id"])
+    configurable = config.get("configurable") if isinstance(config, dict) else None
+    if isinstance(configurable, dict) and configurable.get("thread_id"):
+        return str(configurable["thread_id"])
+    return "default"
+
+
+def parse_debate_model_selection(feedback: str) -> list[str]:
+    """Extract selected debate model IDs from interrupt feedback."""
+    if not feedback:
+        return []
+    try:
+        match = re.search(r"models=([^\]]+)", feedback, re.IGNORECASE)
+        if not match:
+            return []
+        raw = match.group(1)
+        return [model.strip() for model in raw.split(",") if model.strip()]
+    except Exception:
+        return []
+
+
+def build_rounds_preview(rounds: list[dict], max_chars: int = 400) -> list[dict]:
+    """Trim debate round data for UI display."""
+    preview: list[dict] = []
+    for round_data in rounds:
+        responses_preview = []
+        for resp in round_data.get("responses", []):
+            if resp.get("error"):
+                continue
+            response_text = resp.get("response", "")
+            if isinstance(response_text, str) and len(response_text) > max_chars:
+                response_text = response_text[:max_chars] + "... [trunkerat]"
+            responses_preview.append({
+                "model": resp.get("model"),
+                "display_name": resp.get("display_name"),
+                "response": response_text,
+            })
+        preview.append({
+            "round": round_data.get("round"),
+            "responses": responses_preview,
+        })
+    return preview
+
+
+def extract_claim_sentences(text: str, max_claims: int = 8) -> list[str]:
+    """Extract claim-like sentences for controlled fact checking."""
+    if not text:
+        return []
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    claims = []
+    for sentence in sentences:
+        cleaned = sentence.strip()
+        if len(cleaned) < 20:
+            continue
+        if any(token in cleaned.lower() for token in ["%", "år", "year", "miljoner", "million", "billion", "studie", "rapport", "enligt", "according", "fakta", "data"]) or re.search(r"\d", cleaned):
+            claims.append(cleaned)
+        if len(claims) >= max_claims:
+            break
+    return claims
 
 
 def validate_and_fix_plan(plan: dict, enforce_web_search: bool = False, enable_web_search: bool = True) -> dict:
@@ -828,7 +912,7 @@ def extract_plan_content(plan_data: str | dict | Any) -> str:
 
 def human_feedback_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["planner", "research_team", "reporter", "__end__"]]:
+) -> Command[Literal["planner", "research_team", "reporter", "debate_orchestrator", "__end__"]]:
     coder_flag = state.get('coder_just_completed', False)
     logger.info(f"[human_feedback_node] ENTERED - coder_just_completed={coder_flag}")
     logger.info(f"[human_feedback_node] State keys: {list(state.keys())}")
@@ -905,6 +989,7 @@ def human_feedback_node(
     current_plan = state.get("current_plan", "")
     # check if the plan is auto accepted
     auto_accepted_plan = state.get("auto_accepted_plan", False)
+    selected_models: list[str] = state.get("debate_model_ids", [])
     if not auto_accepted_plan:
         feedback = interrupt("Please Review the Plan.")
 
@@ -917,7 +1002,9 @@ def human_feedback_node(
             )
 
         # Normalize feedback string
-        feedback_normalized = str(feedback).strip().upper()
+        feedback_raw = str(feedback).strip()
+        feedback_normalized = feedback_raw.upper()
+        selected_models = parse_debate_model_selection(feedback_raw)
 
         # if the feedback is not accepted, return the planner node
         if feedback_normalized.startswith("[EDIT_PLAN]"):
@@ -931,7 +1018,7 @@ def human_feedback_node(
                 },
                 goto="planner",
             )
-        elif feedback_normalized.startswith("[ACCEPTED]"):
+        elif feedback_normalized.startswith("[ACCEPTED") or feedback_normalized.startswith("ACCEPTED"):
             logger.info("Plan is accepted by user.")
         else:
             logger.warning(f"Unsupported feedback format: {feedback}. Please use '[ACCEPTED]' to accept or '[EDIT_PLAN]' to edit.")
@@ -942,7 +1029,21 @@ def human_feedback_node(
 
     # if the plan is accepted, run the following node
     plan_iterations = state["plan_iterations"] if state.get("plan_iterations", 0) else 0
-    goto = "research_team"
+    
+    # Determine routing based on mode
+    if state.get("debate_complete", False):
+        # Debate is complete - route to END (debate has separate chain, never use research_team)
+        goto = END
+        logger.info("[human_feedback_node] Debate complete, routing to END (debate is separate chain)")
+    elif state.get("enable_debate_mode", False):
+        # Debate mode - route to debate_orchestrator after plan approval
+        goto = "debate_orchestrator"
+        logger.info("[human_feedback_node] Plan approved in debate mode, routing to debate_orchestrator")
+    else:
+        # Normal mode - route to research_team
+        goto = "research_team"
+        logger.info("[human_feedback_node] Plan approved, routing to research_team")
+    
     try:
         # Safely extract plan content from different types (string, AIMessage, dict)
         original_plan = current_plan
@@ -960,6 +1061,19 @@ def human_feedback_node(
         # Validate and fix plan to ensure web search requirements are met
         configurable = Configuration.from_runnable_config(config)
         new_plan = validate_and_fix_plan(new_plan, configurable.enforce_web_search, configurable.enable_web_search)
+        
+        if selected_models:
+            from backend.debate_flow import DEBATE_MODELS
+            model_names = [
+                DEBATE_MODELS.get(model_id, {}).get("display_name", model_id)
+                for model_id in selected_models
+            ]
+            locale = state.get("locale", "en-US")
+            if locale.startswith("sv"):
+                selection_note = f"Valda modeller: {', '.join(model_names)}"
+            else:
+                selection_note = f"Selected models: {', '.join(model_names)}"
+            new_plan["thought"] = f"{new_plan.get('thought', '')} ({selection_note})"
     except (json.JSONDecodeError, AttributeError) as e:
         logger.warning(f"Failed to parse plan: {str(e)}. Plan data type: {type(current_plan).__name__}")
         if isinstance(current_plan, dict) and "content" in original_plan:
@@ -985,6 +1099,16 @@ def human_feedback_node(
     # Only override locale if new_plan provides a valid value, otherwise use preserved locale
     if new_plan.get("locale"):
         update_dict["locale"] = new_plan["locale"]
+    
+    # Initialize debate state if routing to debate_orchestrator
+    if goto == "debate_orchestrator":
+        update_dict.update({
+            "debate_round": 0,
+            "debate_max_rounds": 3,
+            "debate_scores": {"proponent": 0, "opponent": 0},
+            "debate_knockout": False,
+            "debate_model_ids": selected_models or state.get("debate_model_ids", []),
+        })
     
     return Command(
         update=update_dict,
@@ -1381,6 +1505,65 @@ def coordinator_node(
     )
 
 
+def _format_debate_results_for_report(debate_results: dict) -> str:
+    """Create a compact debate context for the reporter model."""
+    def truncate(text: str, max_chars: int = 900) -> str:
+        if not text:
+            return ""
+        text = text.strip()
+        if len(text) > max_chars:
+            return text[:max_chars] + "... [trunkerat]"
+        return text
+
+    user_query = debate_results.get("user_query", "")
+    rounds = debate_results.get("rounds", [])
+    vote_results = debate_results.get("vote_results")
+    internal_fact_checks = debate_results.get("internal_fact_checks", [])
+    internal_summaries = debate_results.get("internal_summaries", [])
+
+    parts = [
+        "Denna debattprocess är intern för OneSeek och ska inte delas externt.",
+        f"Fråga: {user_query}",
+    ]
+
+    for round_data in rounds:
+        round_number = round_data.get("round")
+        parts.append(f"\n## Runda {round_number}")
+        for resp in round_data.get("responses", []):
+            display = resp.get("display_name") or resp.get("model", "Modell")
+            response_text = truncate(resp.get("response", ""))
+            parts.append(f"- **{display}**: {response_text}")
+
+    if internal_fact_checks:
+        parts.append("\n## Interna faktakontroller (kumulativa)")
+        for entry in internal_fact_checks:
+            round_number = entry.get("round")
+            parts.append(f"- Runda {round_number}: {truncate(entry.get('content', ''), 700)}")
+
+    if internal_summaries:
+        parts.append("\n## Interna synteser (kumulativa)")
+        for entry in internal_summaries:
+            round_number = entry.get("round")
+            parts.append(f"- Runda {round_number}: {truncate(entry.get('content', ''), 700)}")
+
+    if vote_results:
+        parts.append("\n## Röstningsresultat (alla modeller, självröstning ej tillåten)")
+        parts.append(f"Vinnare: {vote_results.get('winner')}")
+        parts.append(f"Röster: {vote_results.get('votes')}")
+        details = vote_results.get("vote_details", [])
+        if details:
+            parts.append("Detaljer:")
+            for detail in details:
+                voter = detail.get("voter", "okänd")
+                vote = detail.get("vote", "okänd")
+                parts.append(f"- {voter} → {vote}")
+                reasons = detail.get("reasons") or []
+                for reason in reasons[:3]:
+                    parts.append(f"  - {reason}")
+
+    return "\n".join(parts)
+
+
 def reporter_node(state: State, config: RunnableConfig):
     """Reporter node that write a final report."""
     logger.info("Reporter write final report")
@@ -1390,12 +1573,22 @@ def reporter_node(state: State, config: RunnableConfig):
     debate_results = state.get("debate_results")
     if debate_results:
         logger.info("Handling debate results in reporter node")
-        final_report = debate_results.get("final_report", "Debate completed but no report generated.")
+        final_report = debate_results.get("final_report")
+        if not final_report or len(final_report) < 100:
+            locale = state.get("locale", "sv-SE")
+            debate_context = _format_debate_results_for_report(debate_results)
+            input_ = {
+                "messages": [HumanMessage(content=debate_context)],
+                "locale": locale,
+            }
+            invoke_messages = apply_prompt_template("debate_reporter", input_, configurable, locale)
+            response = get_llm_by_type(AGENT_LLM_MAP["reporter"]).invoke(invoke_messages)
+            final_report = strip_think_tags(response.content)
         
-        # If the report seems short or missing, we might want to wrap it
+        # Ensure a title is present
         if len(final_report) < 100:
-            final_report = f"# Debate Results\n\n{final_report}"
-            
+            final_report = f"# Debattresultat\n\n{final_report}"
+        
         return {
             "final_report": final_report,
             "citations": state.get("citations", []),
@@ -2237,6 +2430,15 @@ async def ai_comparison_node(
     Executes AI comparison agent with tools, then goes directly to reporter.
     Does NOT use research_team routing to avoid loops.
     """
+    # CRITICAL: Do NOT run ai_comparison when debate_mode is enabled
+    # Debate uses completely separate chain with debate_tools
+    if state.get("enable_debate_mode", False):
+        logger.warning("AI Comparison node called with debate_mode=True - this should NOT happen! Skipping ai_comparison.")
+        return Command(
+            update=preserve_state_meta_fields(state),
+            goto="reporter"
+        )
+    
     logger.info("AI Comparison node starting - Debate OS mode")
     
     configurable = Configuration.from_runnable_config(config)
@@ -2485,3 +2687,839 @@ Provide a comprehensive debate report with all rounds, voting results, and concl
             os.environ["AGENT_RECURSION_LIMIT"] = original_recursion_limit
         elif "AGENT_RECURSION_LIMIT" in os.environ:
             del os.environ["AGENT_RECURSION_LIMIT"]
+
+# ============================================================
+# NEW SEPARATE DEBATE CHAIN NODES
+# ============================================================
+
+async def debate_orchestrator_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["external_ai_caller", "reporter"]]:
+    """
+    Debate orchestrator node - manages rounds, scores, and exit criteria.
+    
+    This is the conductor that:
+    1. Tracks current round number
+    2. Routes to external_ai_caller to get real AI model responses
+    3. Collects scores from moderator after each round
+    4. Determines when to exit (rounds complete, knockout, significant score lead)
+    5. Routes to reporter when debate is complete
+    
+    NEW FLOW: orchestrator → external_ai_caller → fact_checker → synthesizer → moderator → orchestrator
+    """
+    logger.info("Debate orchestrator starting")
+    configurable = Configuration.from_runnable_config(config)
+    
+    # Get debate state
+    current_round = state.get("debate_round", 0)
+    max_rounds = state.get("debate_max_rounds", 3)
+    scores = state.get("debate_scores", {"proponent": 0, "opponent": 0})
+    knockout = state.get("debate_knockout", False)
+    logger.info(f"Orchestrator: Read debate_round={current_round} from state (before increment)")
+    
+    # 🚨 CIRCUIT BREAKER: Track consecutive errors to prevent GPU burn
+    error_count = state.get("debate_error_count", 0)
+    MAX_CONSECUTIVE_ERRORS = 3
+    
+    # Check recent messages (not just last one!) for error indicators
+    messages = state.get("messages", [])
+    if messages and len(messages) > 0:
+        # Check last 10 messages for errors from any debate node
+        recent_messages = messages[-10:] if len(messages) >= 10 else messages
+        # More precise error indicators - avoid false positives
+        error_indicators = ["Error querying", "ERROR:", "error:", "AttributeError", "Exception:", "Traceback"]
+        
+        # Check if there are errors in recent messages
+        error_in_recent = False
+        error_node = None
+        for msg in reversed(recent_messages):
+            if hasattr(msg, 'name') and msg.name in ["external_ai_caller", "moderator", "fact_checker", "synthesizer"]:
+                content = msg.content if isinstance(msg.content, str) else str(msg.content)
+                # Only detect actual errors, not JSON fields like '"error": false'
+                if any(indicator in content for indicator in error_indicators):
+                    error_in_recent = True
+                    error_node = msg.name
+                    break
+        
+        if error_in_recent:
+            error_count += 1
+            logger.error(f"🚨 CIRCUIT BREAKER: Error detected in {error_node} (count: {error_count}/{MAX_CONSECUTIVE_ERRORS})")
+            
+            if error_count >= MAX_CONSECUTIVE_ERRORS:
+                logger.error(f"🚨 CIRCUIT BREAKER TRIGGERED: {error_count} consecutive errors - ABORTING DEBATE TO PREVENT GPU BURN")
+                error_msg = AIMessage(
+                    content=json.dumps({
+                        "error": "Circuit breaker triggered",
+                        "reason": f"Debatten avbröts automatiskt efter {error_count} sammanhängande fel",
+                        "final_round": current_round,
+                        "exit_reason": "🚨 SÄKERHETSBRYTARE AKTIVERAD - För många fel, avbryter för att förhindra GPU-bränning",
+                        "node_with_error": error_node
+                    }, ensure_ascii=False, indent=2),
+                    name="debate_orchestrator"
+                )
+                return Command(
+                    update={
+                        **preserve_state_meta_fields(state),
+                        "messages": [error_msg],
+                        "debate_complete": True,
+                        "debate_round": current_round,
+                        "debate_scores": scores,
+                        "debate_knockout": knockout,
+                        "debate_max_rounds": max_rounds,
+                        "debate_error_count": error_count,
+                    },
+                    goto="reporter"
+                )
+        else:
+            # No errors in recent messages - reset counter
+            if error_count > 0:
+                logger.info(f"✅ Circuit breaker reset - no errors in recent messages (was at {error_count})")
+                error_count = 0
+    
+    # Increment round
+    current_round += 1
+    logger.info(f"Orchestrator: Incremented to debate_round={current_round}")
+    logger.info(f"Starting debate round {current_round}/{max_rounds}")
+    
+    # Check exit criteria before starting new round
+    if current_round > max_rounds:
+        logger.info(f"Max rounds reached: {max_rounds}")
+        exit_reason = f"{max_rounds} rundor uppnått"
+        thread_id = get_thread_id_from_config(config)
+        user_query = state.get("clarified_research_topic") or state.get("research_topic", "")
+        vote_results = None
+        debate_rounds = []
+        internal_fact_checks = []
+        internal_summaries = []
+        try:
+            from backend.debate_flow import get_debate_flow
+            debate_flow = get_debate_flow(thread_id=thread_id)
+            round_3_responses = list(debate_flow.chain_so_far) if debate_flow.chain_so_far else []
+            if round_3_responses:
+                vote_results = await debate_flow.collect_votes(user_query, round_3_responses)
+            debate_rounds = list(debate_flow.debate_history)
+            if round_3_responses:
+                debate_rounds.append({
+                    "round": debate_flow.current_round,
+                    "responses": round_3_responses,
+                })
+            internal_fact_checks = list(getattr(debate_flow, "internal_fact_checks", []))
+            internal_summaries = list(getattr(debate_flow, "internal_summaries", []))
+        except Exception as e:
+            logger.warning(f"Failed to collect debate votes or history: {e}")
+        rounds_preview = build_rounds_preview(debate_rounds)
+        summary_msg = AIMessage(
+            content=json.dumps({
+                "final_round": current_round - 1,
+                "final_scores": scores,
+                "exit_reason": exit_reason,
+                "external_ai_models": ["Grok", "Gemini", "ChatGPT", "DeepSeek"],
+                "vote_results": vote_results,
+                "rounds": rounds_preview,
+            }, ensure_ascii=False, indent=2),
+            name="debate_orchestrator"
+        )
+        
+        return Command(
+            update={
+                **preserve_state_meta_fields(state),
+                "messages": [summary_msg],
+                "debate_complete": True,
+                "debate_round": current_round,
+                "debate_scores": scores,
+                "debate_knockout": knockout,
+                "debate_max_rounds": max_rounds,
+                "debate_error_count": 0,  # Reset on successful completion
+                "debate_results": {
+                    "status": "completed",
+                    "final_round": current_round - 1,
+                    "rounds": debate_rounds,
+                    "vote_results": vote_results,
+                    "internal_fact_checks": internal_fact_checks,
+                    "internal_summaries": internal_summaries,
+                    "user_query": user_query,
+                },
+            },
+            goto="reporter"
+        )
+    elif knockout:
+        logger.info("Knockout detected in previous round")
+        exit_reason = "Knockout-argument identifierat"
+        thread_id = get_thread_id_from_config(config)
+        user_query = state.get("clarified_research_topic") or state.get("research_topic", "")
+        debate_rounds = []
+        internal_fact_checks = []
+        internal_summaries = []
+        try:
+            from backend.debate_flow import get_debate_flow
+            debate_flow = get_debate_flow(thread_id=thread_id)
+            current_responses = list(debate_flow.chain_so_far) if debate_flow.chain_so_far else []
+            debate_rounds = list(debate_flow.debate_history)
+            if current_responses:
+                debate_rounds.append({
+                    "round": debate_flow.current_round,
+                    "responses": current_responses,
+                })
+            internal_fact_checks = list(getattr(debate_flow, "internal_fact_checks", []))
+            internal_summaries = list(getattr(debate_flow, "internal_summaries", []))
+        except Exception as e:
+            logger.warning(f"Failed to collect debate history for knockout: {e}")
+        rounds_preview = build_rounds_preview(debate_rounds)
+        summary_msg = AIMessage(
+            content=json.dumps({
+                "final_round": current_round - 1,
+                "final_scores": scores,
+                "exit_reason": exit_reason,
+                "external_ai_models": ["Grok", "Gemini", "ChatGPT", "DeepSeek"],
+                "rounds": rounds_preview,
+            }, ensure_ascii=False, indent=2),
+            name="debate_orchestrator"
+        )
+        
+        return Command(
+            update={
+                **preserve_state_meta_fields(state),
+                "messages": [summary_msg],
+                "debate_complete": True,
+                "debate_round": current_round,
+                "debate_scores": scores,
+                "debate_knockout": knockout,
+                "debate_max_rounds": max_rounds,
+                "debate_error_count": 0,  # Reset on successful completion
+                "debate_results": {
+                    "status": "completed",
+                    "final_round": current_round - 1,
+                    "rounds": debate_rounds,
+                    "vote_results": None,
+                    "internal_fact_checks": internal_fact_checks,
+                    "internal_summaries": internal_summaries,
+                    "user_query": user_query,
+                },
+            },
+            goto="reporter"
+        )
+    
+    # Start new round - route to external_ai_caller to get real AI responses
+    logger.info(f"Round {current_round}: Routing to external_ai_caller for real AI model responses")
+    
+    # Build state update explicitly to debug
+    preserved_fields = preserve_state_meta_fields(state)
+    logger.info(f"Orchestrator: preserved_fields has debate_round={preserved_fields.get('debate_round')}")
+    logger.info(f"Orchestrator: Setting debate_round={current_round} in state update (should override preserved value)")
+    
+    state_update = {
+        **preserved_fields,
+        "debate_round": current_round,
+        "debate_scores": scores,
+        "debate_knockout": knockout,
+        "debate_max_rounds": max_rounds,
+        "debate_complete": False,
+        "debate_error_count": error_count,
+        "debate_round_started": False,
+        "debate_model_index": 0,
+        "debate_model_order": [],
+        "external_ai_responses": "",
+        "debate_pending_model": None,
+    }
+    logger.info(f"Orchestrator: Final state_update has debate_round={state_update.get('debate_round')}")
+    
+    return Command(
+        update=state_update,
+        goto="external_ai_caller"  # Calls Grok, Gemini, ChatGPT, DeepSeek
+    )
+
+
+async def debate_team_node(state: State, config: RunnableConfig):
+    """
+    Debate team sub-graph that runs the specialized debate nodes in sequence:
+    proponent → opponent → fact_checker → synthesizer → moderator
+    
+    Each node has its own dedicated prompt and role in the debate.
+    """
+    logger.info("Debate team starting for round %s", state.get("debate_round", 1))
+    
+    # This is a placeholder that will be replaced by the sub-graph
+    # The actual execution happens through the sub-graph edges
+    pass
+
+
+async def external_ai_caller_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["external_ai_caller", "fact_checker"]]:
+    """
+    External AI Caller node - orchestrates debate rounds one model at a time.
+    
+    This enables near-real-time UI updates by emitting tool calls/results
+    after each model completes instead of after the full round.
+    """
+    logger.info("External AI Caller - orchestrating debate round (per-model)")
+    configurable = Configuration.from_runnable_config(config)
+    thread_id = get_thread_id_from_config(config)
+    
+    from backend.debate_flow import get_debate_flow
+    # Reset debate_flow only when a new debate starts at round 1
+    round_num = state.get("debate_round", 1)
+    round_started = state.get("debate_round_started", False)
+    debate_flow = get_debate_flow(
+        max_search_results=configurable.max_search_results,
+        resources=state.get("resources", []),
+        thread_id=thread_id,
+        reset=(round_num == 1 and not round_started),
+    )
+    
+    # Determine model order and index
+    model_order = state.get("debate_model_order") or []
+    model_index = state.get("debate_model_index", 0)
+    pending_model = state.get("debate_pending_model")
+    
+    try:
+        tool_calls: list[dict[str, Any]] = []
+        tool_results: list[ToolMessage] = []
+        import uuid
+        user_query = state.get("clarified_research_topic") or state.get("research_topic", "")
+        locale = state.get("locale", "sv-SE")
+        max_context_chars = int(os.getenv("DEBATE_TOOL_CONTEXT_MAX_CHARS", "4000"))
+        max_tool_result_chars = int(os.getenv("DEBATE_TOOL_RESULT_MAX_CHARS", "12000"))
+        
+        if pending_model:
+            model_key = pending_model.get("model_key")
+            query_model_id = pending_model.get("tool_call_id")
+            pending_index = pending_model.get("model_index", model_index)
+            
+            logger.info(f"Executing pending model {pending_index + 1}/{len(model_order)}: {model_key}")
+            response = await debate_flow.query_model_in_debate(model_key, user_query, locale)
+            
+            if isinstance(response, dict):
+                response_text = response.get("response", str(response))
+                context_used = response.get("context_used", "")
+            else:
+                response_text = str(response)
+                context_used = ""
+            
+            # Store full context for on-demand UI
+            try:
+                debate_flow.store_tool_context(query_model_id, context_used)
+            except Exception:
+                pass
+            
+            if context_used and len(context_used) > max_context_chars:
+                context_used = (
+                    context_used[:max_context_chars]
+                    + f"... [trunkerat till {max_context_chars} tecken]"
+                )
+            tool_result_text = f"### {model_key} svar\n\n{response_text}"
+            if isinstance(response, dict):
+                latency_ms = response.get("latency_ms")
+                tokens_in = response.get("tokens_in")
+                tokens_out = response.get("tokens_out")
+                metrics_parts = []
+                if latency_ms is not None:
+                    metrics_parts.append(f"latency_ms={latency_ms}")
+                if tokens_in is not None:
+                    metrics_parts.append(f"tokens_in={tokens_in}")
+                if tokens_out is not None:
+                    metrics_parts.append(f"tokens_out={tokens_out}")
+                if metrics_parts:
+                    tool_result_text += "\n\nMETRICS: " + " ".join(metrics_parts)
+            if context_used:
+                tool_result_text += "\n\n(Hela prompten kan hämtas via knappen i UI.)"
+            if len(tool_result_text) > max_tool_result_chars:
+                tool_result_text = (
+                    tool_result_text[:max_tool_result_chars]
+                    + f"... [trunkerat till {max_tool_result_chars} tecken]"
+                )
+            tool_results.append(
+                ToolMessage(
+                    content=tool_result_text,
+                    tool_call_id=query_model_id,
+                )
+            )
+            
+            combined_response = state.get("external_ai_responses", "").strip()
+            if combined_response:
+                combined_response += "\n\n"
+            combined_response += f"Model {model_key}: {response_text}"
+            
+            is_last_model = (pending_index + 1) >= len(model_order)
+            messages_out: list[AIMessage | ToolMessage] = [*tool_results]
+            if is_last_model:
+                round_finished_id = f"call_{uuid.uuid4().hex[:24]}"
+                messages_out.append(
+                    AIMessage(
+                        content="",
+                        name="external_ai_caller",
+                        tool_calls=[{
+                            "id": round_finished_id,
+                            "name": "round_finished",
+                            "args": {"round_number": round_num},
+                        }],
+                        response_metadata={"finish_reason": "stop"},
+                    )
+                )
+                messages_out.append(
+                    ToolMessage(
+                        content=f"Round {round_num} finished",
+                        tool_call_id=round_finished_id,
+                    )
+                )
+                summary_text = f"Runda {round_num} klar. {len(model_order)} modeller svarade."
+                messages_out.append(
+                    AIMessage(
+                        content=summary_text,
+                        name="external_ai_caller",
+                        response_metadata={"finish_reason": "stop"},
+                        additional_kwargs={
+                            "round": round_num,
+                            "models_queried": len(model_order),
+                            "agent": "external_ai_caller",
+                        },
+                    )
+                )
+            
+            next_index = pending_index + 1
+            goto = "external_ai_caller" if next_index < len(model_order) else "fact_checker"
+            
+            return Command(
+                update={
+                    **preserve_state_meta_fields(state),
+                    "messages": messages_out,
+                    "external_ai_responses": combined_response,
+                    "debate_round_started": round_started,
+                    "debate_model_order": model_order,
+                    "debate_model_index": next_index,
+                    "debate_pending_model": None,
+                },
+                goto=goto,
+            )
+        
+        if not round_started:
+            # Initialize round and order
+            logger.info(f"Starting debate round {round_num} for thread {thread_id}")
+            debate_flow.start_new_round(round_num)
+            model_order = debate_flow.get_randomized_order()
+            selected_models = state.get("debate_model_ids") or []
+            if selected_models:
+                allowed = set(selected_models)
+                allowed.add("oneseek-local")
+                model_order = [model for model in model_order if model in allowed]
+            model_index = 0
+            round_started = True
+            
+            start_round_id = f"call_{uuid.uuid4().hex[:24]}"
+            tool_calls.append({
+                "id": start_round_id,
+                "name": "start_debate_round",
+                "args": {"round_number": round_num, "user_query": user_query, "locale": locale},
+            })
+            tool_results.append(
+                ToolMessage(
+                    content=f"Round {round_num} started",
+                    tool_call_id=start_round_id,
+                )
+            )
+        
+        if not model_order:
+            logger.warning("No debate models available; skipping to fact_checker")
+            return Command(
+                update={
+                    **preserve_state_meta_fields(state),
+                    "debate_round_started": round_started,
+                    "debate_model_order": model_order,
+                    "debate_model_index": model_index,
+                    "debate_pending_model": None,
+                },
+                goto="fact_checker",
+            )
+        
+        if model_index >= len(model_order):
+            logger.info("All models already processed for this round")
+            return Command(
+                update={
+                    **preserve_state_meta_fields(state),
+                    "debate_round_started": round_started,
+                    "debate_model_order": model_order,
+                    "debate_model_index": model_index,
+                    "debate_pending_model": None,
+                },
+                goto="fact_checker",
+            )
+        
+        model_key = model_order[model_index]
+        query_model_id = f"call_{uuid.uuid4().hex[:24]}"
+        tool_calls.append({
+            "id": query_model_id,
+            "name": "query_model_in_round",
+            "args": {
+                "model_key": model_key,
+                "round_number": round_num,
+                "model_index": f"{model_index + 1}/{len(model_order)}",
+                "models_total": len(model_order),
+                "user_query": user_query,
+                "locale": locale,
+            },
+        })
+        
+        response_message = AIMessage(
+            content="",
+            name="external_ai_caller",
+            tool_calls=tool_calls,
+            response_metadata={"finish_reason": "stop"},
+            additional_kwargs={
+                "round": round_num,
+                "model_key": model_key,
+                "model_index": model_index + 1,
+                "models_total": len(model_order),
+                "agent": "external_ai_caller",
+            },
+        )
+        
+        return Command(
+            update={
+                **preserve_state_meta_fields(state),
+                "messages": [response_message, *tool_results],
+                "debate_round_started": round_started,
+                "debate_model_order": model_order,
+                "debate_model_index": model_index,
+                "debate_pending_model": {
+                    "tool_call_id": query_model_id,
+                    "model_key": model_key,
+                    "model_index": model_index,
+                },
+            },
+            goto="external_ai_caller",
+        )
+    except Exception as e:
+        logger.error(f"Error in external_ai_caller per-model flow: {e}", exc_info=True)
+        error_message = AIMessage(
+            content=f"Error in debate round: {str(e)}",
+            name="external_ai_caller",
+            response_metadata={"finish_reason": "stop"},
+        )
+        return Command(
+            update={
+                **preserve_state_meta_fields(state),
+                "messages": [error_message],
+                "debate_pending_model": None,
+            },
+            goto="fact_checker",
+        )
+
+
+async def fact_checker_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["synthesizer"]]:
+    """Fact checker node - verifies claims from external AI models."""
+    logger.info("Fact checker verifying external AI claims")
+    configurable = Configuration.from_runnable_config(config)
+    thread_id = get_thread_id_from_config(config)
+    locale = state.get("locale", "en-US")
+    
+    from backend.debate_flow import get_debate_flow
+    debate_flow = get_debate_flow(thread_id=thread_id)
+    current_round = state.get("debate_round", 1)
+    
+    # Controlled claim extraction
+    claims = extract_claim_sentences(state.get("external_ai_responses", ""))
+    
+    # Cached tools
+    base_search_tool = get_web_search_tool(configurable.max_search_results)
+
+    search_count = 0
+
+    @tool("web_search")
+    def cached_web_search(query: str) -> str:
+        """Cached web search for fact checking (max 2)."""
+        nonlocal search_count
+        if search_count >= 2:
+            return "SEARCH_LIMIT_REACHED: Max 2 web searches per round."
+        search_count += 1
+        return debate_flow.cached_web_search(query, current_round)
+
+    @tool("crawl_tool")
+    def cached_crawl(url: str) -> str:
+        """Cached crawl for fact checking."""
+        return debate_flow.cached_crawl(url, current_round)
+
+    tools = [cached_web_search]
+    
+    # Build prompt for fact_checker
+    messages = apply_prompt_template("fact_checker", state, configurable, locale)
+    if claims:
+        claims_text = "\n".join(f"- {claim}" for claim in claims)
+        messages.append({
+            "role": "system",
+            "content": (
+                "Verifiera endast följande explicit formulerade påståenden. "
+                "Undvik att söka på nya eller vaga påståenden.\n\n"
+                f"{claims_text}"
+            ),
+        })
+    
+    # Create agent for fact_checker
+    llm_token_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["fact_checker"])
+    pre_model_hook = partial(ContextManager(llm_token_limit, 3).compress_messages)
+    agent = create_agent(
+        "fact_checker",
+        "fact_checker",
+        tools,
+        "fact_checker",
+        pre_model_hook,
+        interrupt_before_tools=configurable.interrupt_before_tools,
+        locale=locale,
+    )
+    
+    # Build synthesizer agent (run in parallel)
+    synth_tools = [cached_web_search]
+    synth_messages = apply_prompt_template("synthesizer", state, configurable, locale)
+    synth_llm_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["synthesizer"])
+    synth_pre_hook = partial(ContextManager(synth_llm_limit, 3).compress_messages)
+    synth_agent = create_agent(
+        "synthesizer",
+        "synthesizer",
+        synth_tools,
+        "synthesizer",
+        synth_pre_hook,
+        interrupt_before_tools=configurable.interrupt_before_tools,
+        locale=locale,
+    )
+    
+    # Execute both agents concurrently
+    synth_state = {**state, "messages": synth_messages}
+    result, synth_result = await asyncio.gather(
+        agent.ainvoke(state, config),
+        synth_agent.ainvoke(synth_state, config),
+    )
+    
+    # Extract responses
+    response_content = ""
+    if result and "messages" in result and len(result["messages"]) > 0:
+        last_msg = result["messages"][-1]
+        if hasattr(last_msg, "content"):
+            response_content = last_msg.content
+    
+    synth_content = ""
+    if synth_result and "messages" in synth_result and len(synth_result["messages"]) > 0:
+        synth_msg = synth_result["messages"][-1]
+        if hasattr(synth_msg, "content"):
+            synth_content = synth_msg.content
+    
+    logger.info(f"Fact checker response length: {len(response_content)}")
+    logger.info(f"Synthesizer response length: {len(synth_content)}")
+    
+    # Store internal fact-check + synthesis for next-round context
+    try:
+        if response_content:
+            debate_flow.add_internal_fact_check(current_round, response_content)
+        if synth_content:
+            debate_flow.add_internal_summary(current_round, synth_content)
+    except Exception as e:
+        logger.warning(f"Failed to store internal fact/synth: {e}")
+    
+    combined_messages = []
+    combined_messages.extend(result.get("messages", []) if result else [])
+    combined_messages.extend(synth_result.get("messages", []) if synth_result else [])
+    
+    return Command(
+        update={
+            **preserve_state_meta_fields(state),
+            "messages": combined_messages,
+            "fact_checker_response": response_content,
+            "synthesizer_response": synth_content,
+        },
+        goto="synthesizer"  # synthesizer node will skip if already present
+    )
+
+
+async def synthesizer_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["moderator"]]:
+    """Synthesizer node - creates superior synthesis from both sides."""
+    logger.info("Synthesizer creating integrated position")
+    if state.get("synthesizer_response"):
+        logger.info("Synthesizer already computed in parallel step, skipping.")
+        return Command(
+            update=preserve_state_meta_fields(state),
+            goto="moderator",
+        )
+    configurable = Configuration.from_runnable_config(config)
+    thread_id = get_thread_id_from_config(config)
+    locale = state.get("locale", "en-US")
+    
+    # Get web search and other tools for additional context
+    tools = [get_web_search_tool(configurable.max_search_results), crawl_tool]
+    
+    # Build prompt for synthesizer
+    messages = apply_prompt_template("synthesizer", state, configurable, locale)
+    
+    # Create agent for synthesizer
+    llm_token_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["synthesizer"])
+    pre_model_hook = partial(ContextManager(llm_token_limit, 3).compress_messages)
+    agent = create_agent(
+        "synthesizer",
+        "synthesizer",
+        tools,
+        "synthesizer",
+        pre_model_hook,
+        interrupt_before_tools=configurable.interrupt_before_tools,
+        locale=locale,
+    )
+    
+    # Execute agent
+    result = await agent.ainvoke(state, config)
+    
+    # Extract response - agent returns dict with "messages" key
+    response_content = ""
+    if result and "messages" in result and len(result["messages"]) > 0:
+        last_msg = result["messages"][-1]
+        if hasattr(last_msg, 'content'):
+            response_content = last_msg.content
+    
+    logger.info(f"Synthesizer response length: {len(response_content)}")
+    
+    # Store internal synthesis summary for next-round context
+    try:
+        from backend.debate_flow import get_debate_flow
+        debate_flow = get_debate_flow(thread_id=thread_id)
+        current_round = state.get("debate_round", 1)
+        if response_content:
+            debate_flow.add_internal_summary(current_round, response_content)
+    except Exception as e:
+        logger.warning(f"Failed to store internal synthesis: {e}")
+    
+    return Command(
+        update={
+            **preserve_state_meta_fields(state),
+            "messages": result.get("messages", []),
+            "synthesizer_response": response_content,
+        },
+        goto="moderator"
+    )
+
+
+async def moderator_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["debate_orchestrator"]]:
+    """
+    Moderator node - summarizes round, gives scores, determines winner.
+    
+    This node:
+    1. Summarizes the round
+    2. Gives scores (0-3) to proponent and opponent
+    3. Determines round winner
+    4. Checks for knockout arguments
+    5. Updates debate scores in state
+    6. Routes back to debate_orchestrator
+    """
+    logger.info("Moderator evaluating round")
+    configurable = Configuration.from_runnable_config(config)
+    locale = state.get("locale", "en-US")
+    
+    # Get debate state
+    current_round = state.get("debate_round", 1)
+    scores = state.get("debate_scores", {"proponent": 0, "opponent": 0})
+    logger.info(f"Moderator: Read debate_round={current_round} from state")
+    
+    # Build prompt for moderator
+    messages = apply_prompt_template("moderator", state, configurable, locale)
+    
+    # Add context about current scores AND EXPLICIT JSON REQUEST
+    messages.append({
+        "role": "system",
+        "content": f"""Detta är runda {current_round}. Nuvarande poängställning: Proponent {scores['proponent']} - Opponent {scores['opponent']}
+
+**KRITISKT VIKTIGT**: Du MÅSTE svara ENDAST med giltig JSON i detta exakta format (inga extra ord eller text):
+
+{{
+  "proponent_score": 0-3,
+  "opponent_score": 0-3,
+  "winner": "proponent/opponent/tie",
+  "summary": "kort sammanfattning av rundan",
+  "knockout": false
+}}
+
+Svara INTE med vanlig text eller markdown. Endast ren JSON!"""
+    })
+    
+    # Get LLM
+    llm = get_llm_by_type(AGENT_LLM_MAP["moderator"])
+    llm = configure_llm_with_thinking(llm, enable_thinking=False)
+    
+    # Invoke LLM
+    response = await llm.ainvoke(messages)
+    response_content = get_message_content(response) or ""
+    
+    # Parse moderator response (expecting JSON)
+    try:
+        # Strip think tags and markdown fences
+        cleaned_response = strip_think_tags(response_content, expect_json=True)
+        if cleaned_response.startswith("```"):
+            lines = cleaned_response.split('\n')
+            if len(lines) > 0:
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            cleaned_response = '\n'.join(lines).strip()
+        
+        moderator_result = json.loads(cleaned_response)
+
+        # Enforce concise summary to keep UI readable
+        summary_text = moderator_result.get("summary", "")
+        if isinstance(summary_text, str) and len(summary_text) > 400:
+            moderator_result["summary"] = summary_text[:400] + "... [trunkerat]"
+        
+        # Update scores
+        round_proponent_score = moderator_result.get("proponent_score", 0)
+        round_opponent_score = moderator_result.get("opponent_score", 0)
+        
+        scores["proponent"] += round_proponent_score
+        scores["opponent"] += round_opponent_score
+        
+        knockout = moderator_result.get("knockout", False)
+        
+        logger.info(f"Round {current_round} scores: Proponent +{round_proponent_score}, Opponent +{round_opponent_score}")
+        logger.info(f"Total scores: Proponent {scores['proponent']}, Opponent {scores['opponent']}")
+        logger.info(f"Knockout: {knockout}")
+        
+        # Create summary message
+        summary_msg = AIMessage(
+            content=json.dumps(moderator_result, ensure_ascii=False, indent=2),
+            name="moderator"
+        )
+        
+        # Build state update - moderator only updates scores and knockout
+        # debate_round is managed ONLY by debate_orchestrator to avoid conflicts
+        state_update = {
+            **preserve_state_meta_fields(state),
+            "messages": [summary_msg],
+            "debate_scores": scores,
+            "debate_knockout": knockout,
+            # DO NOT set debate_round here - let orchestrator manage it
+        }
+        
+        logger.info(f"Moderator: Returning scores={scores}, knockout={knockout} to orchestrator")
+        
+        return Command(
+            update=state_update,
+            goto="debate_orchestrator"  # Route back for next round
+        )
+        
+    except (json.JSONDecodeError, KeyError) as e:
+        logger.error(f"Failed to parse moderator response: {e}")
+        logger.error(f"Response content: {response_content[:500]}")
+        
+        # Fallback: simple scores
+        summary_msg = AIMessage(
+            content=f"Runda {current_round}: Kunde inte bedöma ordentligt.",
+            name="moderator"
+        )
+        
+        return Command(
+            update={
+                **preserve_state_meta_fields(state),
+                "messages": [summary_msg],
+                "debate_scores": scores,
+                "debate_knockout": False,
+                "debate_round": current_round,  # CRITICAL: Preserve round number even on error!
+            },
+            goto="debate_orchestrator"  # Route back for next round
+        )

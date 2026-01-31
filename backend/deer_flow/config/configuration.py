@@ -15,11 +15,11 @@ from backend.deer_flow.rag.retriever import Resource
 logger = logging.getLogger(__name__)
 
 
-def get_recursion_limit(default: int = 25) -> int:
+def get_recursion_limit(default: int = 100) -> int:
     """Get the recursion limit from environment variable or use default.
 
     Args:
-        default: Default recursion limit if environment variable is not set or invalid
+        default: Default recursion limit if environment variable is not set or invalid (default: 100 for debate chains)
 
     Returns:
         int: The recursion limit to use
