@@ -11,6 +11,7 @@ import { isPlannerAgent, mergeMessage } from "../messages";
 import type {
   Citation,
   Message,
+  Option,
   Resource,
   ToolAction,
   WorkspaceFile,
@@ -70,6 +71,7 @@ export const useStore = create<{
   debateActivityIds: Map<string, string[]>;
   ongoingDebateSessionId: string | null;
   openDebateSessionId: string | null;
+  planApprovalPending: boolean;
 
   appendMessage: (message: Message) => void;
   updateMessage: (message: Message) => void;
@@ -86,6 +88,7 @@ export const useStore = create<{
   closeDebate: () => void;
   setOngoingDebateSession: (sessionId: string | null) => void;
   updateToolActions: (actions: ToolAction[], liveUpdate?: boolean) => void;
+  setPlanApprovalPending: (pending: boolean) => void;
 }>((set) => ({
   responding: false,
   threadId: THREAD_ID,
@@ -109,6 +112,7 @@ export const useStore = create<{
   debateActivityIds: new Map<string, string[]>(),
   ongoingDebateSessionId: null,
   openDebateSessionId: null,
+  planApprovalPending: false,
 
   appendMessage(message: Message) {
     set((state) => {
@@ -293,6 +297,9 @@ export const useStore = create<{
       });
     }
   },
+  setPlanApprovalPending(pending: boolean) {
+    set({ planApprovalPending: pending });
+  },
 }));
 
 export async function sendMessage(
@@ -315,6 +322,10 @@ export async function sendMessage(
       contentChunks: [content],
       resources,
     });
+  }
+
+  if (interruptFeedback && interruptFeedback.toLowerCase().startsWith("accepted")) {
+    useStore.getState().setPlanApprovalPending(false);
   }
 
   const settings = getChatStreamSettings();
@@ -385,6 +396,16 @@ export async function sendMessage(
           useStore.getState().setCitations(ongoingResearchId, data.citations);
         }
         continue;
+      }
+
+      if (type === "interrupt") {
+        const options = (data as { options?: Option[] }).options ?? [];
+        const isTestInterrupt = options.some(
+          (option) => option.value === "[TEST]" || option.value === "[SKIP]",
+        );
+        if (!isTestInterrupt) {
+          useStore.getState().setPlanApprovalPending(true);
+        }
       }
       
       // Handle tool_call_result specially: use the message that contains the tool call
@@ -481,6 +502,15 @@ function findMessageByToolCallId(toolCallId: string) {
 }
 
 function appendMessage(message: Message) {
+  const settings = getChatStreamSettings();
+  const planApprovalPending = useStore.getState().planApprovalPending;
+  const canOpenSidebar = settings.autoAcceptedPlan || !planApprovalPending;
+  if (isPlannerAgent(message.agent) && !settings.autoAcceptedPlan) {
+    useStore.getState().setPlanApprovalPending(true);
+    useStore.getState().closeResearch();
+    useStore.getState().closeCoder();
+    useStore.getState().closeDebate();
+  }
   // DEBUG: Log all messages to trace debate flow
   if (message.agent?.includes("debate")) {
     console.log("🔍 DEBUG appendMessage: agent=", message.agent, "id=", message.id);
@@ -500,12 +530,14 @@ function appendMessage(message: Message) {
     message.agent === "ai_compare_synth" ||
     message.agent === "ai_compare_reporter"
   ) {
-    if (!getOngoingResearchId()) {
-      const id = message.id;
-      appendResearch(id);
-      openResearch(id);
+    if (canOpenSidebar) {
+      if (!getOngoingResearchId()) {
+        const id = message.id;
+        appendResearch(id);
+        openResearch(id);
+      }
+      appendResearchActivity(message);
     }
-    appendResearchActivity(message);
   } else if (
     message.agent === "coder" ||
     message.agent === "code_researcher" ||
@@ -515,12 +547,14 @@ function appendMessage(message: Message) {
     message.agent === "code_tester" ||
     message.agent === "code_reporter"
   ) {
-    if (!getOngoingCoderSessionId()) {
-      const id = message.id;
-      appendCoderSession(id);
-      openCoder(id);
+    if (canOpenSidebar) {
+      if (!getOngoingCoderSessionId()) {
+        const id = message.id;
+        appendCoderSession(id);
+        openCoder(id);
+      }
+      appendCoderActivity(message);
     }
-    appendCoderActivity(message);
   } else if (
     message.agent === "debate_orchestrator" ||
     message.agent === "external_ai_caller" ||
@@ -529,13 +563,15 @@ function appendMessage(message: Message) {
     message.agent === "moderator"
   ) {
     console.log("🎯 DEBUG: debate message detected! agent=", message.agent, "Opening sidebar...");
-    if (!getOngoingDebateSessionId()) {
-      const id = message.id;
-      console.log("🎯 DEBUG: Calling appendDebateSession and openDebate with id=", id);
-      appendDebateSession(id);
-      openDebate(id);
+    if (canOpenSidebar) {
+      if (!getOngoingDebateSessionId()) {
+        const id = message.id;
+        console.log("🎯 DEBUG: Calling appendDebateSession and openDebate with id=", id);
+        appendDebateSession(id);
+        openDebate(id);
+      }
+      appendDebateActivity(message);
     }
-    appendDebateActivity(message);
   }
   useStore.getState().appendMessage(message);
 }
