@@ -961,9 +961,9 @@ def human_feedback_node(
         
         # Ask in appropriate language
         if locale.startswith("sv"):
-            prompt = "Kodningen är klar! Vill du att jag testar koden?\n\nSvara '[TEST]' för att köra tester (pytest, pylint, mypy), eller '[SKIP]' för att hoppa över testning."
+            prompt = "[CODE_TEST_PROMPT|sv-SE]\nKodningen är klar! Vill du att jag testar koden?\n\nSvara '[TEST]' för att köra tester (pytest, pylint, mypy), eller '[SKIP]' för att hoppa över testning."
         else:
-            prompt = "Coding is complete! Would you like me to test the code?\n\nReply '[TEST]' to run tests (pytest, pylint, mypy), or '[SKIP]' to skip testing."
+            prompt = "[CODE_TEST_PROMPT|en-US]\nCoding is complete! Would you like me to test the code?\n\nReply '[TEST]' to run tests (pytest, pylint, mypy), or '[SKIP]' to skip testing."
         
         logger.info(f"[human_feedback_node] Calling interrupt() with prompt (locale={locale}): {prompt[:100]}...")
         feedback = interrupt(prompt)

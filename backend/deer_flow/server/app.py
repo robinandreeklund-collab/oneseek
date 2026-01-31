@@ -677,18 +677,35 @@ def _create_interrupt_event(thread_id, event_data):
     interrupt = event_data["__interrupt__"][0]
     # Use the 'id' attribute (LangGraph 1.0+) instead of deprecated 'ns[0]'
     interrupt_id = getattr(interrupt, "id", None) or thread_id
+    content = interrupt.value
+    options = [
+        {"text": "Edit plan", "value": "edit_plan"},
+        {"text": "Start research", "value": "accepted"},
+    ]
+    if isinstance(content, str) and content.startswith("[CODE_TEST_PROMPT|"):
+        closing = content.find("]")
+        if closing != -1:
+            locale = content[len("[CODE_TEST_PROMPT|"):closing]
+            content = content[closing + 1 :].lstrip()
+            if locale.startswith("sv"):
+                options = [
+                    {"text": "Kör tester", "value": "[TEST]"},
+                    {"text": "Hoppa över", "value": "[SKIP]"},
+                ]
+            else:
+                options = [
+                    {"text": "Run tests", "value": "[TEST]"},
+                    {"text": "Skip testing", "value": "[SKIP]"},
+                ]
     return _make_event(
         "interrupt",
         {
             "thread_id": thread_id,
             "id": interrupt_id,
             "role": "assistant",
-            "content": interrupt.value,
+            "content": content,
             "finish_reason": "interrupt",
-            "options": [
-                {"text": "Edit plan", "value": "edit_plan"},
-                {"text": "Start research", "value": "accepted"},
-            ],
+            "options": options,
         },
     )
 

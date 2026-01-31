@@ -93,6 +93,12 @@ export function MessageListView({
     };
   }, []);
 
+  const isCodeTestInterrupt = useMemo(() => {
+    return (interruptMessage?.options || []).some(
+      (option) => option.value === "[TEST]" || option.value === "[SKIP]",
+    );
+  }, [interruptMessage]);
+
   return (
     <ScrollContainer
       className={cn("flex h-full w-full flex-col overflow-hidden", className)}
@@ -112,12 +118,64 @@ export function MessageListView({
             onToggleSidebar={handleToggleSidebar}
           />
         ))}
+        {isCodeTestInterrupt && interruptMessage && (
+          <li className="px-4 py-4">
+            <InterruptCard
+              message={interruptMessage}
+              onSendMessage={onSendMessage}
+            />
+          </li>
+        )}
         <div className="flex h-8 w-full shrink-0"></div>
       </ul>
       {responding && (noOngoingResearch || !ongoingResearchIsOpen) && (
         <LoadingAnimation className="ml-4" />
       )}
     </ScrollContainer>
+  );
+}
+
+function InterruptCard({
+  message,
+  onSendMessage,
+}: {
+  message: Message;
+  onSendMessage?: (
+    message: string,
+    options?: { interruptFeedback?: string },
+  ) => void;
+}) {
+  const options = message.options ?? [];
+
+  return (
+    <Card className="w-full">
+      <CardHeader>
+        <CardTitle>Feedback</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <Markdown animated={false}>{message.content}</Markdown>
+      </CardContent>
+      <CardFooter className="flex flex-wrap gap-2 justify-end">
+        {options.map((option) => (
+          <Button
+            key={option.value}
+            variant={option.value === "[TEST]" ? "default" : "outline"}
+            onClick={() => {
+              if (!onSendMessage) return;
+              const text =
+                option.value === "[TEST]"
+                  ? "Run tests"
+                  : option.value === "[SKIP]"
+                    ? "Skip testing"
+                    : option.text;
+              onSendMessage(text, { interruptFeedback: option.value });
+            }}
+          >
+            {option.text}
+          </Button>
+        ))}
+      </CardFooter>
+    </Card>
   );
 }
 

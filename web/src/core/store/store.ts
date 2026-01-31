@@ -810,6 +810,12 @@ export function useLastFeedbackMessageId() {
       for (let i = state.messageIds.length - 1; i >= 0; i--) {
         const message = state.messages.get(state.messageIds[i]!);
         if (message?.finishReason === "interrupt") {
+          const isCodeTestInterrupt = (message.options || []).some(
+            (option) => option.value === "[TEST]" || option.value === "[SKIP]",
+          );
+          if (isCodeTestInterrupt) {
+            return null;
+          }
           interruptIndex = i;
           break;
         }
