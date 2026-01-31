@@ -4,7 +4,7 @@
 import { PythonOutlined } from "@ant-design/icons";
 import { motion } from "framer-motion";
 import { LRUCache } from "lru-cache";
-import { BookOpenText, FileText, PencilRuler, Search } from "lucide-react";
+import { BookOpenText, CheckCircle2, FileText, Loader2, PencilRuler, Search } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useTheme } from "next-themes";
 import React, { useMemo } from "react";
@@ -777,47 +777,53 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
     return toolCall.result;
   }, [aiComparePayload, toolCall.result]);
 
+  const metrics = useMemo(() => {
+    if (!toolCall.result) return null;
+    const match = /METRICS:\s*(.+)$/m.exec(toolCall.result);
+    if (!match) return null;
+    const parts = match[1].split(" ").filter(Boolean);
+    const entries: Record<string, string> = {};
+    for (const part of parts) {
+      const [key, value] = part.split("=");
+      if (key && value) entries[key] = value;
+    }
+    return entries;
+  }, [toolCall.result]);
   const isAiCompareTool = useMemo(() => {
     if (toolCall.name !== "query_model_in_round") return false;
     if (!toolCall.args || typeof toolCall.args !== "object") return false;
     const args = toolCall.args as { user_query?: string; round_number?: number };
     return Boolean(args.user_query) && !args.round_number;
   }, [toolCall.args, toolCall.name]);
+  const isRunning = toolCall.result === undefined;
 
   return (
     <section className="mt-4 pl-4">
       <div className="w-fit overflow-y-auto rounded-md py-0">
-        <Accordion
-          type="single"
-          collapsible
-          className="w-full"
-          defaultValue={isAiCompareTool ? "item-1" : undefined}
-        >
+        <Accordion type="single" collapsible className="w-full">
           <AccordionItem value="item-1">
             <AccordionTrigger>
               <Tooltip title={tool?.description}>
-                <div className="flex items-center font-medium italic">
-                  {resolvedModelKey ? (
-                    <DebateModelIcon modelKey={resolvedModelKey} size={16} className="mr-2" />
+                <div className="flex items-center gap-2 font-medium italic">
+                  {toolCall.name === "query_model_in_round" && resolvedModelKey ? (
+                    <DebateModelIcon modelKey={resolvedModelKey} />
                   ) : (
-                    <PencilRuler size={16} className={"mr-2"} />
+                    <PencilRuler size={16} />
+                  )}
+                  {isRunning ? (
+                    <Loader2 size={14} className="animate-spin text-muted-foreground" />
+                  ) : (
+                    <CheckCircle2 size={14} className="text-emerald-500" />
                   )}
                   <RainbowText
                     className="pr-0.5 text-base font-medium italic"
-                    animated={toolCall.result === undefined}
+                    animated={isRunning}
                   >
                     {statusText}
                   </RainbowText>
                 </div>
               </Tooltip>
             </AccordionTrigger>
-            {toolCall.result && (
-              <div className="px-2 pb-2 text-xs opacity-70">
-                {displayResult.length > 240
-                  ? `${displayResult.slice(0, 240)}...`
-                  : displayResult}
-              </div>
-            )}
             <AccordionContent>
               {toolCall.result && (
                 <div className="bg-accent max-h-[400px] max-w-[560px] overflow-y-auto rounded-md text-sm">
@@ -841,6 +847,25 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
                   >
                     {displayResult.trim()}
                   </SyntaxHighlighter>
+                  {metrics && (
+                    <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                      {metrics.latency_ms && (
+                        <span className="rounded-full border border-border/60 px-2 py-0.5">
+                          {metrics.latency_ms} ms
+                        </span>
+                      )}
+                      {metrics.tokens_in && (
+                        <span className="rounded-full border border-border/60 px-2 py-0.5">
+                          in {metrics.tokens_in}
+                        </span>
+                      )}
+                      {metrics.tokens_out && (
+                        <span className="rounded-full border border-border/60 px-2 py-0.5">
+                          out {metrics.tokens_out}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </AccordionContent>
