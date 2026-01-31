@@ -1134,23 +1134,26 @@ def human_feedback_node(
         logger.info(f"[human_feedback_node] Plan approved, routing to {goto}")
     
     try:
-        # Safely extract plan content from different types (string, AIMessage, dict)
+        # Safely extract plan content from different types (string, AIMessage, dict, Plan)
         original_plan = current_plan
-        
-        # Repair the JSON output
-        current_plan = repair_json_output(current_plan)
-        # parse the plan to dict
-        current_plan = json.loads(current_plan)
-        current_plan_content = extract_plan_content(current_plan)
+
+        if isinstance(current_plan, Plan):
+            new_plan = current_plan.model_dump()
+        else:
+            # Repair the JSON output
+            current_plan = repair_json_output(current_plan)
+            # parse the plan to dict
+            current_plan = json.loads(current_plan)
+            current_plan_content = extract_plan_content(current_plan)
+            # parse the plan
+            new_plan = json.loads(repair_json_output(current_plan_content))
         
         # increment the plan iterations
         plan_iterations += 1
-        # parse the plan
-        new_plan = json.loads(repair_json_output(current_plan_content))
         # Validate and fix plan to ensure web search requirements are met
         configurable = Configuration.from_runnable_config(config)
         enforce_web_search = configurable.enforce_web_search
-        if state.get("plan_source") == "code_planner":
+        if state.get("plan_source") in ("code_planner", "ai_comparison"):
             enforce_web_search = False
         new_plan = validate_and_fix_plan(new_plan, enforce_web_search, configurable.enable_web_search)
         if state.get("plan_source") == "code_planner":
@@ -2702,48 +2705,89 @@ async def ai_comparison_node(
 
     from backend.deer_flow.prompts.planner_model import Plan, Step, StepType
 
-    steps = [
-        Step(
-            need_search=False,
-            step_type=StepType.AI_QUERY,
-            title="Query AI Models",
-            description="Collect responses from each AI model sequentially.",
-            execution_res=None,
-        ),
-        Step(
-            need_search=False,
-            step_type=StepType.AI_FACT_CHECK,
-            title="Fact Check",
-            description="Verify key claims with external sources.",
-            execution_res=None,
-        ),
-        Step(
-            need_search=False,
-            step_type=StepType.AI_META,
-            title="Meta Analysis",
-            description="Score models across meta-analysis dimensions.",
-            execution_res=None,
-        ),
-        Step(
-            need_search=False,
-            step_type=StepType.AI_SYNTH,
-            title="Synthesize Answer",
-            description="Produce optimal synthesized answer from all inputs.",
-            execution_res=None,
-        ),
-        Step(
-            need_search=False,
-            step_type=StepType.AI_REPORT,
-            title="Generate Comparison Report",
-            description="Write the final comparison report with tables.",
-            execution_res=None,
-        ),
-    ]
+    if locale.startswith("sv"):
+        thought = "Kör AI‑jämförelse med modellfrågor, faktakoll, meta‑analys och syntes."
+        steps = [
+            Step(
+                need_search=False,
+                step_type=StepType.AI_QUERY,
+                title="Fråga AI‑modeller",
+                description="Samla in svar från varje modell i tur och ordning.",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_FACT_CHECK,
+                title="Faktakoll",
+                description="Verifiera centrala påståenden med externa källor.",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_META,
+                title="Meta‑analys",
+                description="Poängsätt modellerna över meta‑analytiska dimensioner.",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_SYNTH,
+                title="Syntetisera svar",
+                description="Skapa en optimal syntes baserad på all input.",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_REPORT,
+                title="Skapa jämförelserapport",
+                description="Skriv slutrapporten med tabeller och källor.",
+                execution_res=None,
+            ),
+        ]
+    else:
+        thought = "Run AI comparison with model queries, fact-checking, meta-analysis, and synthesis."
+        steps = [
+            Step(
+                need_search=False,
+                step_type=StepType.AI_QUERY,
+                title="Query AI Models",
+                description="Collect responses from each AI model sequentially.",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_FACT_CHECK,
+                title="Fact Check",
+                description="Verify key claims with external sources.",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_META,
+                title="Meta Analysis",
+                description="Score models across meta-analysis dimensions.",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_SYNTH,
+                title="Synthesize Answer",
+                description="Produce optimal synthesized answer from all inputs.",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_REPORT,
+                title="Generate Comparison Report",
+                description="Write the final comparison report with tables.",
+                execution_res=None,
+            ),
+        ]
 
     comparison_plan = Plan(
         locale=locale,
         has_enough_context=False,
-        thought="Run AI comparison with model queries, fact-checking, meta-analysis, and synthesis.",
+        thought=thought,
         title=research_topic,
         steps=steps,
     )
