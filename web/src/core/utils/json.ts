@@ -1,5 +1,3 @@
-import { parse } from "best-effort-json-parser";
-
 /**
  * Extract valid JSON from content that may have extra tokens.
  * Finds the last closing brace/bracket that could be valid JSON.
@@ -84,16 +82,7 @@ export function parseJSON<T>(json: string | null | undefined, fallback: T) {
     try {
       return JSON.parse(raw) as T;
     } catch {
-      // Only attempt best-effort parsing if it looks like JSON
-      const trimmed = raw.trim();
-      if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
-        return fallback;
-      }
-      try {
-        return parse(raw) as T;
-      } catch {
-        return fallback;
-      }
+      return fallback;
     }
   } catch {
     // Fallback: return fallback value for completely malformed JSON

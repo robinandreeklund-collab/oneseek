@@ -762,10 +762,22 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
     return toolCall.result;
   }, [aiComparePayload, toolCall.result]);
 
+  const isAiCompareTool = useMemo(() => {
+    if (toolCall.name !== "query_model_in_round") return false;
+    if (!toolCall.args || typeof toolCall.args !== "object") return false;
+    const args = toolCall.args as { user_query?: string; round_number?: number };
+    return Boolean(args.user_query) && !args.round_number;
+  }, [toolCall.args, toolCall.name]);
+
   return (
     <section className="mt-4 pl-4">
       <div className="w-fit overflow-y-auto rounded-md py-0">
-        <Accordion type="single" collapsible className="w-full">
+        <Accordion
+          type="single"
+          collapsible
+          className="w-full"
+          defaultValue={isAiCompareTool ? "item-1" : undefined}
+        >
           <AccordionItem value="item-1">
             <AccordionTrigger>
               <Tooltip title={tool?.description}>
@@ -784,6 +796,13 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
                 </div>
               </Tooltip>
             </AccordionTrigger>
+            {toolCall.result && (
+              <div className="px-2 pb-2 text-xs opacity-70">
+                {displayResult.length > 240
+                  ? `${displayResult.slice(0, 240)}...`
+                  : displayResult}
+              </div>
+            )}
             <AccordionContent>
               {toolCall.result && (
                 <div className="bg-accent max-h-[400px] max-w-[560px] overflow-y-auto rounded-md text-sm">
