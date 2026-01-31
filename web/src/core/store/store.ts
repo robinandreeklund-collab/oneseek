@@ -335,6 +335,9 @@ export async function sendMessage(
     useStore.getState().closeResearch();
     useStore.getState().closeCoder();
     useStore.getState().closeDebate();
+    useStore.getState().setOngoingResearch(null);
+    useStore.getState().setOngoingCoderSession(null);
+    useStore.getState().setOngoingDebateSession(null);
   } else if (settings.autoAcceptedPlan) {
     useStore.getState().setPlanApprovalPending(false);
   }
@@ -539,14 +542,14 @@ function appendMessage(message: Message) {
     message.agent === "ai_compare_synth" ||
     message.agent === "ai_compare_reporter"
   ) {
-    if (!getOngoingResearchId()) {
-      const id = message.id;
-      appendResearch(id);
-      if (canOpenSidebar) {
+    if (canOpenSidebar) {
+      if (!getOngoingResearchId()) {
+        const id = message.id;
+        appendResearch(id);
         openResearch(id);
       }
+      appendResearchActivity(message);
     }
-    appendResearchActivity(message);
   } else if (
     message.agent === "coder" ||
     message.agent === "code_researcher" ||
@@ -556,14 +559,14 @@ function appendMessage(message: Message) {
     message.agent === "code_tester" ||
     message.agent === "code_reporter"
   ) {
-    if (!getOngoingCoderSessionId()) {
-      const id = message.id;
-      appendCoderSession(id);
-      if (canOpenSidebar) {
+    if (canOpenSidebar) {
+      if (!getOngoingCoderSessionId()) {
+        const id = message.id;
+        appendCoderSession(id);
         openCoder(id);
       }
+      appendCoderActivity(message);
     }
-    appendCoderActivity(message);
   } else if (
     message.agent === "debate_orchestrator" ||
     message.agent === "external_ai_caller" ||
@@ -572,15 +575,15 @@ function appendMessage(message: Message) {
     message.agent === "moderator"
   ) {
     console.log("🎯 DEBUG: debate message detected! agent=", message.agent, "Opening sidebar...");
-    if (!getOngoingDebateSessionId()) {
-      const id = message.id;
-      console.log("🎯 DEBUG: Calling appendDebateSession and openDebate with id=", id);
-      appendDebateSession(id);
-      if (canOpenSidebar) {
+    if (canOpenSidebar) {
+      if (!getOngoingDebateSessionId()) {
+        const id = message.id;
+        console.log("🎯 DEBUG: Calling appendDebateSession and openDebate with id=", id);
+        appendDebateSession(id);
         openDebate(id);
       }
+      appendDebateActivity(message);
     }
-    appendDebateActivity(message);
   }
   useStore.getState().appendMessage(message);
 }
