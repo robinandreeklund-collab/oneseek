@@ -63,6 +63,7 @@ export const useStore = create<{
   coderSessionIds: string[];
   coderActivityIds: Map<string, string[]>;
   coderWorkspaceFiles: Map<string, WorkspaceFile[]>;
+  coderWorkspaceSnapshot: Map<string, WorkspaceFile[]>;
   ongoingCoderSessionId: string | null;
   openCoderSessionId: string | null;
   debateSessionIds: string[];
@@ -80,6 +81,7 @@ export const useStore = create<{
   openCoder: (sessionId: string | null) => void;
   closeCoder: () => void;
   setOngoingCoderSession: (sessionId: string | null) => void;
+  setCoderWorkspaceSnapshot: (sessionId: string, files: WorkspaceFile[]) => void;
   openDebate: (sessionId: string | null) => void;
   closeDebate: () => void;
   setOngoingDebateSession: (sessionId: string | null) => void;
@@ -100,6 +102,7 @@ export const useStore = create<{
   coderSessionIds: [],
   coderActivityIds: new Map<string, string[]>(),
   coderWorkspaceFiles: new Map<string, WorkspaceFile[]>(),
+  coderWorkspaceSnapshot: new Map<string, WorkspaceFile[]>(),
   ongoingCoderSessionId: null,
   openCoderSessionId: null,
   debateSessionIds: [],
@@ -153,6 +156,14 @@ export const useStore = create<{
   },
   setOngoingCoderSession(sessionId: string | null) {
     set({ ongoingCoderSessionId: sessionId });
+  },
+  setCoderWorkspaceSnapshot(sessionId: string, files: WorkspaceFile[]) {
+    set((state) => ({
+      coderWorkspaceSnapshot: new Map(state.coderWorkspaceSnapshot).set(
+        sessionId,
+        files,
+      ),
+    }));
   },
   openDebate(sessionId: string | null) {
     console.log("🎯 DEBUG openDebate called with sessionId=", sessionId);

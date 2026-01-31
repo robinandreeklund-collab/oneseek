@@ -3,10 +3,15 @@
 
 import asyncio
 import base64
+import difflib
+import io
 import json
 import logging
 import os
+import subprocess
+import sys
 import time
+import zipfile
 from typing import Annotated, Any, List, Optional, cast
 from uuid import uuid4
 
@@ -67,12 +72,22 @@ from backend.deer_flow.server.rag_request import (
     RAGResourceRequest,
     RAGResourcesResponse,
 )
+from pydantic import BaseModel, Field
+
 from backend.deer_flow.tools import (
     OpenAITTS,
     clear_workspace_files,
+    get_latest_workspace_diff,
+    get_workspace_file_content,
     get_workspace_files,
+    get_workspace_history_counts,
+    list_workspace_files,
+    redo_workspace_change,
     set_current_run_id,
+    undo_workspace_change,
 )
+from backend.deer_flow.tools.code_tools import get_workspace_root
+from backend.deer_flow.tools.python_repl import python_repl_tool
 from backend.deer_flow.utils.json_utils import sanitize_args
 from backend.deer_flow.utils.log_sanitizer import (
     sanitize_agent_name,
@@ -321,6 +336,142 @@ async def chat_stream(request: ChatRequest):
             request.enable_debate_mode,
         ),
         media_type="text/event-stream",
+    )
+
+
+class WorkspaceActionRequest(BaseModel):
+    thread_id: str = Field(..., min_length=1)
+
+
+class WorkspacePathRequest(WorkspaceActionRequest):
+    path: str = Field(..., min_length=1)
+
+
+@app.get("/api/workspace/history")
+async def workspace_history(thread_id: str = Query(..., min_length=1)):
+    set_current_run_id(thread_id)
+    return get_workspace_history_counts(thread_id)
+
+
+@app.get("/api/workspace/files")
+async def workspace_files(
+    thread_id: str = Query(..., min_length=1),
+    max_files: int = Query(1000, ge=1, le=5000),
+):
+    set_current_run_id(thread_id)
+    files = list_workspace_files(thread_id, max_files=max_files)
+    return {"files": files}
+
+
+@app.get("/api/workspace/file")
+async def workspace_file(
+    thread_id: str = Query(..., min_length=1),
+    path: str = Query(..., min_length=1),
+):
+    set_current_run_id(thread_id)
+    return get_workspace_file_content(path, run_id=thread_id)
+
+
+@app.get("/api/workspace/diff")
+async def workspace_diff(
+    thread_id: str = Query(..., min_length=1),
+    path: str = Query(..., min_length=1),
+):
+    set_current_run_id(thread_id)
+    diff_info = get_latest_workspace_diff(thread_id, path)
+    if diff_info.get("status") != "ok":
+        return diff_info
+
+    before = diff_info.get("before") or ""
+    after = diff_info.get("after") or ""
+    diff_lines = difflib.unified_diff(
+        before.splitlines(),
+        after.splitlines(),
+        fromfile="before",
+        tofile="after",
+        lineterm="",
+    )
+    diff_info["diff"] = "\n".join(diff_lines)
+    diff_info["truncated"] = bool(
+        diff_info.get("before_truncated") or diff_info.get("after_truncated")
+    )
+    return diff_info
+
+
+@app.post("/api/workspace/undo")
+async def workspace_undo(request: WorkspaceActionRequest):
+    set_current_run_id(request.thread_id)
+    result = undo_workspace_change(request.thread_id)
+    counts = get_workspace_history_counts(request.thread_id)
+    return {**result, **counts}
+
+
+@app.post("/api/workspace/redo")
+async def workspace_redo(request: WorkspaceActionRequest):
+    set_current_run_id(request.thread_id)
+    result = redo_workspace_change(request.thread_id)
+    counts = get_workspace_history_counts(request.thread_id)
+    return {**result, **counts}
+
+
+@app.post("/api/workspace/run")
+async def workspace_run(request: WorkspacePathRequest):
+    set_current_run_id(request.thread_id)
+    content_result = get_workspace_file_content(request.path, run_id=request.thread_id)
+    if content_result.get("status") != "ok":
+        raise HTTPException(status_code=404, detail="File not found")
+    if content_result.get("truncated"):
+        raise HTTPException(status_code=400, detail="File too large to run in REPL")
+
+    content = content_result.get("content", "")
+    output = python_repl_tool(content)
+    if isinstance(output, str) and output.startswith("Tool disabled"):
+        workspace_root = get_workspace_root()
+        target_path = (workspace_root / request.path).resolve()
+        if not str(target_path).startswith(str(workspace_root)):
+            raise HTTPException(status_code=400, detail="Path outside workspace")
+        if not target_path.exists():
+            raise HTTPException(status_code=404, detail="File not found")
+        try:
+            result = subprocess.run(
+                [sys.executable, str(target_path)],
+                cwd=workspace_root,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except subprocess.TimeoutExpired as exc:
+            return {
+                "status": "error",
+                "mode": "subprocess",
+                "error": f"Timed out after {exc.timeout} seconds",
+            }
+        return {
+            "status": "success" if result.returncode == 0 else "error",
+            "mode": "subprocess",
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "return_code": result.returncode,
+        }
+
+    return {"status": "success", "mode": "repl", "output": output}
+
+
+@app.get("/api/workspace/export")
+async def workspace_export(thread_id: str = Query(..., min_length=1)):
+    set_current_run_id(thread_id)
+    workspace_root = get_workspace_root()
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
+        for path in workspace_root.rglob("*"):
+            if path.is_file():
+                zipf.write(path, arcname=path.relative_to(workspace_root))
+    zip_buffer.seek(0)
+    filename = f"workspace-{thread_id}.zip"
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

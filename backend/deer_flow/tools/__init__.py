@@ -15,6 +15,12 @@ from .code_tools import (
     get_workspace_files,
     clear_workspace_files,
     set_current_run_id,
+    get_workspace_history_counts,
+    list_workspace_files,
+    undo_workspace_change,
+    redo_workspace_change,
+    get_workspace_file_content,
+    get_latest_workspace_diff,
 )
 from .test_tools import get_test_tools, python_test_tool, javascript_test_tool
 
@@ -32,6 +38,12 @@ __all__ = [
     "get_workspace_files",
     "clear_workspace_files",
     "set_current_run_id",
+    "get_workspace_history_counts",
+    "list_workspace_files",
+    "undo_workspace_change",
+    "redo_workspace_change",
+    "get_workspace_file_content",
+    "get_latest_workspace_diff",
     "get_test_tools",
     "python_test_tool",
     "javascript_test_tool",

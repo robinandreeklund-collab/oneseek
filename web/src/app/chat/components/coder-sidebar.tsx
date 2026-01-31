@@ -5,18 +5,25 @@ import { PythonOutlined } from "@ant-design/icons";
 import { motion } from "framer-motion";
 import {
   Code,
+  Download,
+  FileDiff,
   FileCode,
   FileText,
   Monitor,
   PencilRuler,
+  Play,
+  RefreshCw,
+  RotateCcw,
+  RotateCw,
   X,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useTheme } from "next-themes";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import SyntaxHighlighter from "react-syntax-highlighter";
 import { docco } from "react-syntax-highlighter/dist/esm/styles/hljs";
 import { dark } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { toast } from "sonner";
 
 import { LoadingAnimation } from "~/components/deer-flow/loading-animation";
 import { RainbowText } from "~/components/deer-flow/rainbow-text";
@@ -39,6 +46,16 @@ import {
   DialogTitle,
 } from "~/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
+import {
+  exportWorkspaceZip,
+  fetchWorkspaceDiff,
+  fetchWorkspaceFileContent,
+  fetchWorkspaceFiles,
+  fetchWorkspaceHistory,
+  redoWorkspaceChange,
+  runWorkspaceFile,
+  undoWorkspaceChange,
+} from "~/core/api/workspace";
 import { findMCPTool } from "~/core/mcp";
 import type { ToolCallRuntime, WorkspaceFile } from "~/core/messages";
 import { closeCoder, useMessage, useStore } from "~/core/store";
@@ -584,9 +601,24 @@ function CoderPreviewBlock({ sessionId }: { sessionId: string }) {
   );
   const messages = useStore((state) => state.messages);
   const workspaceFilesByMessage = useStore((state) => state.coderWorkspaceFiles);
+  const workspaceSnapshotBySession = useStore(
+    (state) => state.coderWorkspaceSnapshot,
+  );
+  const snapshotFiles = workspaceSnapshotBySession.get(sessionId) ?? [];
   const previewHtml = useMemo(() => {
     if (!activityIds) return null;
     let truncatedFallback: string | null = null;
+    for (const file of [...snapshotFiles].reverse()) {
+      if (!file.path.endsWith(".html")) continue;
+      if (file.content?.trim()) {
+        if (!file.truncated) {
+          return file.content;
+        }
+        if (!truncatedFallback) {
+          truncatedFallback = file.content;
+        }
+      }
+    }
     for (const activityId of [...activityIds].reverse()) {
       const workspaceFiles = workspaceFilesByMessage.get(activityId) ?? [];
       for (const file of workspaceFiles) {
@@ -615,7 +647,7 @@ function CoderPreviewBlock({ sessionId }: { sessionId: string }) {
       }
     }
     return truncatedFallback;
-  }, [activityIds, messages, workspaceFilesByMessage]);
+  }, [activityIds, messages, workspaceFilesByMessage, snapshotFiles]);
 
   const hasPreviewError = useMemo(() => {
     if (!activityIds) return false;
@@ -683,17 +715,213 @@ function CoderPreviewBlock({ sessionId }: { sessionId: string }) {
 
 function CoderFilesBlock({ sessionId }: { sessionId: string }) {
   const t = useTranslations("chat.coder");
+  const threadId = useStore((state) => state.threadId);
   const activityIds = useStore((state) =>
     state.coderActivityIds.get(sessionId),
   );
   const messages = useStore((state) => state.messages);
   const workspaceFilesByMessage = useStore((state) => state.coderWorkspaceFiles);
+  const workspaceSnapshotBySession = useStore(
+    (state) => state.coderWorkspaceSnapshot,
+  );
+  const setWorkspaceSnapshot = useStore(
+    (state) => state.setCoderWorkspaceSnapshot,
+  );
+  const snapshotFiles = workspaceSnapshotBySession.get(sessionId) ?? [];
   const [selectedFile, setSelectedFile] = useState<WorkspaceFile | null>(null);
+  const [selectedFileContent, setSelectedFileContent] = useState<string>("");
+  const [fileContentLoading, setFileContentLoading] = useState(false);
+  const [fileContentError, setFileContentError] = useState<string | null>(null);
+  const [diffView, setDiffView] = useState<"content" | "diff">("content");
+  const [diffText, setDiffText] = useState<string | null>(null);
+  const [diffLoading, setDiffLoading] = useState(false);
+  const [diffError, setDiffError] = useState<string | null>(null);
+  const [diffTruncated, setDiffTruncated] = useState(false);
+  const [historyCounts, setHistoryCounts] = useState({
+    undo_count: 0,
+    redo_count: 0,
+  });
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [filesRefreshing, setFilesRefreshing] = useState(false);
+  const [runTarget, setRunTarget] = useState<string | null>(null);
+  const [runResult, setRunResult] = useState<string | null>(null);
+  const [runError, setRunError] = useState<string | null>(null);
+  const [runLoading, setRunLoading] = useState(false);
   const { resolvedTheme } = useTheme();
+
+  const refreshHistory = async () => {
+    if (!threadId) return;
+    setHistoryLoading(true);
+    try {
+      const history = await fetchWorkspaceHistory(threadId);
+      setHistoryCounts(history);
+    } catch (error) {
+      toast.error("Failed to load workspace history");
+      console.error(error);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const refreshWorkspaceFiles = async () => {
+    if (!threadId) return;
+    setFilesRefreshing(true);
+    try {
+      const data = await fetchWorkspaceFiles(threadId);
+      const files = (data.files ?? [])
+        .map((file) => ({
+          path: String(file.path ?? ""),
+          name: typeof file.name === "string" ? file.name : undefined,
+          size: typeof file.size === "number" ? file.size : undefined,
+          operation:
+            typeof file.operation === "string" ? file.operation : "existing",
+          modified:
+            typeof file.modified === "string" ? file.modified : undefined,
+        }))
+        .filter((file) => file.path);
+      setWorkspaceSnapshot(sessionId, files);
+    } catch (error) {
+      toast.error("Failed to refresh workspace files");
+      console.error(error);
+    } finally {
+      setFilesRefreshing(false);
+    }
+  };
+
+  const handleUndo = async () => {
+    if (!threadId) return;
+    try {
+      await undoWorkspaceChange(threadId);
+      await refreshHistory();
+      await refreshWorkspaceFiles();
+    } catch (error) {
+      toast.error("Undo failed");
+      console.error(error);
+    }
+  };
+
+  const handleRedo = async () => {
+    if (!threadId) return;
+    try {
+      await redoWorkspaceChange(threadId);
+      await refreshHistory();
+      await refreshWorkspaceFiles();
+    } catch (error) {
+      toast.error("Redo failed");
+      console.error(error);
+    }
+  };
+
+  const handleExport = async () => {
+    if (!threadId) return;
+    try {
+      const blob = await exportWorkspaceZip(threadId);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `workspace-${threadId}.zip`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast.error("Export failed");
+      console.error(error);
+    }
+  };
+
+  const handleRunFile = async (path: string) => {
+    if (!threadId) return;
+    setRunLoading(true);
+    setRunTarget(path);
+    setRunResult(null);
+    setRunError(null);
+    try {
+      const result = await runWorkspaceFile(threadId, path);
+      const output =
+        result.output ??
+        [result.stdout, result.stderr].filter(Boolean).join("\n");
+      setRunResult(output || "(no output)");
+      if (result.status === "error" && result.error) {
+        setRunError(result.error);
+      }
+    } catch (error) {
+      setRunError("Failed to run file");
+      console.error(error);
+    } finally {
+      setRunLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!sessionId) return;
+    refreshHistory();
+    refreshWorkspaceFiles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (!activityIds) return;
+    refreshHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activityIds?.length]);
+
+  useEffect(() => {
+    if (!selectedFile) return;
+    setDiffView("content");
+    setDiffText(null);
+    setDiffError(null);
+    setDiffTruncated(false);
+    setFileContentError(null);
+    setSelectedFileContent(selectedFile.content ?? "");
+    if (selectedFile.content?.trim()) {
+      setSelectedFileContent(selectedFile.content);
+      return;
+    }
+    if (!threadId) return;
+    setFileContentLoading(true);
+    fetchWorkspaceFileContent(threadId, selectedFile.path)
+      .then((result) => {
+        if (result.status !== "ok") {
+          setFileContentError("File not found");
+          return;
+        }
+        setSelectedFileContent(result.content ?? "");
+      })
+      .catch((error) => {
+        setFileContentError("Failed to load file content");
+        console.error(error);
+      })
+      .finally(() => setFileContentLoading(false));
+  }, [selectedFile, threadId]);
+
+  useEffect(() => {
+    if (!selectedFile || diffView !== "diff" || !threadId) return;
+    setDiffLoading(true);
+    setDiffError(null);
+    fetchWorkspaceDiff(threadId, selectedFile.path)
+      .then((result) => {
+        if (result.status !== "ok") {
+          setDiffError("No diff available");
+          return;
+        }
+        setDiffText(result.diff ?? "");
+        setDiffTruncated(Boolean(result.truncated));
+      })
+      .catch((error) => {
+        setDiffError("Failed to load diff");
+        console.error(error);
+      })
+      .finally(() => setDiffLoading(false));
+  }, [diffView, selectedFile, threadId]);
 
   const files = useMemo(() => {
     const fileMap = new Map<string, WorkspaceFile>();
     if (!activityIds) return [];
+
+    if (snapshotFiles.length > 0) {
+      snapshotFiles.forEach((file) => {
+        fileMap.set(file.path, file);
+      });
+    }
 
     for (const activityId of activityIds) {
       const message = messages.get(activityId);
@@ -736,10 +964,48 @@ function CoderFilesBlock({ sessionId }: { sessionId: string }) {
       if (aTime !== bTime) return bTime - aTime;
       return a.path.localeCompare(b.path);
     });
-  }, [activityIds, messages, workspaceFilesByMessage]);
+  }, [activityIds, messages, workspaceFilesByMessage, snapshotFiles]);
 
   return (
     <div className="py-4">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleUndo}
+          disabled={historyLoading || historyCounts.undo_count === 0}
+        >
+          <RotateCcw className="mr-2 h-4 w-4" />
+          Undo {historyCounts.undo_count}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleRedo}
+          disabled={historyLoading || historyCounts.redo_count === 0}
+        >
+          <RotateCw className="mr-2 h-4 w-4" />
+          Redo {historyCounts.redo_count}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={refreshWorkspaceFiles}
+          disabled={filesRefreshing}
+        >
+          <RefreshCw
+            className={cn(
+              "mr-2 h-4 w-4",
+              filesRefreshing ? "animate-spin" : "",
+            )}
+          />
+          Refresh
+        </Button>
+        <Button size="sm" variant="outline" onClick={handleExport}>
+          <Download className="mr-2 h-4 w-4" />
+          Export zip
+        </Button>
+      </div>
       {files.length > 0 ? (
         <ul className="flex flex-col gap-2">
           {files.map((file, i) => (
@@ -768,12 +1034,37 @@ function CoderFilesBlock({ sessionId }: { sessionId: string }) {
                   </span>
                 </div>
               </button>
-              <Badge
-                variant="secondary"
-                className={cn("shrink-0", getOperationBadgeClass(file.operation))}
-              >
-                {formatOperationLabel(file.operation)}
-              </Badge>
+              <div className="flex items-center gap-2">
+                {file.path.endsWith(".py") && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleRunFile(file.path);
+                    }}
+                    disabled={runLoading}
+                  >
+                    <Play
+                      className={cn(
+                        "h-4 w-4",
+                        runLoading && runTarget === file.path
+                          ? "animate-pulse"
+                          : "",
+                      )}
+                    />
+                  </Button>
+                )}
+                <Badge
+                  variant="secondary"
+                  className={cn(
+                    "shrink-0",
+                    getOperationBadgeClass(file.operation),
+                  )}
+                >
+                  {formatOperationLabel(file.operation)}
+                </Badge>
+              </div>
             </motion.li>
           ))}
         </ul>
@@ -805,27 +1096,113 @@ function CoderFilesBlock({ sessionId }: { sessionId: string }) {
                 .filter(Boolean)
                 .join(" • ")}
             </DialogDescription>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant={diffView === "content" ? "secondary" : "ghost"}
+                onClick={() => setDiffView("content")}
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                Content
+              </Button>
+              <Button
+                size="sm"
+                variant={diffView === "diff" ? "secondary" : "ghost"}
+                onClick={() => setDiffView("diff")}
+              >
+                <FileDiff className="mr-2 h-4 w-4" />
+                Diff
+              </Button>
+            </div>
           </DialogHeader>
           <div className="bg-accent max-h-[60vh] overflow-auto rounded-md p-4 text-sm">
-            <SyntaxHighlighter
-              language={getLanguageFromFilePath(selectedFile?.path)}
-              style={resolvedTheme === "dark" ? dark : docco}
-              customStyle={{
-                background: "transparent",
-                border: "none",
-                boxShadow: "none",
-              }}
-            >
-              {selectedFile?.content?.trim() || "(empty)"}
-            </SyntaxHighlighter>
+            {diffView === "diff" ? (
+              diffLoading ? (
+                <LoadingAnimation className="mx-auto my-12" />
+              ) : diffError ? (
+                <p className="text-sm text-muted-foreground">{diffError}</p>
+              ) : (
+                <SyntaxHighlighter
+                  language="diff"
+                  style={resolvedTheme === "dark" ? dark : docco}
+                  customStyle={{
+                    background: "transparent",
+                    border: "none",
+                    boxShadow: "none",
+                  }}
+                >
+                  {diffText?.trim() || "(empty diff)"}
+                </SyntaxHighlighter>
+              )
+            ) : fileContentLoading ? (
+              <LoadingAnimation className="mx-auto my-12" />
+            ) : fileContentError ? (
+              <p className="text-sm text-muted-foreground">{fileContentError}</p>
+            ) : (
+              <SyntaxHighlighter
+                language={getLanguageFromFilePath(selectedFile?.path)}
+                style={resolvedTheme === "dark" ? dark : docco}
+                customStyle={{
+                  background: "transparent",
+                  border: "none",
+                  boxShadow: "none",
+                }}
+              >
+                {selectedFileContent.trim() || "(empty)"}
+              </SyntaxHighlighter>
+            )}
           </div>
-          {selectedFile?.truncated && (
+          {diffView === "diff" && diffTruncated && (
+            <p className="text-xs text-muted-foreground">
+              Diff truncated due to size limits
+            </p>
+          )}
+          {diffView === "content" && selectedFile?.truncated && (
             <p className="text-xs text-muted-foreground">
               Showing truncated content
             </p>
           )}
           </DialogContent>
         </Dialog>
+      <Dialog
+        open={Boolean(runTarget)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRunTarget(null);
+            setRunResult(null);
+            setRunError(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Run output</DialogTitle>
+            <DialogDescription>{runTarget ?? ""}</DialogDescription>
+          </DialogHeader>
+          <div className="bg-accent max-h-[60vh] overflow-auto rounded-md p-4 text-sm">
+            {runLoading ? (
+              <LoadingAnimation className="mx-auto my-12" />
+            ) : (
+              <SyntaxHighlighter
+                language="text"
+                style={resolvedTheme === "dark" ? dark : docco}
+                customStyle={{
+                  background: "transparent",
+                  border: "none",
+                  boxShadow: "none",
+                }}
+              >
+                {runResult?.trim() || "(no output)"}
+              </SyntaxHighlighter>
+            )}
+          </div>
+          {runError && (
+            <p className="text-xs text-red-500">
+              {runError}
+            </p>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
