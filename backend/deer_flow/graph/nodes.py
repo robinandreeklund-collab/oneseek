@@ -3106,35 +3106,60 @@ async def ai_compare_synth_node(
         max_search_results=configurable.max_search_results,
         resources=state.get("resources", []),
     )
-    tools = [synthesize_optimal_answer]
-    result = await _setup_and_execute_agent_step(
-        state,
-        config,
-        "ai_compare_synth",
-        tools,
+    query = state.get("research_topic", "")
+    model_responses_json = state.get("ai_compare_responses_json") or json.dumps(
+        state.get("ai_compare_responses", []), ensure_ascii=False
     )
-    payload = {}
-    for message in result.update.get("messages", []):
-        if isinstance(message, ToolMessage) and message.name == "synthesize_optimal_answer":
-            payload = _parse_json_content(message.content or "")
-            break
-    if not payload:
-        payload = _parse_json_content(
-            result.update.get("messages", [])[-1].content
-            if result.update.get("messages")
-            else ""
-        )
-    synthesis = payload.get("synthesis") if payload else None
-    synthesis_payload = synthesis or payload
-    synthesis_json = json.dumps(synthesis_payload, ensure_ascii=False) if synthesis_payload else None
+    analysis_json = state.get("ai_compare_fact_check_json") or json.dumps(
+        state.get("ai_compare_fact_check") or {}, ensure_ascii=False
+    )
+    meta_json = state.get("ai_compare_meta_json") or json.dumps(
+        state.get("ai_compare_meta") or {}, ensure_ascii=False
+    )
+
+    tool_result = await synthesize_optimal_answer.ainvoke(
+        {
+            "query": query,
+            "model_responses_json": model_responses_json,
+            "analysis_json": analysis_json,
+            "meta_json": meta_json,
+        }
+    )
+    payload = _parse_json_content(str(tool_result))
+    synthesis_payload = None
+    if isinstance(payload, dict):
+        synthesis_payload = payload.get("synthesis") or payload
+    elif payload:
+        synthesis_payload = payload
+    synthesis_json = (
+        json.dumps(synthesis_payload, ensure_ascii=False) if synthesis_payload else None
+    )
+
+    current_plan = state.get("current_plan")
+    from backend.deer_flow.prompts.planner_model import Plan, StepType
+    if isinstance(current_plan, Plan):
+        for step in current_plan.steps:
+            if not step.execution_res and step.step_type == StepType.AI_SYNTH:
+                step.execution_res = "AI comparison synthesis completed"
+                break
     return Command(
         update={
             **preserve_state_meta_fields(state),
-            **result.update,
             "ai_compare_synthesis": synthesis_payload,
             "ai_compare_synthesis_json": synthesis_json,
+            "messages": [
+                AIMessage(
+                    content=(
+                        json.dumps(synthesis_payload, ensure_ascii=False)
+                        if synthesis_payload
+                        else ""
+                    ),
+                    name="ai_compare_synth",
+                )
+            ],
+            "current_plan": current_plan,
         },
-        goto=result.goto,
+        goto="ai_compare_team",
     )
 
 
