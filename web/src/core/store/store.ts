@@ -331,6 +331,9 @@ export async function sendMessage(
   const settings = getChatStreamSettings();
   if (!settings.autoAcceptedPlan && !interruptFeedback) {
     useStore.getState().setPlanApprovalPending(true);
+    useStore.getState().closeResearch();
+    useStore.getState().closeCoder();
+    useStore.getState().closeDebate();
   } else if (settings.autoAcceptedPlan) {
     useStore.getState().setPlanApprovalPending(false);
   }
