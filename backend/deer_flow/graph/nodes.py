@@ -3345,8 +3345,8 @@ async def synthesizer_node(
     thread_id = get_thread_id_from_config(config)
     locale = state.get("locale", "en-US")
     
-    # Get web search and other tools for additional context
-    tools = [get_web_search_tool(configurable.max_search_results), crawl_tool]
+    # Get web search tool for additional context (no crawl_tool)
+    tools = [get_web_search_tool(configurable.max_search_results)]
     
     # Build prompt for synthesizer
     messages = apply_prompt_template("synthesizer", state, configurable, locale)
