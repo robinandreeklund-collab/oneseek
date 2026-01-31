@@ -626,9 +626,11 @@ def _get_agent_name(agent, message_metadata):
     if "debate" in agent_name.lower():
         logger.info(f"🔍 DEBUG _get_agent_name: agent={agent}, agent_name={agent_name}")
     
-    # Keep debate planner output compatible with planner UI rendering.
+    # Keep planner outputs compatible with planner UI rendering.
     if agent_name == "debate_planner":
         return "planner"
+    if agent_name == "ai_comparison":
+        return "ai_comparison_planner"
     return agent_name
 
 
