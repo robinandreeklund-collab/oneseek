@@ -279,6 +279,14 @@ def preserve_state_meta_fields(state: State) -> dict:
     }
 
 
+def get_team_route(state: State) -> str:
+    """Return the appropriate team router for the current plan."""
+    plan_source = state.get("plan_source")
+    if plan_source == "code_planner":
+        return "code_team"
+    return "research_team"
+
+
 def get_thread_id_from_config(config: RunnableConfig | None) -> str:
     """Extract thread_id from runnable config."""
     if not config:
@@ -920,7 +928,7 @@ def extract_plan_content(plan_data: str | dict | Any) -> str:
 
 def human_feedback_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["planner", "research_team", "reporter", "debate_orchestrator", "__end__"]]:
+) -> Command[Literal["planner", "research_team", "code_team", "reporter", "debate_orchestrator", "__end__"]]:
     coder_flag = state.get('coder_just_completed', False)
     logger.info(f"[human_feedback_node] ENTERED - coder_just_completed={coder_flag}")
     logger.info(f"[human_feedback_node] State keys: {list(state.keys())}")
@@ -955,7 +963,7 @@ def human_feedback_node(
         feedback_normalized = str(feedback).strip().upper()
         
         if feedback_normalized.startswith("[TEST]"):
-            logger.info("User requested testing. Creating TESTING step and routing to research_team.")
+            logger.info("User requested testing. Creating TESTING step and routing to team.")
             # Add a TESTING step to the current plan
             current_plan = state.get("current_plan")
             if current_plan and hasattr(current_plan, 'steps'):
@@ -980,7 +988,7 @@ def human_feedback_node(
                         "coder_just_completed": False,  # Clear flag
                         **preserve_state_meta_fields(state),
                     },
-                    goto="research_team"
+                    goto=get_team_route(state),
                 )
         
         # If [SKIP] or any other response, skip testing and go to reporter
@@ -1048,9 +1056,9 @@ def human_feedback_node(
         goto = "debate_orchestrator"
         logger.info("[human_feedback_node] Plan approved in debate mode, routing to debate_orchestrator")
     else:
-        # Normal mode - route to research_team
-        goto = "research_team"
-        logger.info("[human_feedback_node] Plan approved, routing to research_team")
+        # Normal mode - route to appropriate team
+        goto = get_team_route(state)
+        logger.info(f"[human_feedback_node] Plan approved, routing to {goto}")
     
     try:
         # Safely extract plan content from different types (string, AIMessage, dict)
@@ -1784,6 +1792,13 @@ def research_team_node(state: State):
     pass
 
 
+def code_team_node(state: State):
+    """Code team node that orchestrates code-only tasks."""
+    logger.info("Code team is collaborating on code tasks.")
+    logger.debug("Entering code_team_node - coordinating code-only agents")
+    pass
+
+
 def validate_web_search_usage(messages: list, agent_name: str = "agent") -> bool:
     """
     Validate if the agent has used the web search tool during execution.
@@ -1829,9 +1844,10 @@ def validate_web_search_usage(messages: list, agent_name: str = "agent") -> bool
 
 async def _execute_agent_step(
     state: State, agent, agent_name: str, config: RunnableConfig = None
-) -> Command[Literal["research_team"]]:
+) -> Command[Literal["research_team", "code_team"]]:
     """Helper function to execute a step using the specified agent."""
     logger.debug(f"[_execute_agent_step] Starting execution for agent: {agent_name}")
+    team_goto = get_team_route(state)
     
     current_plan = state.get("current_plan")
     
@@ -1852,7 +1868,7 @@ async def _execute_agent_step(
             # Return to research_team if parsing fails
             return Command(
                 update=preserve_state_meta_fields(state),
-                goto="research_team"
+                goto=team_goto
             )
     
     # Handle case where current_plan is None (direct call from coordinator for code questions)
@@ -1905,7 +1921,7 @@ async def _execute_agent_step(
         logger.warning(f"[_execute_agent_step] No unexecuted step found in {len(current_plan.steps)} total steps")
         return Command(
             update=preserve_state_meta_fields(state),
-            goto="research_team"
+            goto=team_goto
         )
 
     logger.info(f"[_execute_agent_step] Executing step: {current_step.title}, agent: {agent_name}")
@@ -2035,7 +2051,7 @@ async def _execute_agent_step(
                 "observations": observations + [detailed_error],
                 **preserve_state_meta_fields(state),
             },
-            goto="research_team",
+            goto=team_goto,
         )
 
     # Process the result
@@ -2157,7 +2173,7 @@ async def _execute_agent_step(
             "observations": observations + [response_content + validation_info],
             "citations": merged_citations,  # Store merged citations based on existing state and new tool results
         },
-        goto="research_team",
+        goto=team_goto,
     )
 
 
@@ -2166,7 +2182,7 @@ async def _setup_and_execute_agent_step(
     config: RunnableConfig,
     agent_type: str,
     default_tools: list,
-) -> Command[Literal["research_team"]]:
+) -> Command[Literal["research_team", "code_team"]]:
     """Helper function to set up an agent with appropriate tools and execute a step.
 
     This function handles the common logic for both researcher_node and coder_node:
@@ -2181,7 +2197,7 @@ async def _setup_and_execute_agent_step(
         default_tools: The default tools to add to the agent
 
     Returns:
-        Command to update state and go to research_team
+        Command to update state and go to the appropriate team router
     """
     configurable = Configuration.from_runnable_config(config)
     mcp_servers = {}
@@ -2288,6 +2304,33 @@ async def researcher_node(
         state,
         config,
         "researcher",
+        tools,
+    )
+
+
+async def code_researcher_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["code_team"]]:
+    """Code researcher node that gathers code/documentation references."""
+    logger.info("Code researcher node is researching code references.")
+    logger.debug("[code_researcher_node] Starting code researcher agent")
+
+    configurable = Configuration.from_runnable_config(config)
+
+    tools = []
+    if configurable.enable_web_search:
+        tools.extend([get_web_search_tool(configurable.max_search_results), crawl_tool])
+    else:
+        logger.info("[code_researcher_node] Web search disabled, using local resources only")
+
+    retriever_tool = get_retriever_tool(state.get("resources", []))
+    if retriever_tool:
+        tools.insert(0, retriever_tool)
+
+    return await _setup_and_execute_agent_step(
+        state,
+        config,
+        "code_researcher",
         tools,
     )
 

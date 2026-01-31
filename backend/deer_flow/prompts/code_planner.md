@@ -39,6 +39,7 @@ You MUST create a plan that breaks down the code task into clear, executable ste
 - Find library documentation or API references
 - Research algorithms or design patterns
 - Only include if external information is needed
+- These steps are executed by `code_researcher` (code-only chain)
 
 ### Processing Steps (`step_type: "processing"`, `need_search: false`)
 - Code implementation tasks
@@ -194,7 +195,7 @@ Your response MUST be valid JSON matching this schema:
 
 - The plan will be reviewed by a human before execution (human feedback)
 - Coder agent will execute processing steps
-- Researcher agent will execute research steps (if needed)
+- Code researcher agent will execute research steps (if needed)
 - **Testing is NOT automatic** - after coding, user will be asked: "Would you like me to test the code?"
 - If user approves testing, Tester agent will run appropriate tests
 - Focus on creating clear, actionable implementation steps

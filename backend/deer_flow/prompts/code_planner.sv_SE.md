@@ -39,6 +39,7 @@ Du MÅSTE skapa en plan som delar upp koduppgiften i tydliga, körbara steg. Pla
 - Hitta biblioteksdokumentation eller API-referenser
 - Forska algoritmer eller designmönster
 - Inkludera endast om extern information behövs
+- Dessa steg körs av `code_researcher` (kodkedjan)
 
 ### Bearbetningssteg (`step_type: "processing"`, `need_search: false`)
 - Kodimplementeringsuppgifter
@@ -200,7 +201,7 @@ Ditt svar MÅSTE vara giltig JSON som matchar detta schema:
 
 - Planen kommer att granskas av en människa före exekvering (mänsklig feedback)
 - Coder-agent kommer att utföra bearbetningssteg
-- Researcher-agent kommer att utföra forskningssteg (om det behövs)
+- Code researcher-agent kommer att utföra forskningssteg (om det behövs)
 - **Testning är INTE automatisk** - efter kodning kommer användaren tillfrågas: "Vill du att jag testar koden?"
 - Om användaren godkänner testning kommer Tester-agenten köra lämpliga tester
 - Fokusera på att skapa tydliga, åtgärdbara implementeringssteg

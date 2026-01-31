@@ -438,6 +438,7 @@ function appendMessage(message: Message) {
     appendResearchActivity(message);
   } else if (
     message.agent === "coder" ||
+    message.agent === "code_researcher" ||
     message.agent === "code_reviewer" ||
     message.agent === "code_refiner"
   ) {
