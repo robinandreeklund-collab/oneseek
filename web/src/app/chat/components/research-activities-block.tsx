@@ -685,6 +685,12 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
     } else if (toolCall.name === "query_grok4") {
       const label = modelDisplayName ?? "Grok-4";
       return isSwedish ? `Väntar på ${label}...` : `Waiting for ${label}...`;
+    } else if (toolCall.name === "fact_check_responses") {
+      return isSwedish ? "Väntar på faktakoll..." : "Waiting for fact check...";
+    } else if (toolCall.name === "run_meta_analysis") {
+      return isSwedish ? "Väntar på meta‑analys..." : "Waiting for meta analysis...";
+    } else if (toolCall.name === "synthesize_optimal_answer") {
+      return isSwedish ? "Väntar på syntes..." : "Waiting for synthesis...";
     } else if (toolCall.name === "start_debate_round") {
         const args = toolCall.args as { round_number?: number };
         return isSwedish
@@ -726,6 +732,15 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
          const label = modelDisplayName ?? "Grok-4";
          return isSwedish ? `${label} svarade` : `${label} responded`;
        }
+      if (toolCall.name === "fact_check_responses") {
+        return isSwedish ? "Faktakoll klart" : "Fact check completed";
+      }
+      if (toolCall.name === "run_meta_analysis") {
+        return isSwedish ? "Meta‑analys klar" : "Meta analysis completed";
+      }
+      if (toolCall.name === "synthesize_optimal_answer") {
+        return isSwedish ? "Syntes klar" : "Synthesis completed";
+      }
        if (toolCall.name === "start_debate_round") return isSwedish ? "Runda startad" : "Round started";
        if (toolCall.name === "collect_debate_votes") return isSwedish ? "Röster insamlade" : "Votes collected";
        return isSwedish ? `Körde ${toolCall.name}()` : `Executed ${toolCall.name}()`;

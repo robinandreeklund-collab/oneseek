@@ -301,7 +301,8 @@ async def synthesize_optimal_answer(
     query: str,
     model_responses_json: str,
     analysis_json: str,
-    meta_json: str
+    meta_json: str,
+    locale: str = "en-US",
 ) -> str:
     """
     Synthesize an optimal answer by combining insights from all models, fact-checking, and meta-analysis.
@@ -311,6 +312,7 @@ async def synthesize_optimal_answer(
         model_responses_json: JSON list of model responses
         analysis_json: JSON fact-check analysis results
         meta_json: JSON meta-analysis results
+        locale: Output locale (e.g., sv-SE)
         
     Returns:
         Synthesized optimal answer with sources and reasoning
@@ -334,7 +336,7 @@ async def synthesize_optimal_answer(
             meta_results = {}
 
         synthesis = await comparison_flow.synthesize_optimal_answer(
-            query, responses, analysis, meta_results
+            query, responses, analysis, meta_results, locale=locale
         )
         return _safe_json_dump(synthesis)
         

@@ -19,6 +19,7 @@ You are `ai_compare_reporter`. Create a clear comparison report with citations a
 6. **Meta‑Analysis Insights**
 
 Use markdown. Keep the report focused and readable.
+Keep it under 700 words and avoid repetition.
 
 User query:
 {{ research_topic }}

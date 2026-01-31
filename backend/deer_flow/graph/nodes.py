@@ -3136,33 +3136,53 @@ async def ai_compare_fact_check_node(
         max_search_results=configurable.max_search_results,
         resources=state.get("resources", []),
     )
-    tools = [fact_check_responses]
-    result = await _setup_and_execute_agent_step(
-        state,
-        config,
-        "ai_compare_fact_check",
-        tools,
+    query = state.get("research_topic", "")
+    model_responses_json = state.get("ai_compare_responses_json") or json.dumps(
+        state.get("ai_compare_responses", []), ensure_ascii=False
     )
-    payload = {}
-    for message in result.update.get("messages", []):
-        if isinstance(message, ToolMessage) and message.name == "fact_check_responses":
-            payload = _parse_json_content(message.content or "")
-            break
-    if not payload:
-        payload = _parse_json_content(
-            result.update.get("messages", [])[-1].content
-            if result.update.get("messages")
-            else ""
-        )
+    tool_call_id = uuid4().hex
+    tool_args = {"query": query, "model_responses_json": model_responses_json}
+    try:
+        tool_output = await fact_check_responses.ainvoke(tool_args)
+    except Exception as exc:
+        tool_output = json.dumps({"error": str(exc)}, ensure_ascii=False)
+    payload = _parse_json_content(str(tool_output))
+    ui_text = ""
+    if isinstance(payload, dict) and payload:
+        summary = payload.get("fact_check_summary") or payload.get("summary")
+        if summary:
+            ui_text = f"### Faktakoll\n\n{summary}"
+    messages = [
+        AIMessage(
+            content="",
+            name="ai_compare_fact_check",
+            tool_calls=[
+                {"id": tool_call_id, "name": "fact_check_responses", "args": tool_args}
+            ],
+        ),
+        ToolMessage(
+            content=ui_text or str(tool_output),
+            tool_call_id=tool_call_id,
+            name="fact_check_responses",
+        ),
+    ]
+    current_plan = state.get("current_plan")
+    from backend.deer_flow.prompts.planner_model import Plan, StepType
+    if isinstance(current_plan, Plan):
+        for step in current_plan.steps:
+            if not step.execution_res and step.step_type == StepType.AI_FACT_CHECK:
+                step.execution_res = "Fact check completed"
+                break
     fact_check_json = json.dumps(payload, ensure_ascii=False) if payload else None
     return Command(
         update={
             **preserve_state_meta_fields(state),
-            **result.update,
             "ai_compare_fact_check": payload or None,
             "ai_compare_fact_check_json": fact_check_json,
+            "messages": messages,
+            "current_plan": current_plan,
         },
-        goto=result.goto,
+        goto="ai_compare_team",
     )
 
 
@@ -3175,35 +3195,57 @@ async def ai_compare_meta_node(
         max_search_results=configurable.max_search_results,
         resources=state.get("resources", []),
     )
-    tools = [run_meta_analysis]
-    result = await _setup_and_execute_agent_step(
-        state,
-        config,
-        "ai_compare_meta",
-        tools,
+    query = state.get("research_topic", "")
+    model_responses_json = state.get("ai_compare_responses_json") or json.dumps(
+        state.get("ai_compare_responses", []), ensure_ascii=False
     )
-    payload = {}
-    for message in result.update.get("messages", []):
-        if isinstance(message, ToolMessage) and message.name == "run_meta_analysis":
-            payload = _parse_json_content(message.content or "")
-            break
-    if not payload:
-        payload = _parse_json_content(
-            result.update.get("messages", [])[-1].content
-            if result.update.get("messages")
-            else ""
-        )
+    analysis_json = state.get("ai_compare_fact_check_json") or json.dumps(
+        state.get("ai_compare_fact_check") or {}, ensure_ascii=False
+    )
+    tool_call_id = uuid4().hex
+    tool_args = {
+        "query": query,
+        "model_responses_json": model_responses_json,
+        "analysis_json": analysis_json,
+    }
+    try:
+        tool_output = await run_meta_analysis.ainvoke(tool_args)
+    except Exception as exc:
+        tool_output = json.dumps({"error": str(exc)}, ensure_ascii=False)
+    payload = _parse_json_content(str(tool_output))
+    messages = [
+        AIMessage(
+            content="",
+            name="ai_compare_meta",
+            tool_calls=[
+                {"id": tool_call_id, "name": "run_meta_analysis", "args": tool_args}
+            ],
+        ),
+        ToolMessage(
+            content=str(tool_output),
+            tool_call_id=tool_call_id,
+            name="run_meta_analysis",
+        ),
+    ]
+    current_plan = state.get("current_plan")
+    from backend.deer_flow.prompts.planner_model import Plan, StepType
+    if isinstance(current_plan, Plan):
+        for step in current_plan.steps:
+            if not step.execution_res and step.step_type == StepType.AI_META:
+                step.execution_res = "Meta analysis completed"
+                break
     meta_results = payload.get("meta_results") if payload else None
     meta_payload = meta_results or payload
     meta_json = json.dumps(meta_payload, ensure_ascii=False) if meta_payload else None
     return Command(
         update={
             **preserve_state_meta_fields(state),
-            **result.update,
             "ai_compare_meta": meta_payload,
             "ai_compare_meta_json": meta_json,
+            "messages": messages,
+            "current_plan": current_plan,
         },
-        goto=result.goto,
+        goto="ai_compare_team",
     )
 
 
@@ -3227,14 +3269,15 @@ async def ai_compare_synth_node(
         state.get("ai_compare_meta") or {}, ensure_ascii=False
     )
 
-    tool_result = await synthesize_optimal_answer.ainvoke(
-        {
-            "query": query,
-            "model_responses_json": model_responses_json,
-            "analysis_json": analysis_json,
-            "meta_json": meta_json,
-        }
-    )
+    tool_call_id = uuid4().hex
+    tool_args = {
+        "query": query,
+        "model_responses_json": model_responses_json,
+        "analysis_json": analysis_json,
+        "meta_json": meta_json,
+        "locale": state.get("locale", "en-US"),
+    }
+    tool_result = await synthesize_optimal_answer.ainvoke(tool_args)
     payload = _parse_json_content(str(tool_result))
     synthesis_payload = None
     if isinstance(payload, dict):
@@ -3259,13 +3302,25 @@ async def ai_compare_synth_node(
             "ai_compare_synthesis_json": synthesis_json,
             "messages": [
                 AIMessage(
+                    content="",
+                    name="ai_compare_synth",
+                    tool_calls=[
+                        {
+                            "id": tool_call_id,
+                            "name": "synthesize_optimal_answer",
+                            "args": tool_args,
+                        }
+                    ],
+                ),
+                ToolMessage(
                     content=(
                         json.dumps(synthesis_payload, ensure_ascii=False)
                         if synthesis_payload
                         else ""
                     ),
-                    name="ai_compare_synth",
-                )
+                    tool_call_id=tool_call_id,
+                    name="synthesize_optimal_answer",
+                ),
             ],
             "current_plan": current_plan,
         },
