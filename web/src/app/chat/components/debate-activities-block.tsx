@@ -239,7 +239,7 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
   }, [toolCall.args, toolCall.name]);
   const metrics = useMemo(() => {
     if (!toolCall.result) return null;
-    const match = toolCall.result.match(/METRICS:\s*(.+)$/m);
+    const match = /METRICS:\s*(.+)$/m.exec(toolCall.result);
     if (!match) return null;
     const parts = match[1].split(" ").filter(Boolean);
     const entries: Record<string, string> = {};

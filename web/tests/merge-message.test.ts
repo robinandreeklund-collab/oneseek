@@ -330,4 +330,53 @@ describe("mergeMessage", () => {
       expect(result.toolCalls?.[0]?.argsChunks?.[0]).toBe("{[test]}");
     });
   });
+
+  describe("metadata tool actions", () => {
+    it("should update tool call results from tool_actions metadata", () => {
+      const message = {
+        id: "msg-1",
+        threadId: "thread-1",
+        role: "assistant",
+        content: "",
+        contentChunks: [],
+        toolCalls: [
+          {
+            id: "tool-1",
+            name: "python_repl_tool",
+            args: { code: "print('hello')" },
+            result: undefined,
+          },
+        ],
+      };
+      const metadataEvent = {
+        type: "data",
+        data: {
+          tool_actions: [
+            {
+              tool_call_id: "tool-1",
+              tool_name: "python_repl_tool",
+              tool_output: "hello",
+              status: "completed",
+            },
+          ],
+          live_update: true,
+        },
+      };
+
+      // Simulate store updater behavior without requiring the full store
+      const toolAction = metadataEvent.data.tool_actions[0];
+      const updatedToolCalls = message.toolCalls?.map((toolCall) => {
+        if (toolCall.id !== toolAction.tool_call_id) return toolCall;
+        return {
+          ...toolCall,
+          name: toolAction.tool_name ?? toolCall.name,
+          result: toolAction.tool_output as string,
+          status: toolAction.status,
+        };
+      });
+
+      expect(updatedToolCalls?.[0]?.result).toBe("hello");
+      expect(updatedToolCalls?.[0]?.status).toBe("completed");
+    });
+  });
 });

@@ -8,7 +8,13 @@ import { useShallow } from "zustand/react/shallow";
 
 import { chatStream, generatePodcast } from "../api";
 import { isPlannerAgent, mergeMessage } from "../messages";
-import type { Citation, Message, Resource } from "../messages";
+import type {
+  Citation,
+  Message,
+  Resource,
+  ToolAction,
+  WorkspaceFile,
+} from "../messages";
 import { parseJSON } from "../utils";
 
 import { getChatStreamSettings } from "./settings-store";
@@ -32,12 +38,12 @@ function getLocaleFromCookie(): string {
 // Helper function to get translated podcast prompt
 function getPodcastPromptTranslation(): string {
   const locale = getLocaleFromCookie();
-  const translations: Record<string, string> = {
+   const translations: Record<string, string> = {
     "en": "Please generate a podcast for the above research.",
     "sv": "Vänligen generera en podcast för ovanstående forskning.",
     "zh": "请为以上研究生成播客。"
   };
-  return translations[locale] ?? translations["en"]!;
+   return translations[locale] ?? translations.en!;
 }
 
 
@@ -56,6 +62,7 @@ export const useStore = create<{
   openResearchId: string | null;
   coderSessionIds: string[];
   coderActivityIds: Map<string, string[]>;
+  coderWorkspaceFiles: Map<string, WorkspaceFile[]>;
   ongoingCoderSessionId: string | null;
   openCoderSessionId: string | null;
   debateSessionIds: string[];
@@ -76,6 +83,7 @@ export const useStore = create<{
   openDebate: (sessionId: string | null) => void;
   closeDebate: () => void;
   setOngoingDebateSession: (sessionId: string | null) => void;
+  updateToolActions: (actions: ToolAction[], liveUpdate?: boolean) => void;
 }>((set) => ({
   responding: false,
   threadId: THREAD_ID,
@@ -91,6 +99,7 @@ export const useStore = create<{
   openResearchId: null,
   coderSessionIds: [],
   coderActivityIds: new Map<string, string[]>(),
+  coderWorkspaceFiles: new Map<string, WorkspaceFile[]>(),
   ongoingCoderSessionId: null,
   openCoderSessionId: null,
   debateSessionIds: [],
@@ -156,6 +165,61 @@ export const useStore = create<{
   setOngoingDebateSession(sessionId: string | null) {
     set({ ongoingDebateSessionId: sessionId });
   },
+  updateToolActions(actions: ToolAction[], liveUpdate = true) {
+    const currentMessages = useStore.getState().messages;
+    const updatedMessages = new Map(currentMessages);
+    const updatedMessageIds = new Set<string>();
+    const toolActions = actions.filter(
+      (action) => action && typeof action.tool_call_id === "string",
+    );
+    const updatedWorkspaceFiles = new Map(useStore.getState().coderWorkspaceFiles);
+
+    toolActions.forEach((action) => {
+      const targetMessage = findMessageByToolCallId(action.tool_call_id);
+      if (!targetMessage) return;
+      const toolCalls = targetMessage.toolCalls ?? [];
+      const updatedToolCalls = toolCalls.map((toolCall) => {
+        if (toolCall.id !== action.tool_call_id) return toolCall;
+        const rawInput = action.input ?? action.tool_input;
+        const mergedArgs =
+          rawInput && typeof rawInput === "object"
+            ? (rawInput as Record<string, unknown>)
+            : toolCall.args;
+        const rawOutput = action.output ?? action.tool_output;
+        const mergedResult =
+          rawOutput !== undefined
+            ? typeof rawOutput === "string"
+              ? rawOutput
+              : JSON.stringify(rawOutput, null, 2)
+            : toolCall.result;
+        const mergedStatus = action.status ?? toolCall.status;
+        return {
+          ...toolCall,
+          name: action.tool_name ?? toolCall.name,
+          args: mergedArgs,
+          result: mergedResult,
+          status: mergedStatus,
+        };
+      });
+      if (action.workspace_files?.length) {
+        updatedWorkspaceFiles.set(targetMessage.id, action.workspace_files);
+      }
+      const updatedMessage = {
+        ...targetMessage,
+        toolCalls: updatedToolCalls,
+        ...(liveUpdate ? { isStreaming: true } : {}),
+      };
+      updatedMessages.set(updatedMessage.id, updatedMessage);
+      updatedMessageIds.add(updatedMessage.id);
+    });
+
+    if (updatedMessageIds.size > 0) {
+      set({
+        messages: updatedMessages,
+        coderWorkspaceFiles: updatedWorkspaceFiles,
+      });
+    }
+  },
 }));
 
 export async function sendMessage(
@@ -207,7 +271,7 @@ export async function sendMessage(
 
   setResponding(true);
   let messageId: string | undefined;
-  let lastEvent: any;
+  let lastEvent: unknown;
   let lastMessage: Message | undefined;
   const pendingUpdates = new Map<string, Message>();
   let updateTimer: NodeJS.Timeout | undefined;
@@ -230,6 +294,18 @@ export async function sendMessage(
       let message: Message | undefined;
       
       // Handle citations event: store citations for the current research
+      if (type === "data") {
+        const actions = Array.isArray((data as { tool_actions?: ToolAction[] }).tool_actions)
+          ? (data as { tool_actions?: ToolAction[] }).tool_actions ?? []
+          : [];
+        if (actions.length > 0) {
+          useStore.getState().updateToolActions(
+            actions,
+            Boolean((data as { live_update?: boolean }).live_update),
+          );
+        }
+        continue;
+      }
       if (type === "citations") {
         const ongoingResearchId = useStore.getState().ongoingResearchId;
         if (ongoingResearchId && data.citations) {
@@ -334,7 +410,7 @@ function findMessageByToolCallId(toolCallId: string) {
 
 function appendMessage(message: Message) {
   // DEBUG: Log all messages to trace debate flow
-  if (message.agent && message.agent.includes("debate")) {
+  if (message.agent?.includes("debate")) {
     console.log("🔍 DEBUG appendMessage: agent=", message.agent, "id=", message.id);
   }
   if (message.agent === "external_ai_caller") {

@@ -28,11 +28,19 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "~/components/ui/accordion";
+import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Card } from "~/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "~/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { findMCPTool } from "~/core/mcp";
-import type { ToolCallRuntime } from "~/core/messages";
+import type { ToolCallRuntime, WorkspaceFile } from "~/core/messages";
 import { closeCoder, useMessage, useStore } from "~/core/store";
 import { cn } from "~/lib/utils";
 
@@ -176,16 +184,14 @@ function CoderActivityItem({ messageId }: { messageId: string }) {
     return null;
   }
 
-  if (!message.isStreaming && message.toolCalls?.length) {
+  if (message.toolCalls?.length) {
     const toolCallComponents = message.toolCalls
-      .filter(
-        (toolCall) =>
-          !(
-            typeof toolCall.result === "string" &&
-            (toolCall.result.trim().startsWith("Error:") || 
-             toolCall.result.trim().startsWith("ERROR:"))
-          ),
-      )
+      .slice()
+      .sort((a, b) => {
+        if (a.result && !b.result) return 1;
+        if (!a.result && b.result) return -1;
+        return 0;
+      })
       .map((toolCall) => {
         if (toolCall.name === "python_repl_tool") {
           return <PythonToolCall key={toolCall.id} toolCall={toolCall} />;
@@ -211,10 +217,24 @@ function CoderActivityItem({ messageId }: { messageId: string }) {
 
 function PythonToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
   const t = useTranslations("chat.coder");
+  const { resolvedTheme } = useTheme();
   const code = useMemo<string | undefined>(() => {
     return (toolCall.args as { code?: string }).code;
   }, [toolCall.args]);
-  const { resolvedTheme } = useTheme();
+  const statusLabel = useMemo(() => {
+    if (toolCall.result) {
+      return toolCall.result.trim().startsWith("Error:")
+        ? t("statusError")
+        : t("statusSuccess");
+    }
+    if (toolCall.status === "running") {
+      return t("statusRunning");
+    }
+    if (toolCall.status === "complete" || toolCall.status === "completed") {
+      return t("statusSuccess");
+    }
+    return t("statusPending");
+  }, [toolCall.result, toolCall.status, t]);
 
   return (
     <section className="mt-4 pl-4">
@@ -226,6 +246,9 @@ function PythonToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
         >
           {t("runningPython")}
         </RainbowText>
+        <Badge variant="secondary" className="ml-2">
+          {statusLabel}
+        </Badge>
       </div>
       <div>
         <div className="bg-accent mt-2 max-h-[400px] max-w-[calc(100%-120px)] overflow-y-auto rounded-md p-2 text-sm">
@@ -284,6 +307,20 @@ function FileSystemToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
     }
     return undefined;
   }, [toolCall.args, toolCall.argsChunks]);
+  const statusLabel = useMemo(() => {
+    if (toolCall.result) {
+      return toolCall.result.trim().startsWith("Error:")
+        ? t("statusError")
+        : t("statusSuccess");
+    }
+    if (toolCall.status === "running") {
+      return t("statusRunning");
+    }
+    if (toolCall.status === "complete" || toolCall.status === "completed") {
+      return t("statusSuccess");
+    }
+    return t("statusPending");
+  }, [toolCall.result, toolCall.status, t]);
 
   return (
     <section className="mt-4 pl-4">
@@ -296,6 +333,9 @@ function FileSystemToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
           {t("fileOperation")}: {operation ?? "unknown"}
           {path && ` → ${path}`}
         </RainbowText>
+        <Badge variant="secondary" className="ml-2">
+          {statusLabel}
+        </Badge>
       </div>
       {toolCall.result && <ToolCallResult result={toolCall.result} />}
     </section>
@@ -304,6 +344,20 @@ function FileSystemToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
 
 function ReactSandboxToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
   const t = useTranslations("chat.coder");
+  const statusLabel = useMemo(() => {
+    if (toolCall.result) {
+      return toolCall.result.trim().startsWith("Error:")
+        ? t("statusError")
+        : t("statusSuccess");
+    }
+    if (toolCall.status === "running") {
+      return t("statusRunning");
+    }
+    if (toolCall.status === "complete" || toolCall.status === "completed") {
+      return t("statusSuccess");
+    }
+    return t("statusPending");
+  }, [toolCall.result, toolCall.status, t]);
 
   return (
     <section className="mt-4 pl-4">
@@ -315,6 +369,9 @@ function ReactSandboxToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
         >
           {t("reactSandbox")}
         </RainbowText>
+        <Badge variant="secondary" className="ml-2">
+          {statusLabel}
+        </Badge>
       </div>
       {toolCall.result && <ToolCallResult result={toolCall.result} />}
     </section>
@@ -322,8 +379,21 @@ function ReactSandboxToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
 }
 
 function GenericToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
+  const t = useTranslations("chat.coder");
   const tool = useMemo(() => findMCPTool(toolCall.name), [toolCall.name]);
   const { resolvedTheme } = useTheme();
+  const statusLabel = useMemo(() => {
+    if (toolCall.result) {
+      return t("statusSuccess");
+    }
+    if (toolCall.status === "running") {
+      return t("statusRunning");
+    }
+    if (toolCall.status === "complete" || toolCall.status === "completed") {
+      return t("statusSuccess");
+    }
+    return t("statusPending");
+  }, [toolCall.result, toolCall.status, t]);
 
   return (
     <section className="mt-4 pl-4">
@@ -342,6 +412,9 @@ function GenericToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
                       ? `Executed ${toolCall.name}()`
                       : `Running ${toolCall.name}()`}
                   </RainbowText>
+                  <Badge variant="secondary" className="ml-2">
+                    {statusLabel}
+                  </Badge>
                 </div>
               </Tooltip>
             </AccordionTrigger>
@@ -401,7 +474,7 @@ function ToolCallResult({ result }: { result: string }) {
             boxShadow: "none",
           }}
         >
-          {result.trim() || "(empty)"}
+          {result.trim() ?? "(empty)"}
         </SyntaxHighlighter>
       </div>
     </>
@@ -414,6 +487,48 @@ function CoderPreviewBlock({ sessionId }: { sessionId: string }) {
     state.coderActivityIds.get(sessionId),
   );
   const messages = useStore((state) => state.messages);
+  const workspaceFilesByMessage = useStore((state) => state.coderWorkspaceFiles);
+  const previewHtml = useMemo(() => {
+    if (!activityIds) return null;
+    for (const activityId of [...activityIds].reverse()) {
+      const workspaceFiles = workspaceFilesByMessage.get(activityId) ?? [];
+      for (const file of workspaceFiles) {
+        if (!file.path.endsWith(".html")) continue;
+        if (file.content?.trim()) {
+          return file.content;
+        }
+      }
+      const message = messages.get(activityId);
+      if (!message?.toolCalls) continue;
+      for (const toolCall of message.toolCalls) {
+        if (toolCall.name !== "file_system_tool") continue;
+        const args = toolCall.args as { path?: string; content?: string; operation?: string };
+        if (!args.path || (args.operation !== "write" && args.operation !== "create")) {
+          continue;
+        }
+        if (!args.path.endsWith(".html")) continue;
+        if (args.content?.trim()) {
+          return args.content;
+        }
+      }
+    }
+    return null;
+  }, [activityIds, messages, workspaceFilesByMessage]);
+
+  const hasPreviewError = useMemo(() => {
+    if (!activityIds) return false;
+    for (const activityId of [...activityIds].reverse()) {
+      const message = messages.get(activityId);
+      if (!message?.toolCalls) continue;
+      for (const toolCall of message.toolCalls) {
+        if (toolCall.name !== "react_sandbox_tool") continue;
+        if (toolCall.result?.trim().startsWith("Error:")) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }, [activityIds, messages]);
 
   const previewUrl = useMemo(() => {
     if (!activityIds) return null;
@@ -438,16 +553,17 @@ function CoderPreviewBlock({ sessionId }: { sessionId: string }) {
                 return null;
               }
             }
-          } catch (e) {
+          } catch {
             // Not JSON, try to extract URL with more robust pattern
-            const urlMatch = toolCall.result.match(
-              /preview_url["':\s]+["']?(https?:\/\/[^\s'"]+)["']?/,
+            const urlMatch = /preview_url["':\s]+["']?(https?:\/\/[^\s'"]+)["']?/.exec(
+              toolCall.result,
             );
-            if (urlMatch?.[1]) {
+            const previewUrlFromMatch = urlMatch?.[1];
+            if (previewUrlFromMatch) {
               try {
-                const url = new URL(urlMatch[1]);
+                const url = new URL(previewUrlFromMatch);
                 if (url.protocol === "http:" || url.protocol === "https:") {
-                  return urlMatch[1];
+                  return previewUrlFromMatch;
                 }
               } catch {
                 return null;
@@ -460,25 +576,34 @@ function CoderPreviewBlock({ sessionId }: { sessionId: string }) {
     return null;
   }, [activityIds, messages]);
 
-  return (
-    <div className="h-full w-full py-4">
-      {previewUrl ? (
-        <iframe
-          src={previewUrl}
-          className="h-full w-full rounded-lg border"
-          title="React App Preview"
-          sandbox="allow-scripts"
-        />
-      ) : (
-        <div className="flex h-full w-full items-center justify-center">
-          <div className="text-center">
-            <Monitor className="mx-auto mb-4 h-12 w-12 opacity-50" />
-            <p className="text-muted-foreground">{t("noPreview")}</p>
+    return (
+      <div className="h-full w-full py-4">
+        {previewUrl ? (
+          <iframe
+            src={previewUrl}
+            className="h-full w-full rounded-lg border"
+            title="React App Preview"
+            sandbox="allow-scripts"
+          />
+        ) : previewHtml ? (
+          <iframe
+            srcDoc={previewHtml}
+            className="h-full w-full rounded-lg border"
+            title="HTML Preview"
+            sandbox="allow-scripts"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center">
+            <div className="text-center">
+              <Monitor className="mx-auto mb-4 h-12 w-12 opacity-50" />
+              <p className="text-muted-foreground">
+                {hasPreviewError ? t("error") : t("noPreview")}
+              </p>
+            </div>
           </div>
-        </div>
-      )}
-    </div>
-  );
+        )}
+      </div>
+    );
 }
 
 function CoderFilesBlock({ sessionId }: { sessionId: string }) {
@@ -487,30 +612,44 @@ function CoderFilesBlock({ sessionId }: { sessionId: string }) {
     state.coderActivityIds.get(sessionId),
   );
   const messages = useStore((state) => state.messages);
+  const workspaceFilesByMessage = useStore((state) => state.coderWorkspaceFiles);
+  const [selectedFile, setSelectedFile] = useState<WorkspaceFile | null>(null);
+  const { resolvedTheme } = useTheme();
 
   const files = useMemo(() => {
-    const fileSet = new Set<string>();
+    const fileMap = new Map<string, WorkspaceFile>();
     if (!activityIds) return [];
 
     for (const activityId of activityIds) {
+      const workspaceFiles = workspaceFilesByMessage.get(activityId) ?? [];
+      if (workspaceFiles.length > 0) {
+        workspaceFiles.forEach((file) => {
+          fileMap.set(file.path, file);
+        });
+      }
       const message = messages.get(activityId);
       if (!message?.toolCalls) continue;
 
       for (const toolCall of message.toolCalls) {
-        if (toolCall.name === "file_system_tool") {
-          const args = toolCall.args as { path?: string; operation?: string };
-          if (
-            args.path &&
-            (args.operation === "write" || args.operation === "create")
-          ) {
-            fileSet.add(args.path);
-          }
-        }
+        if (toolCall.name !== "file_system_tool") continue;
+        const args = toolCall.args as {
+          path?: string;
+          operation?: string;
+          content?: string;
+        };
+        if (!args.path) continue;
+        const operation = args.operation ?? "unknown";
+        fileMap.set(args.path, {
+          path: args.path,
+          name: args.path.split("/").pop(),
+          operation,
+          content: args.content ?? toolCall.result ?? "",
+        });
       }
     }
 
-    return Array.from(fileSet);
-  }, [activityIds, messages]);
+    return Array.from(fileMap.values());
+  }, [activityIds, messages, workspaceFilesByMessage]);
 
   return (
     <div className="py-4">
@@ -518,14 +657,23 @@ function CoderFilesBlock({ sessionId }: { sessionId: string }) {
         <ul className="flex flex-col gap-2">
           {files.map((file, i) => (
             <motion.li
-              key={file}
-              className="bg-accent flex items-center gap-2 rounded-md p-3"
+              key={file.path}
+              className="bg-accent flex items-center justify-between gap-2 rounded-md p-3"
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.2, delay: i * 0.05 }}
             >
-              <FileText className="h-4 w-4 shrink-0" />
-              <span className="font-mono text-sm">{file}</span>
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                onClick={() => setSelectedFile(file)}
+              >
+                <FileText className="h-4 w-4 shrink-0" />
+                <span className="truncate font-mono text-sm">{file.path}</span>
+              </button>
+              <Badge variant="secondary">
+                {file.operation ?? "unknown"}
+              </Badge>
             </motion.li>
           ))}
         </ul>
@@ -537,6 +685,39 @@ function CoderFilesBlock({ sessionId }: { sessionId: string }) {
           </div>
         </div>
       )}
+      <Dialog
+        open={Boolean(selectedFile)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedFile(null);
+        }}
+      >
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{selectedFile?.path}</DialogTitle>
+            <DialogDescription>
+              {selectedFile?.operation ?? "unknown"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="bg-accent max-h-[60vh] overflow-auto rounded-md p-4 text-sm">
+            <SyntaxHighlighter
+              language="text"
+              style={resolvedTheme === "dark" ? dark : docco}
+              customStyle={{
+                background: "transparent",
+                border: "none",
+                boxShadow: "none",
+              }}
+            >
+              {(selectedFile?.content?.trim() ?? "") || "(empty)"}
+            </SyntaxHighlighter>
+          </div>
+          {selectedFile?.truncated && (
+            <p className="text-xs text-muted-foreground">
+              Showing truncated content
+            </p>
+          )}
+          </DialogContent>
+        </Dialog>
     </div>
   );
 }
