@@ -929,6 +929,12 @@ def extract_plan_content(plan_data: str | dict | Any) -> str:
 def human_feedback_node(
     state: State, config: RunnableConfig
 ) -> Command[Literal["planner", "research_team", "code_team", "reporter", "debate_orchestrator", "__end__"]]:
+    if state.get("final_report") and state.get("plan_source") == "code_planner":
+        logger.info("[human_feedback_node] Code plan complete, routing to END")
+        return Command(
+            update=preserve_state_meta_fields(state),
+            goto=END,
+        )
     coder_flag = state.get('coder_just_completed', False)
     logger.info(f"[human_feedback_node] ENTERED - coder_just_completed={coder_flag}")
     logger.info(f"[human_feedback_node] State keys: {list(state.keys())}")

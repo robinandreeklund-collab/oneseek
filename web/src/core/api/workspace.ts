@@ -34,11 +34,26 @@ export interface WorkspaceRunResult {
   error?: string;
 }
 
+async function fetchWithFallback(url: string, options?: RequestInit) {
+  try {
+    return await fetch(url, options);
+  } catch (error) {
+    if (typeof window === "undefined") throw error;
+    try {
+      const parsed = new URL(url);
+      const fallbackUrl = `${window.location.origin}${parsed.pathname}${parsed.search}`;
+      return await fetch(fallbackUrl, options);
+    } catch {
+      throw error;
+    }
+  }
+}
+
 export async function fetchWorkspaceHistory(threadId: string) {
   const url = resolveServiceURL(
     `workspace/history?thread_id=${encodeURIComponent(threadId)}`,
   );
-  const res = await fetch(url);
+  const res = await fetchWithFallback(url);
   if (!res.ok) {
     throw new Error(`Failed to fetch history: ${res.statusText}`);
   }
@@ -49,7 +64,7 @@ export async function fetchWorkspaceFiles(threadId: string, maxFiles = 1000) {
   const url = resolveServiceURL(
     `workspace/files?thread_id=${encodeURIComponent(threadId)}&max_files=${maxFiles}`,
   );
-  const res = await fetch(url);
+  const res = await fetchWithFallback(url);
   if (!res.ok) {
     throw new Error(`Failed to fetch files: ${res.statusText}`);
   }
@@ -63,7 +78,7 @@ export async function fetchWorkspaceFileContent(
   const url = resolveServiceURL(
     `workspace/file?thread_id=${encodeURIComponent(threadId)}&path=${encodeURIComponent(path)}`,
   );
-  const res = await fetch(url);
+  const res = await fetchWithFallback(url);
   if (!res.ok) {
     throw new Error(`Failed to fetch file: ${res.statusText}`);
   }
@@ -74,7 +89,7 @@ export async function fetchWorkspaceDiff(threadId: string, path: string) {
   const url = resolveServiceURL(
     `workspace/diff?thread_id=${encodeURIComponent(threadId)}&path=${encodeURIComponent(path)}`,
   );
-  const res = await fetch(url);
+  const res = await fetchWithFallback(url);
   if (!res.ok) {
     throw new Error(`Failed to fetch diff: ${res.statusText}`);
   }
@@ -83,7 +98,7 @@ export async function fetchWorkspaceDiff(threadId: string, path: string) {
 
 export async function undoWorkspaceChange(threadId: string) {
   const url = resolveServiceURL("workspace/undo");
-  const res = await fetch(url, {
+  const res = await fetchWithFallback(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ thread_id: threadId }),
@@ -96,7 +111,7 @@ export async function undoWorkspaceChange(threadId: string) {
 
 export async function redoWorkspaceChange(threadId: string) {
   const url = resolveServiceURL("workspace/redo");
-  const res = await fetch(url, {
+  const res = await fetchWithFallback(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ thread_id: threadId }),
@@ -109,7 +124,7 @@ export async function redoWorkspaceChange(threadId: string) {
 
 export async function runWorkspaceFile(threadId: string, path: string) {
   const url = resolveServiceURL("workspace/run");
-  const res = await fetch(url, {
+  const res = await fetchWithFallback(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ thread_id: threadId, path }),
@@ -124,7 +139,7 @@ export async function exportWorkspaceZip(threadId: string) {
   const url = resolveServiceURL(
     `workspace/export?thread_id=${encodeURIComponent(threadId)}`,
   );
-  const res = await fetch(url);
+  const res = await fetchWithFallback(url);
   if (!res.ok) {
     throw new Error(`Failed to export zip: ${res.statusText}`);
   }
