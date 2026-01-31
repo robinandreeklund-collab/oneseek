@@ -107,7 +107,17 @@ const ActivityMessage = React.memo(({ messageId }: { messageId: string }) => {
       return <PlanCard message={message} />;
     }
     // Skip reporter messages (they're shown in the Report tab)
-    if (message.agent !== "reporter" && message.agent !== "ai_compare_reporter" && message.content) {
+    if (
+      message.agent !== "reporter" &&
+      message.agent !== "ai_compare_reporter" &&
+      ![
+        "ai_compare_query",
+        "ai_compare_fact_check",
+        "ai_compare_meta",
+        "ai_compare_synth",
+      ].includes(message.agent) &&
+      message.content
+    ) {
       return (
         <div className="px-4 py-2">
           <Markdown animated checkLinkCredibility>
@@ -212,7 +222,7 @@ PlanCard.displayName = "PlanCard";
 const ActivityListItem = React.memo(({ messageId }: { messageId: string }) => {
   const message = useMessage(messageId);
   if (message) {
-    if (!message.isStreaming && message.toolCalls?.length) {
+    if (message.toolCalls?.length) {
       const toolCallComponents = message.toolCalls
         .filter(toolCall => !(typeof toolCall.result === "string" && toolCall.result?.startsWith("Error")))
         .map(toolCall => {
@@ -592,6 +602,54 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
     if (toolCall.name === "query_grok4") return "grok-4-fast-reasoning";
     return undefined;
   }, [toolCall.args, toolCall.name]);
+  const aiComparePayload = useMemo(() => {
+    if (!toolCall.result) return null;
+    const name = toolCall.name ?? "";
+    if (
+      [
+        "query_gpt35",
+        "query_gemini_flash",
+        "query_deepseek",
+        "query_grok4",
+        "fact_check_responses",
+        "run_meta_analysis",
+        "synthesize_optimal_answer",
+      ].includes(name)
+    ) {
+      return parseJSON<unknown>(toolCall.result, null) as
+        | Record<string, unknown>
+        | string
+        | null;
+    }
+    return null;
+  }, [toolCall.name, toolCall.result]);
+  const modelLabelFromKey = useMemo(() => {
+    const key =
+      (aiComparePayload &&
+      typeof aiComparePayload === "object" &&
+      "model" in aiComparePayload
+        ? String((aiComparePayload as Record<string, unknown>).model)
+        : modelIconKey) ?? "";
+    if (key === "gpt-3.5-turbo") return "GPT-3.5";
+    if (key === "gemini-2.5-flash") return "Gemini 2.5 Flash";
+    if (key === "deepseek-chat") return "DeepSeek";
+    if (key === "grok-4-fast-reasoning") return "Grok-4";
+    return "";
+  }, [aiComparePayload, modelIconKey]);
+  const modelDisplayName = useMemo(() => {
+    if (aiComparePayload && typeof aiComparePayload === "object" && "display_name" in aiComparePayload) {
+      const name = (aiComparePayload as Record<string, unknown>).display_name;
+      if (typeof name === "string" && name.trim()) return name;
+    }
+    return modelLabelFromKey || undefined;
+  }, [aiComparePayload, modelLabelFromKey]);
+  const resolvedModelKey = useMemo(() => {
+    if (aiComparePayload && typeof aiComparePayload === "object" && "model" in aiComparePayload) {
+      const key = String((aiComparePayload as Record<string, unknown>).model);
+      if (key) return key;
+    }
+    return modelIconKey;
+  }, [aiComparePayload, modelIconKey]);
   
   // Custom display name for debate tools
   const displayName = useMemo(() => {
@@ -608,13 +666,17 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
       }
       return isSwedish ? `Väntar på ${model}...` : `Waiting for ${model}...`;
     } else if (toolCall.name === "query_gpt35") {
-      return isSwedish ? "Väntar på GPT-3.5..." : "Waiting for GPT-3.5...";
+      const label = modelDisplayName ?? "GPT-3.5";
+      return isSwedish ? `Väntar på ${label}...` : `Waiting for ${label}...`;
     } else if (toolCall.name === "query_gemini_flash") {
-      return isSwedish ? "Väntar på Gemini 2.5 Flash..." : "Waiting for Gemini 2.5 Flash...";
+      const label = modelDisplayName ?? "Gemini 2.5 Flash";
+      return isSwedish ? `Väntar på ${label}...` : `Waiting for ${label}...`;
     } else if (toolCall.name === "query_deepseek") {
-      return isSwedish ? "Väntar på DeepSeek..." : "Waiting for DeepSeek...";
+      const label = modelDisplayName ?? "DeepSeek";
+      return isSwedish ? `Väntar på ${label}...` : `Waiting for ${label}...`;
     } else if (toolCall.name === "query_grok4") {
-      return isSwedish ? "Väntar på Grok-4..." : "Waiting for Grok-4...";
+      const label = modelDisplayName ?? "Grok-4";
+      return isSwedish ? `Väntar på ${label}...` : `Waiting for ${label}...`;
     } else if (toolCall.name === "start_debate_round") {
         const args = toolCall.args as { round_number?: number };
         return isSwedish
@@ -626,7 +688,7 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
     
     // Default: just function name
     return `${toolCall.name}()`;
-  }, [toolCall.name, toolCall.args, isSwedish]);
+  }, [toolCall.name, toolCall.args, isSwedish, modelDisplayName]);
 
   // Is this a debate tool that has finished running?
   // If so, we might want to change the text from "Waiting..." to "Responded"
@@ -640,16 +702,57 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
            }
            return isSwedish ? `${model} svarade` : `${model} responded`;
        }
-       if (toolCall.name === "query_gpt35") return isSwedish ? "GPT-3.5 svarade" : "GPT-3.5 responded";
-       if (toolCall.name === "query_gemini_flash") return isSwedish ? "Gemini 2.5 Flash svarade" : "Gemini 2.5 Flash responded";
-       if (toolCall.name === "query_deepseek") return isSwedish ? "DeepSeek svarade" : "DeepSeek responded";
-       if (toolCall.name === "query_grok4") return isSwedish ? "Grok-4 svarade" : "Grok-4 responded";
+       if (toolCall.name === "query_gpt35") {
+         const label = modelDisplayName ?? "GPT-3.5";
+         return isSwedish ? `${label} svarade` : `${label} responded`;
+       }
+       if (toolCall.name === "query_gemini_flash") {
+         const label = modelDisplayName ?? "Gemini 2.5 Flash";
+         return isSwedish ? `${label} svarade` : `${label} responded`;
+       }
+       if (toolCall.name === "query_deepseek") {
+         const label = modelDisplayName ?? "DeepSeek";
+         return isSwedish ? `${label} svarade` : `${label} responded`;
+       }
+       if (toolCall.name === "query_grok4") {
+         const label = modelDisplayName ?? "Grok-4";
+         return isSwedish ? `${label} svarade` : `${label} responded`;
+       }
        if (toolCall.name === "start_debate_round") return isSwedish ? "Runda startad" : "Round started";
        if (toolCall.name === "collect_debate_votes") return isSwedish ? "Röster insamlade" : "Votes collected";
        return isSwedish ? `Körde ${toolCall.name}()` : `Executed ${toolCall.name}()`;
     }
     return isSwedish ? `Kör ${displayName}` : `Running ${displayName}`;
-  }, [displayName, toolCall.name, toolCall.result, toolCall.args, isSwedish]);
+  }, [displayName, toolCall.name, toolCall.result, toolCall.args, isSwedish, modelDisplayName]);
+
+  const displayResult = useMemo(() => {
+    if (!toolCall.result) return "";
+    if (aiComparePayload) {
+      if (typeof aiComparePayload === "string") {
+        return aiComparePayload;
+      }
+      if (Array.isArray(aiComparePayload)) {
+        return JSON.stringify(aiComparePayload, null, 2);
+      }
+      if (typeof aiComparePayload === "object") {
+        const payload = aiComparePayload as Record<string, unknown>;
+        if (typeof payload.response === "string") {
+          return payload.response;
+        }
+        if (typeof payload.error === "string") {
+          return payload.error;
+        }
+        if (payload.synthesis) {
+          if (typeof payload.synthesis === "string") {
+            return payload.synthesis;
+          }
+          return JSON.stringify(payload.synthesis, null, 2);
+        }
+        return JSON.stringify(payload, null, 2);
+      }
+    }
+    return toolCall.result;
+  }, [aiComparePayload, toolCall.result]);
 
   return (
     <section className="mt-4 pl-4">
@@ -659,8 +762,8 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
             <AccordionTrigger>
               <Tooltip title={tool?.description}>
                 <div className="flex items-center font-medium italic">
-                  {modelIconKey ? (
-                    <DebateModelIcon modelKey={modelIconKey} size={16} className="mr-2" />
+                  {resolvedModelKey ? (
+                    <DebateModelIcon modelKey={resolvedModelKey} size={16} className="mr-2" />
                   ) : (
                     <PencilRuler size={16} className={"mr-2"} />
                   )}
@@ -694,7 +797,7 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
                       boxShadow: "none",
                     }}
                   >
-                    {toolCall.result.trim()}
+                    {displayResult.trim()}
                   </SyntaxHighlighter>
                 </div>
               )}
