@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Design 2: Neumorphic Glass</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #e8f0fe 0%, #f0e8ff 50%, #ffe8f0 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            width: 100%;
+            max-width: 850px;
+            position: relative;
+        }
+        
+        /* Glassmorphic header */
+        .header {
+            position: absolute;
+            top: -80px;
+            left: 0;
+            right: 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 24px;
+            background: rgba(255, 255, 255, 0.4);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            box-shadow: 
+                0 8px 32px rgba(0, 0, 0, 0.08),
+                inset 0 1px 0 rgba(255, 255, 255, 0.8);
+        }
+        
+        .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .logo-glass {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.6));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: bold;
+            color: #6366f1;
+            box-shadow: 
+                -6px -6px 12px rgba(255, 255, 255, 0.8),
+                6px 6px 12px rgba(0, 0, 0, 0.1);
+        }
+        
+        .brand-text {
+            font-size: 24px;
+            font-weight: 600;
+            color: #4f46e5;
+        }
+        
+        .header-actions {
+            display: flex;
+            gap: 12px;
+        }
+        
+        .icon-button {
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.6);
+            border-radius: 12px;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 
+                -4px -4px 8px rgba(255, 255, 255, 0.8),
+                4px 4px 8px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .icon-button:hover {
+            background: rgba(255, 255, 255, 0.8);
+            transform: translateY(-2px);
+        }
+        
+        /* Main card with neumorphic design */
+        .main-card {
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.7));
+            backdrop-filter: blur(20px);
+            border-radius: 32px;
+            padding: 60px 50px;
+            box-shadow: 
+                -20px -20px 40px rgba(255, 255, 255, 0.9),
+                20px 20px 40px rgba(0, 0, 0, 0.08),
+                inset 0 1px 0 rgba(255, 255, 255, 1);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+        }
+        
+        .welcome-area {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+        
+        .icon-circle {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 24px;
+            background: linear-gradient(145deg, #e8f0fe, #ffffff);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            box-shadow: 
+                -8px -8px 16px rgba(255, 255, 255, 1),
+                8px 8px 16px rgba(0, 0, 0, 0.1),
+                inset 2px 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        
+        .main-title {
+            font-size: 42px;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 12px;
+            letter-spacing: -0.5px;
+        }
+        
+        .subtitle {
+            font-size: 18px;
+            color: #64748b;
+            font-weight: 400;
+        }
+        
+        /* Neumorphic input */
+        .input-section {
+            margin-bottom: 30px;
+        }
+        
+        .input-box {
+            background: linear-gradient(145deg, #f8fafc, #f1f5f9);
+            border-radius: 24px;
+            padding: 24px 28px;
+            box-shadow: 
+                inset -6px -6px 12px rgba(255, 255, 255, 1),
+                inset 6px 6px 12px rgba(0, 0, 0, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+        }
+        
+        .input-field {
+            width: 100%;
+            background: transparent;
+            border: none;
+            outline: none;
+            font-size: 16px;
+            color: #1e293b;
+            padding: 8px 0;
+            font-weight: 400;
+        }
+        
+        .input-field::placeholder {
+            color: #94a3b8;
+        }
+        
+        .input-controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+        
+        .control-group {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .control-btn {
+            padding: 10px 20px;
+            background: linear-gradient(145deg, #ffffff, #f8fafc);
+            border-radius: 16px;
+            border: none;
+            font-size: 14px;
+            color: #475569;
+            cursor: pointer;
+            box-shadow: 
+                -4px -4px 8px rgba(255, 255, 255, 1),
+                4px 4px 8px rgba(0, 0, 0, 0.08);
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+        
+        .control-btn:hover {
+            background: linear-gradient(145deg, #f8fafc, #f1f5f9);
+            transform: translateY(-1px);
+        }
+        
+        .control-btn.active {
+            background: linear-gradient(145deg, #6366f1, #4f46e5);
+            color: white;
+            box-shadow: 
+                -4px -4px 8px rgba(99, 102, 241, 0.3),
+                4px 4px 8px rgba(99, 102, 241, 0.3);
+        }
+        
+        .send-btn {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            border-radius: 50%;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 
+                -4px -4px 8px rgba(139, 92, 246, 0.2),
+                4px 4px 8px rgba(99, 102, 241, 0.4);
+            transition: all 0.3s ease;
+        }
+        
+        .send-btn:hover {
+            transform: scale(1.05) translateY(-2px);
+            box-shadow: 
+                -6px -6px 12px rgba(139, 92, 246, 0.3),
+                6px 6px 12px rgba(99, 102, 241, 0.5);
+        }
+        
+        .send-btn svg {
+            width: 22px;
+            height: 22px;
+            stroke: white;
+            stroke-width: 2.5;
+            fill: none;
+        }
+        
+        /* Suggestions */
+        .suggestions {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }
+        
+        .suggestion-card {
+            padding: 20px 24px;
+            background: linear-gradient(145deg, #ffffff, #f8fafc);
+            border-radius: 20px;
+            box-shadow: 
+                -6px -6px 12px rgba(255, 255, 255, 1),
+                6px 6px 12px rgba(0, 0, 0, 0.08);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.8);
+        }
+        
+        .suggestion-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 
+                -8px -8px 16px rgba(255, 255, 255, 1),
+                8px 8px 16px rgba(0, 0, 0, 0.12);
+        }
+        
+        .suggestion-icon {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+        
+        .suggestion-text {
+            font-size: 15px;
+            color: #334155;
+            font-weight: 500;
+        }
+        
+        /* Decorative elements */
+        .floating-shape {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.15;
+            pointer-events: none;
+        }
+        
+        .shape-1 {
+            width: 300px;
+            height: 300px;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            top: -150px;
+            right: -100px;
+        }
+        
+        .shape-2 {
+            width: 250px;
+            height: 250px;
+            background: linear-gradient(135deg, #ec4899, #f472b6);
+            bottom: -100px;
+            left: -80px;
+        }
+    </style>
+</head>
+<body>
+    <div class="floating-shape shape-1"></div>
+    <div class="floating-shape shape-2"></div>
+    
+    <div class="container">
+        <div class="header">
+            <div class="logo-section">
+                <div class="logo-glass">S</div>
+                <div class="brand-text">OneSeek</div>
+            </div>
+            <div class="header-actions">
+                <button class="icon-button">🌓</button>
+                <button class="icon-button">⚙️</button>
+            </div>
+        </div>
+        
+        <div class="main-card">
+            <div class="welcome-area">
+                <div class="icon-circle">🔮</div>
+                <h1 class="main-title">Välkommen till OneSeek</h1>
+                <p class="subtitle">Din personliga AI-assistent för allt</p>
+            </div>
+            
+            <div class="input-section">
+                <div class="input-box">
+                    <input 
+                        type="text" 
+                        class="input-field" 
+                        placeholder="Skriv din fråga här..."
+                    />
+                    <div class="input-controls">
+                        <div class="control-group">
+                            <button class="control-btn active">Standard</button>
+                            <button class="control-btn">Kreativ</button>
+                            <button class="control-btn">Precision</button>
+                        </div>
+                        <button class="send-btn">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M12 19V5M5 12l7-7 7 7"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="suggestions">
+                <div class="suggestion-card">
+                    <div class="suggestion-icon">🔍</div>
+                    <div class="suggestion-text">DeepSearch Analysis</div>
+                </div>
+                <div class="suggestion-card">
+                    <div class="suggestion-icon">🎨</div>
+                    <div class="suggestion-text">Generera Bilder</div>
+                </div>
+                <div class="suggestion-card">
+                    <div class="suggestion-icon">📊</div>
+                    <div class="suggestion-text">Data Analys</div>
+                </div>
+                <div class="suggestion-card">
+                    <div class="suggestion-icon">💬</div>
+                    <div class="suggestion-text">Konversation</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Design 5: Organic Flow</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Georgia', serif;
+            background: linear-gradient(135deg, #fef9f3 0%, #f0f9ff 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        /* Organic flowing shapes */
+        .blob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.2;
+            animation: blobMove 25s ease-in-out infinite;
+        }
+        
+        .blob-1 {
+            width: 500px;
+            height: 500px;
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            top: -200px;
+            left: -150px;
+        }
+        
+        .blob-2 {
+            width: 400px;
+            height: 400px;
+            background: linear-gradient(135deg, #10b981, #059669);
+            bottom: -150px;
+            right: -100px;
+            animation-delay: -8s;
+        }
+        
+        .blob-3 {
+            width: 350px;
+            height: 350px;
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            top: 50%;
+            right: -100px;
+            animation-delay: -15s;
+        }
+        
+        @keyframes blobMove {
+            0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+            33% { transform: translate(50px, -50px) rotate(120deg) scale(1.1); }
+            66% { transform: translate(-30px, 30px) rotate(240deg) scale(0.9); }
+        }
+        
+        .container {
+            width: 90%;
+            max-width: 850px;
+            position: relative;
+            z-index: 10;
+        }
+        
+        /* Organic header */
+        .organic-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 80px;
+            padding: 24px 32px;
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(20px);
+            border-radius: 60px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+        }
+        
+        .logo-organic {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        
+        .logo-leaf {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, #10b981, #34d399);
+            border-radius: 0 100% 0 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            animation: leafSway 4s ease-in-out infinite;
+        }
+        
+        @keyframes leafSway {
+            0%, 100% { transform: rotate(0deg); }
+            50% { transform: rotate(5deg); }
+        }
+        
+        .brand-organic {
+            font-size: 26px;
+            font-weight: 600;
+            color: #1f2937;
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .nav-dots {
+            display: flex;
+            gap: 12px;
+        }
+        
+        .nav-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #d1d5db;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-dot:hover {
+            background: #10b981;
+            transform: scale(1.3);
+        }
+        
+        /* Main card with organic shape */
+        .organic-card {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(20px);
+            border-radius: 48px;
+            padding: 60px 50px;
+            box-shadow: 
+                0 20px 60px rgba(0, 0, 0, 0.08),
+                0 0 0 1px rgba(255, 255, 255, 0.5);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .organic-card::before {
+            content: '';
+            position: absolute;
+            top: -100px;
+            right: -100px;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, rgba(16, 185, 129, 0.15), transparent 70%);
+            border-radius: 50%;
+            animation: pulse 6s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50% { transform: scale(1.2); opacity: 0.8; }
+        }
+        
+        .welcome-organic {
+            text-align: center;
+            margin-bottom: 50px;
+            position: relative;
+            z-index: 2;
+        }
+        
+        .nature-icon {
+            font-size: 64px;
+            margin-bottom: 24px;
+            animation: float 3s ease-in-out infinite;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        
+        .organic-title {
+            font-size: 44px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 16px;
+            line-height: 1.2;
+        }
+        
+        .organic-subtitle {
+            font-size: 18px;
+            color: #6b7280;
+            font-weight: 400;
+        }
+        
+        /* Flowing input */
+        .input-organic {
+            background: white;
+            border-radius: 36px;
+            padding: 28px 32px;
+            box-shadow: 
+                0 10px 30px rgba(0, 0, 0, 0.06),
+                inset 0 1px 0 rgba(255, 255, 255, 1);
+            margin-bottom: 32px;
+            position: relative;
+            z-index: 2;
+        }
+        
+        .input-field {
+            width: 100%;
+            background: transparent;
+            border: none;
+            outline: none;
+            font-size: 17px;
+            color: #1f2937;
+            font-family: 'Inter', sans-serif;
+            padding: 8px 0;
+        }
+        
+        .input-field::placeholder {
+            color: #9ca3af;
+        }
+        
+        .input-controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+        
+        .mood-selector {
+            display: flex;
+            gap: 12px;
+        }
+        
+        .mood-btn {
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
+            border: none;
+            border-radius: 24px;
+            font-size: 14px;
+            color: #4b5563;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .mood-btn:hover {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+        }
+        
+        .send-organic {
+            width: 52px;
+            height: 52px;
+            background: linear-gradient(135deg, #10b981, #34d399);
+            border: none;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.3);
+            transition: all 0.3s ease;
+        }
+        
+        .send-organic:hover {
+            transform: scale(1.1) rotate(15deg);
+            box-shadow: 0 8px 30px rgba(16, 185, 129, 0.4);
+        }
+        
+        .send-organic svg {
+            width: 24px;
+            height: 24px;
+            stroke: white;
+            stroke-width: 2.5;
+            fill: none;
+        }
+        
+        /* Organic suggestions */
+        .suggestions-organic {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            justify-content: center;
+            position: relative;
+            z-index: 2;
+        }
+        
+        .organic-chip {
+            padding: 14px 28px;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.7));
+            backdrop-filter: blur(10px);
+            border-radius: 30px;
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            font-size: 15px;
+            color: #374151;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .organic-chip:hover {
+            background: linear-gradient(135deg, white, #f0fdf4);
+            border-color: #10b981;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 24px rgba(16, 185, 129, 0.2);
+        }
+        
+        .chip-icon {
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+    
+    <div class="container">
+        <div class="organic-header">
+            <div class="logo-organic">
+                <div class="logo-leaf">🌿</div>
+                <div class="brand-organic">OneSeek</div>
+            </div>
+            <div class="nav-dots">
+                <div class="nav-dot"></div>
+                <div class="nav-dot"></div>
+                <div class="nav-dot"></div>
+            </div>
+        </div>
+        
+        <div class="organic-card">
+            <div class="welcome-organic">
+                <div class="nature-icon">🍃</div>
+                <h1 class="organic-title">Väx med kunskap</h1>
+                <p class="organic-subtitle">Naturlig intelligens för naturliga frågor</p>
+            </div>
+            
+            <div class="input-organic">
+                <input 
+                    type="text" 
+                    class="input-field" 
+                    placeholder="Låt dina tankar flöda..."
+                />
+                <div class="input-controls">
+                    <div class="mood-selector">
+                        <button class="mood-btn">🌱 Utforska</button>
+                        <button class="mood-btn">🌸 Skapa</button>
+                        <button class="mood-btn">🌳 Fördjupa</button>
+                    </div>
+                    <button class="send-organic">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M12 19V5M5 12l7-7 7 7"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="suggestions-organic">
+                <div class="organic-chip">
+                    <span class="chip-icon">🔍</span>
+                    Research naturligt
+                </div>
+                <div class="organic-chip">
+                    <span class="chip-icon">🎨</span>
+                    Kreativ skapande
+                </div>
+                <div class="organic-chip">
+                    <span class="chip-icon">📚</span>
+                    Lär dig nytt
+                </div>
+                <div class="organic-chip">
+                    <span class="chip-icon">💡</span>
+                    Få insikter
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
