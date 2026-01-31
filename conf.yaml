@@ -1,0 +1,50 @@
+# DeerFlow Configuration for OneSeek with VLLM
+# This configuration uses local VLLM for inference
+
+# VLLM Configuration (OpenAI-compatible API)
+BASIC_MODEL:
+  base_url: "http://localhost:8000/v1"
+  model: "/models/Qwen3-8B-AWQ"
+  api_key: "EMPTY"  # VLLM doesn't require authentication for local deployment
+  max_retries: 3
+  verify_ssl: false  # Local deployment doesn't need SSL
+  temperature: 0.7
+  max_tokens: 8192
+
+# Optional: Use same VLLM for reasoning tasks
+REASONING_MODEL:
+  base_url: "http://localhost:8000/v1"
+  model: "/models/Qwen3-8B-AWQ"
+  api_key: "EMPTY"
+  max_retries: 3
+  verify_ssl: false
+  temperature: 0.3  # Lower temperature for reasoning
+  max_tokens: 8192
+
+# Optional: Code model (uses same VLLM but with lower temperature)
+CODE_MODEL:
+  base_url: "http://localhost:8000/v1"
+  model: "/models/Qwen3-8B-AWQ"
+  api_key: "EMPTY"
+  max_retries: 3
+  verify_ssl: false
+  temperature: 0.1  # Very low temperature for deterministic code generation
+  max_tokens: 8192
+
+# Search Engine Configuration
+# Options: tavily, infoquest, duckduckgo, brave, arxiv, searx, serper
+# DuckDuckGo works without API key
+SEARCH_ENGINE: tavily
+
+# RAG Configuration (optional - for Vespa integration)
+# Options: milvus, qdrant, ragflow, dify, vikingdb
+# Leave commented out if not using RAG
+# RAG_PROVIDER: vespa
+
+# Tool-specific interrupts configuration
+# Uncomment to enable pre-execution approval for sensitive tools
+# TOOL_INTERRUPTS:
+#   interrupt_before: 
+#     - "db_tool"
+#     - "db_read_tool"
+#     - "db_write_tool"

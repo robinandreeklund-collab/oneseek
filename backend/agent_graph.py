@@ -7,6 +7,7 @@ import os
 import json
 import time
 import logging
+import uuid
 from typing import TypedDict, List, Dict, Any, Optional, Literal, Annotated
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
@@ -16,6 +17,7 @@ from dotenv import load_dotenv
 import operator
 
 from tools import AVAILABLE_TOOLS
+from backend.deer_flow.tools import get_workspace_files, clear_workspace_files, set_current_run_id
 
 load_dotenv()
 
@@ -387,6 +389,11 @@ class OneSeekGraphAgent:
         
         logger.info(f"Starting workflow with {len(lc_messages)} messages")
         
+        # Generate run_id for this execution
+        run_id = str(uuid.uuid4())[:8]  # Short ID for logging
+        set_current_run_id(run_id)
+        logger.info(f"Set run_id={run_id} for workspace file tracking")
+        
         # Run the graph with streaming
         # This is a simplified version - in a full implementation, you'd stream through the graph
         current_state: AgentState = {
@@ -397,6 +404,10 @@ class OneSeekGraphAgent:
             "system_prompt": system_prompt,
             "enable_thinking": enable_thinking
         }
+        
+        # Clear workspace files at start of run
+        clear_workspace_files()
+        logger.info(f"Cleared workspace files for run_id={run_id}")
         
         max_iterations = 5  # Prevent infinite loops
         iteration = 0
@@ -486,6 +497,16 @@ class OneSeekGraphAgent:
                             "error": str(e)
                         }
                     
+                    # Add workspace files if any were tracked
+                    logger.info("Getting workspace files for tool action")
+                    workspace_files = get_workspace_files()
+                    logger.info(f"Retrieved {len(workspace_files)} workspace files")
+                    if workspace_files:
+                        tool_action["workspace_files"] = workspace_files
+                        logger.info(f"Attaching {len(workspace_files)} workspace files to tool action: {[f['path'] for f in workspace_files]}")
+                    else:
+                        logger.info("No workspace files to attach")
+                    
                     # Update the tool action in the list
                     callback("tool_action", tool_action)
             
@@ -560,6 +581,11 @@ class OneSeekGraphAgent:
         
         logger.info(f"Starting workflow with real-time streaming, {len(lc_messages)} messages")
         
+        # Generate run_id for this execution
+        run_id = str(uuid.uuid4())[:8]  # Short ID for logging
+        set_current_run_id(run_id)
+        logger.info(f"Set run_id={run_id} for workspace file tracking")
+        
         # Run the graph with streaming (same as run_with_streaming but with realtime callback)
         current_state: AgentState = {
             "messages": lc_messages,
@@ -569,6 +595,10 @@ class OneSeekGraphAgent:
             "system_prompt": system_prompt,
             "enable_thinking": enable_thinking
         }
+        
+        # Clear workspace files at start of run
+        clear_workspace_files()
+        logger.info(f"Cleared workspace files for run_id={run_id}")
         
         max_iterations = 5
         iteration = 0
@@ -657,6 +687,16 @@ class OneSeekGraphAgent:
                             "content": msg.content,
                             "error": str(e)
                         }
+                    
+                    # Add workspace files if any were tracked
+                    logger.info("Getting workspace files for tool action (stream mode)")
+                    workspace_files = get_workspace_files()
+                    logger.info(f"Retrieved {len(workspace_files)} workspace files (stream mode)")
+                    if workspace_files:
+                        tool_action["workspace_files"] = workspace_files
+                        logger.info(f"Attaching {len(workspace_files)} workspace files to tool action: {[f['path'] for f in workspace_files]}")
+                    else:
+                        logger.info("No workspace files to attach (stream mode)")
                     
                     # Update the tool action in the list and trigger realtime callback
                     callback("tool_action", tool_action)  # This triggers realtime_callback immediately!

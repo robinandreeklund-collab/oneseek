@@ -2,6 +2,15 @@
  * Shared type definitions for ActionBlock and tool invocation tracking
  */
 
+export interface WorkspaceFile {
+  path: string;
+  name: string;
+  size?: number;
+  content?: string;
+  type?: string;
+  modified?: string;
+}
+
 export interface ToolAction {
   tool_call_id?: string;  // Unique identifier for this specific invocation (optional for backward compatibility)
   tool_name: string;
@@ -27,6 +36,7 @@ export interface ToolAction {
   end_time?: number;
   duration?: number;
   status: "running" | "completed";
+  workspace_files?: WorkspaceFile[];  // Files created/modified in workspace
 }
 
 export interface MessageToolActions {
