@@ -295,13 +295,14 @@ export async function sendMessage(
       
       // Handle citations event: store citations for the current research
       if (type === "data") {
-        const actions = Array.isArray((data as { tool_actions?: ToolAction[] }).tool_actions)
-          ? (data as { tool_actions?: ToolAction[] }).tool_actions ?? []
+        const metadata = data as { tool_actions?: ToolAction[]; live_update?: boolean };
+        const actions = Array.isArray(metadata.tool_actions)
+          ? metadata.tool_actions ?? []
           : [];
         if (actions.length > 0) {
           useStore.getState().updateToolActions(
             actions,
-            Boolean((data as { live_update?: boolean }).live_update),
+            Boolean(metadata.live_update),
           );
         }
         continue;

@@ -641,7 +641,7 @@ function CoderFilesBlock({ sessionId }: { sessionId: string }) {
         const operation = args.operation ?? "unknown";
         fileMap.set(args.path, {
           path: args.path,
-          name: args.path.split("/").pop(),
+          name: args.path.split("/").pop() ?? args.path,
           operation,
           content: args.content ?? toolCall.result ?? "",
         });
