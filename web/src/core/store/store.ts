@@ -429,7 +429,12 @@ function appendMessage(message: Message) {
     message.agent === "reporter" ||
     message.agent === "researcher" ||
     message.agent === "analyst" ||
-    message.agent === "ai_comparison"
+    message.agent === "ai_comparison" ||
+    message.agent === "ai_compare_query" ||
+    message.agent === "ai_compare_fact_check" ||
+    message.agent === "ai_compare_meta" ||
+    message.agent === "ai_compare_synth" ||
+    message.agent === "ai_compare_reporter"
   ) {
     if (!getOngoingResearchId()) {
       const id = message.id;
@@ -474,7 +479,7 @@ function appendMessage(message: Message) {
 function updateMessage(message: Message) {
   if (
     getOngoingResearchId() &&
-    message.agent === "reporter" &&
+    (message.agent === "reporter" || message.agent === "ai_compare_reporter") &&
     !message.isStreaming
   ) {
     useStore.getState().setOngoingResearch(null);

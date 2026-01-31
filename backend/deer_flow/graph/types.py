@@ -52,6 +52,17 @@ class State(MessagesState):
     # AI Comparison / Debate OS mode
     enable_ai_comparison: bool = False  # Enable AI comparison mode
     comparison_results: dict[str, Any] | None = None  # Results from AI comparison
+
+    # AI comparison chain state
+    ai_compare_responses: list[dict[str, Any]] = field(default_factory=list)
+    ai_compare_responses_json: str | None = None
+    ai_compare_fact_check: dict[str, Any] | None = None
+    ai_compare_fact_check_json: str | None = None
+    ai_compare_meta: dict[str, Any] | None = None
+    ai_compare_meta_json: str | None = None
+    ai_compare_synthesis: dict[str, Any] | None = None
+    ai_compare_synthesis_json: str | None = None
+    ai_compare_report_complete: bool = False
     
     # Multi-Round Debate Engine mode
     enable_debate_mode: bool = False  # Enable multi-round debate mode

@@ -30,7 +30,16 @@ from backend.deer_flow.tools import (
     get_web_search_tool,
     python_repl_tool,
 )
-from backend.deer_flow.tools.ai_comparison_tools import get_ai_comparison_tools
+from backend.deer_flow.tools.ai_comparison_tools import (
+    fact_check_responses,
+    query_deepseek,
+    query_gemini_flash,
+    query_gpt35,
+    query_grok4,
+    run_meta_analysis,
+    set_ai_comparison_context,
+    synthesize_optimal_answer,
+)
 from backend.deer_flow.tools.debate_tools import get_debate_tools
 from backend.deer_flow.tools.search import LoggedTavilySearch
 from backend.deer_flow.utils.context_manager import ContextManager, validate_message_content
@@ -84,6 +93,26 @@ def strip_think_tags(content: str, expect_json: bool = False) -> str:
     """
     if not content or '<think>' not in content or '</think>' not in content:
         return content
+
+
+def _parse_json_content(content: str) -> dict[str, Any]:
+    """Parse JSON content from a message string."""
+    if not content:
+        return {}
+    content = content.strip()
+    if content.startswith("```"):
+        match = re.search(r"```json\s*(.*?)```", content, re.S | re.I)
+        if match:
+            content = match.group(1).strip()
+        else:
+            # Fallback to any fenced block
+            match = re.search(r"```(.*?)```", content, re.S)
+            if match:
+                content = match.group(1).strip()
+    try:
+        return json.loads(repair_json_output(content))
+    except Exception:
+        return {}
     
     think_start = content.find('<think>')
     think_end = content.find('</think>')
@@ -261,6 +290,16 @@ def preserve_state_meta_fields(state: State) -> dict:
         "plan_source": state.get("plan_source", "planner"),
         "enable_code_mode": state.get("enable_code_mode", False),
         "code_report_complete": state.get("code_report_complete", False),
+        "enable_ai_comparison": state.get("enable_ai_comparison", False),
+        "ai_compare_responses": state.get("ai_compare_responses", []),
+        "ai_compare_responses_json": state.get("ai_compare_responses_json"),
+        "ai_compare_fact_check": state.get("ai_compare_fact_check"),
+        "ai_compare_fact_check_json": state.get("ai_compare_fact_check_json"),
+        "ai_compare_meta": state.get("ai_compare_meta"),
+        "ai_compare_meta_json": state.get("ai_compare_meta_json"),
+        "ai_compare_synthesis": state.get("ai_compare_synthesis"),
+        "ai_compare_synthesis_json": state.get("ai_compare_synthesis_json"),
+        "ai_compare_report_complete": state.get("ai_compare_report_complete", False),
         "clarification_history": state.get("clarification_history", []),
         "enable_clarification": state.get("enable_clarification", False),
         "max_clarification_rounds": state.get("max_clarification_rounds", 3),
@@ -287,6 +326,8 @@ def get_team_route(state: State) -> str:
     plan_source = state.get("plan_source")
     if plan_source == "code_planner":
         return "code_team"
+    if plan_source == "ai_comparison":
+        return "ai_compare_team"
     return "research_team"
 
 
@@ -944,7 +985,17 @@ def extract_plan_content(plan_data: str | dict | Any) -> str:
 
 def human_feedback_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["planner", "research_team", "code_team", "reporter", "debate_orchestrator", "__end__"]]:
+) -> Command[
+    Literal[
+        "planner",
+        "research_team",
+        "code_team",
+        "ai_compare_team",
+        "reporter",
+        "debate_orchestrator",
+        "__end__",
+    ]
+]:
     if state.get("final_report") and state.get("plan_source") == "code_planner":
         logger.info("[human_feedback_node] Code plan complete, routing to END")
         return Command(
@@ -1234,8 +1285,8 @@ def coordinator_node(
                             goto = "debate_planner"
                         # Check AI comparison mode - route to planner (which routes to ai_comparison)
                         elif state.get("enable_ai_comparison", False):
-                            logger.info("AI comparison mode enabled, planner will route to ai_comparison")
-                            goto = "planner"
+                            logger.info("AI comparison mode enabled, routing to ai_comparison planner")
+                            goto = "ai_comparison"
                         # Normal research mode
                         else:
                             goto = "planner"
@@ -1465,8 +1516,8 @@ def coordinator_node(
                         goto = "debate_planner"
                     # Check AI comparison mode - route to planner (which routes to ai_comparison)
                     elif state.get("enable_ai_comparison", False):
-                        logger.info("AI comparison mode enabled, planner will route to ai_comparison")
-                        goto = "planner"
+                        logger.info("AI comparison mode enabled, routing to ai_comparison planner")
+                        goto = "ai_comparison"
                     # Normal research mode
                     else:
                         goto = "planner"
@@ -1847,6 +1898,13 @@ def code_team_node(state: State):
     pass
 
 
+def ai_compare_team_node(state: State):
+    """AI comparison team node that orchestrates comparison tasks."""
+    logger.info("AI comparison team is collaborating on comparison tasks.")
+    logger.debug("Entering ai_compare_team_node - coordinating ai comparison agents")
+    pass
+
+
 def validate_web_search_usage(messages: list, agent_name: str = "agent") -> bool:
     """
     Validate if the agent has used the web search tool during execution.
@@ -1892,7 +1950,7 @@ def validate_web_search_usage(messages: list, agent_name: str = "agent") -> bool
 
 async def _execute_agent_step(
     state: State, agent, agent_name: str, config: RunnableConfig = None
-) -> Command[Literal["research_team", "code_team"]]:
+) -> Command[Literal["research_team", "code_team", "ai_compare_team"]]:
     """Helper function to execute a step using the specified agent."""
     logger.debug(f"[_execute_agent_step] Starting execution for agent: {agent_name}")
     team_goto = get_team_route(state)
@@ -2230,7 +2288,7 @@ async def _setup_and_execute_agent_step(
     config: RunnableConfig,
     agent_type: str,
     default_tools: list,
-) -> Command[Literal["research_team", "code_team"]]:
+) -> Command[Literal["research_team", "code_team", "ai_compare_team"]]:
     """Helper function to set up an agent with appropriate tools and execute a step.
 
     This function handles the common logic for both researcher_node and coder_node:
@@ -2627,122 +2685,92 @@ async def analyst_node(
 
 async def ai_comparison_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["reporter"]]:
-    """
-    AI Comparison node that runs sequential queries across multiple AI models.
-    Implements Debate OS functionality for DeerFlow with real-time streaming.
-    
-    Executes AI comparison agent with tools, then goes directly to reporter.
-    Does NOT use research_team routing to avoid loops.
-    """
-    # CRITICAL: Do NOT run ai_comparison when debate_mode is enabled
-    # Debate uses completely separate chain with debate_tools
+) -> Command[Literal["human_feedback"]]:
+    """AI comparison planner node that creates a comparison plan."""
     if state.get("enable_debate_mode", False):
-        logger.warning("AI Comparison node called with debate_mode=True - this should NOT happen! Skipping ai_comparison.")
-        return Command(
-            update=preserve_state_meta_fields(state),
-            goto="reporter"
-        )
-    
-    logger.info("AI Comparison node starting - Debate OS mode")
-    
+        logger.warning("AI Comparison node called with debate_mode=True - skipping.")
+        return Command(update=preserve_state_meta_fields(state), goto="reporter")
+
     configurable = Configuration.from_runnable_config(config)
-    
-    # Get AI comparison tools
-    tools = get_ai_comparison_tools()
-    logger.info(f"AI comparison tools count: {len(tools)}")
-    
-    # Get locale and research topic from state
     locale = state.get("locale", "en-US")
     research_topic = state.get("research_topic", "Unknown topic")
-    logger.info(f"Research topic: {research_topic}")
-    
-    # Create a simple plan with one step for AI comparison
-    # This allows us to use _setup_and_execute_agent_step() which we KNOW works for streaming
+
+    set_ai_comparison_context(
+        max_search_results=configurable.max_search_results,
+        resources=state.get("resources", []),
+    )
+
     from backend.deer_flow.prompts.planner_model import Plan, Step, StepType
-    
-    comparison_step = Step(
-        need_search=False,  # AI comparison doesn't need web search, it queries AI models
-        step_type=StepType.RESEARCH,
-        title="AI Model Comparison",
-        description=f"""Query and compare responses from multiple AI models for: {research_topic}
 
-Follow these steps:
-1. Query each AI model individually (call tools one at a time for streaming):
-   - query_gpt35
-   - query_gemini_flash
-   - query_deepseek  
-   - query_grok4
-   - query_oneseek_local
+    steps = [
+        Step(
+            need_search=False,
+            step_type=StepType.AI_QUERY,
+            title="Query AI Models",
+            description="Collect responses from each AI model sequentially.",
+            execution_res=None,
+        ),
+        Step(
+            need_search=False,
+            step_type=StepType.AI_FACT_CHECK,
+            title="Fact Check",
+            description="Verify key claims with external sources.",
+            execution_res=None,
+        ),
+        Step(
+            need_search=False,
+            step_type=StepType.AI_META,
+            title="Meta Analysis",
+            description="Score models across meta-analysis dimensions.",
+            execution_res=None,
+        ),
+        Step(
+            need_search=False,
+            step_type=StepType.AI_SYNTH,
+            title="Synthesize Answer",
+            description="Produce optimal synthesized answer from all inputs.",
+            execution_res=None,
+        ),
+        Step(
+            need_search=False,
+            step_type=StepType.AI_REPORT,
+            title="Generate Comparison Report",
+            description="Write the final comparison report with tables.",
+            execution_res=None,
+        ),
+    ]
 
-2. Fact-check responses using fact_check_responses tool
-
-3. Run meta-analysis using run_meta_analysis tool
-
-4. Synthesize optimal answer using synthesize_optimal_answer tool
-
-Provide a comprehensive comparison report with citations.""",
-        execution_res=None
-    )
-    
     comparison_plan = Plan(
-        locale=state.get("locale", "en-US"),  # Get locale from state, default to en-US
-        has_enough_context=False,  # We need to execute this comparison step
-        thought="Running AI comparison across multiple models to provide comprehensive analysis.",
+        locale=locale,
+        has_enough_context=False,
+        thought="Run AI comparison with model queries, fact-checking, meta-analysis, and synthesis.",
         title=research_topic,
-        steps=[comparison_step]
+        steps=steps,
     )
-    
-    # Update state directly with the comparison plan
-    # State is a dict-like object, so we can mutate it
-    state["current_plan"] = comparison_plan
-    state["locale"] = locale
-    state["research_topic"] = research_topic
-    
-    logger.info("Created comparison plan with 1 step, using standard execution path")
-    
-    # Set a higher recursion limit for AI comparison since it needs to call 8+ tools sequentially
-    # Each tool call counts as ~2-3 recursion steps, so 8 tools = ~24 steps minimum
-    # We set to 50 to give plenty of buffer
-    import os
-    original_recursion_limit = os.getenv("AGENT_RECURSION_LIMIT")
-    os.environ["AGENT_RECURSION_LIMIT"] = "50"
-    
-    try:
-        # Planner node already created the planner message before routing to ai_comparison
-        # So we don't need to create it again here - it already exists in state["messages"]
-        logger.info("Planner already created planner message, executing AI comparison step")
-        
-        # Use the EXACT SAME execution path as researcher/coder
-        # This is what makes streaming work correctly!
-        result = await _setup_and_execute_agent_step(
-            state,
-            config,
-            "ai_comparison",
-            tools,
-        )
-        
-        # Mark the comparison step as complete to prevent research_team from routing to researcher
-        comparison_step.execution_res = "AI comparison completed successfully"
-        
-        # Go directly to reporter instead of research_team to avoid researcher loops
-        # The ai_comparison agent has already executed all tools (query models, fact_check, meta_analysis, synthesize)
-        logger.info("AI comparison complete, routing directly to reporter")
-        
-        # Return updated state with completed step and goto reporter
-        return Command(
-            update={
-                **result.update,
-                "current_plan": comparison_plan,  # Update with completed step
-            },
-            goto="reporter",
-        )
-    finally:
-        # Restore original recursion limit
-        if original_recursion_limit is not None:
-            os.environ["AGENT_RECURSION_LIMIT"] = original_recursion_limit
-        elif "AGENT_RECURSION_LIMIT" in os.environ:
-            del os.environ["AGENT_RECURSION_LIMIT"]
+
+    return Command(
+        update={
+            **preserve_state_meta_fields(state),
+            "messages": [
+                AIMessage(
+                    content=json.dumps(comparison_plan.model_dump(), ensure_ascii=False, indent=2),
+                    name="planner",
+                )
+            ],
+            "current_plan": comparison_plan,
+            "plan_source": "ai_comparison",
+            "ai_compare_responses": [],
+            "ai_compare_responses_json": None,
+            "ai_compare_fact_check": None,
+            "ai_compare_fact_check_json": None,
+            "ai_compare_meta": None,
+            "ai_compare_meta_json": None,
+            "ai_compare_synthesis": None,
+            "ai_compare_synthesis_json": None,
+            "ai_compare_report_complete": False,
+        },
+        goto="human_feedback",
+    )
 
 
 async def debate_node(
@@ -2892,6 +2920,206 @@ Provide a comprehensive debate report with all rounds, voting results, and concl
             os.environ["AGENT_RECURSION_LIMIT"] = original_recursion_limit
         elif "AGENT_RECURSION_LIMIT" in os.environ:
             del os.environ["AGENT_RECURSION_LIMIT"]
+
+
+async def ai_compare_query_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["ai_compare_team"]]:
+    """Query AI models sequentially and store responses."""
+    configurable = Configuration.from_runnable_config(config)
+    set_ai_comparison_context(
+        max_search_results=configurable.max_search_results,
+        resources=state.get("resources", []),
+    )
+    tools = [
+        query_gpt35,
+        query_gemini_flash,
+        query_deepseek,
+        query_grok4,
+    ]
+    result = await _setup_and_execute_agent_step(
+        state,
+        config,
+        "ai_compare_query",
+        tools,
+    )
+    responses = []
+    for message in result.update.get("messages", []):
+        if isinstance(message, ToolMessage) and message.name in {
+            "query_gpt35",
+            "query_gemini_flash",
+            "query_deepseek",
+            "query_grok4",
+        }:
+            payload = _parse_json_content(message.content or "")
+            if payload:
+                responses.append(payload)
+    if not responses:
+        payload = _parse_json_content(
+            result.update.get("messages", [])[-1].content
+            if result.update.get("messages")
+            else ""
+        )
+        responses = payload.get("responses", [])
+    responses_json = json.dumps(responses, ensure_ascii=False)
+    return Command(
+        update={
+            **preserve_state_meta_fields(state),
+            **result.update,
+            "ai_compare_responses": responses,
+            "ai_compare_responses_json": responses_json,
+        },
+        goto=result.goto,
+    )
+
+
+async def ai_compare_fact_check_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["ai_compare_team"]]:
+    """Fact-check AI model responses."""
+    configurable = Configuration.from_runnable_config(config)
+    set_ai_comparison_context(
+        max_search_results=configurable.max_search_results,
+        resources=state.get("resources", []),
+    )
+    tools = [fact_check_responses]
+    result = await _setup_and_execute_agent_step(
+        state,
+        config,
+        "ai_compare_fact_check",
+        tools,
+    )
+    payload = {}
+    for message in result.update.get("messages", []):
+        if isinstance(message, ToolMessage) and message.name == "fact_check_responses":
+            payload = _parse_json_content(message.content or "")
+            break
+    if not payload:
+        payload = _parse_json_content(
+            result.update.get("messages", [])[-1].content
+            if result.update.get("messages")
+            else ""
+        )
+    fact_check_json = json.dumps(payload, ensure_ascii=False) if payload else None
+    return Command(
+        update={
+            **preserve_state_meta_fields(state),
+            **result.update,
+            "ai_compare_fact_check": payload or None,
+            "ai_compare_fact_check_json": fact_check_json,
+        },
+        goto=result.goto,
+    )
+
+
+async def ai_compare_meta_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["ai_compare_team"]]:
+    """Run meta-analysis on AI model responses."""
+    configurable = Configuration.from_runnable_config(config)
+    set_ai_comparison_context(
+        max_search_results=configurable.max_search_results,
+        resources=state.get("resources", []),
+    )
+    tools = [run_meta_analysis]
+    result = await _setup_and_execute_agent_step(
+        state,
+        config,
+        "ai_compare_meta",
+        tools,
+    )
+    payload = {}
+    for message in result.update.get("messages", []):
+        if isinstance(message, ToolMessage) and message.name == "run_meta_analysis":
+            payload = _parse_json_content(message.content or "")
+            break
+    if not payload:
+        payload = _parse_json_content(
+            result.update.get("messages", [])[-1].content
+            if result.update.get("messages")
+            else ""
+        )
+    meta_results = payload.get("meta_results") if payload else None
+    meta_payload = meta_results or payload
+    meta_json = json.dumps(meta_payload, ensure_ascii=False) if meta_payload else None
+    return Command(
+        update={
+            **preserve_state_meta_fields(state),
+            **result.update,
+            "ai_compare_meta": meta_payload,
+            "ai_compare_meta_json": meta_json,
+        },
+        goto=result.goto,
+    )
+
+
+async def ai_compare_synth_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["ai_compare_team"]]:
+    """Synthesize optimal answer."""
+    configurable = Configuration.from_runnable_config(config)
+    set_ai_comparison_context(
+        max_search_results=configurable.max_search_results,
+        resources=state.get("resources", []),
+    )
+    tools = [synthesize_optimal_answer]
+    result = await _setup_and_execute_agent_step(
+        state,
+        config,
+        "ai_compare_synth",
+        tools,
+    )
+    payload = {}
+    for message in result.update.get("messages", []):
+        if isinstance(message, ToolMessage) and message.name == "synthesize_optimal_answer":
+            payload = _parse_json_content(message.content or "")
+            break
+    if not payload:
+        payload = _parse_json_content(
+            result.update.get("messages", [])[-1].content
+            if result.update.get("messages")
+            else ""
+        )
+    synthesis = payload.get("synthesis") if payload else None
+    synthesis_payload = synthesis or payload
+    synthesis_json = json.dumps(synthesis_payload, ensure_ascii=False) if synthesis_payload else None
+    return Command(
+        update={
+            **preserve_state_meta_fields(state),
+            **result.update,
+            "ai_compare_synthesis": synthesis_payload,
+            "ai_compare_synthesis_json": synthesis_json,
+        },
+        goto=result.goto,
+    )
+
+
+async def ai_compare_reporter_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["__end__"]]:
+    """Generate final AI comparison report."""
+    configurable = Configuration.from_runnable_config(config)
+    locale = state.get("locale", "en-US")
+    messages = apply_prompt_template("ai_compare_reporter", state, configurable, locale)
+    llm = get_llm_by_type(AGENT_LLM_MAP.get("ai_compare_reporter", "basic"))
+    response = llm.invoke(messages)
+    content = strip_think_tags(get_message_content(response) or "")
+    current_plan = state.get("current_plan")
+    from backend.deer_flow.prompts.planner_model import Plan, StepType
+    if isinstance(current_plan, Plan):
+        for step in current_plan.steps:
+            if not step.execution_res and step.step_type == StepType.AI_REPORT:
+                step.execution_res = "AI comparison report generated"
+                break
+    return Command(
+        update={
+            **preserve_state_meta_fields(state),
+            "messages": [AIMessage(content=content, name="ai_compare_reporter")],
+            "ai_compare_report_complete": True,
+            "current_plan": current_plan,
+        },
+        goto="__end__",
+    )
 
 # ============================================================
 # NEW SEPARATE DEBATE CHAIN NODES

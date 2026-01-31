@@ -14,6 +14,11 @@ ASSISTANT_SPEAKER_NAMES = {
     "code_refiner",
     "code_tester",
     "code_reporter",
+    "ai_compare_query",
+    "ai_compare_fact_check",
+    "ai_compare_meta",
+    "ai_compare_synth",
+    "ai_compare_reporter",
     "reporter",
     "background_investigator",
 }

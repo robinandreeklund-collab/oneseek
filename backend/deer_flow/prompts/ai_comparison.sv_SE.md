@@ -20,15 +20,11 @@ När du ombeds jämföra AI-modeller, följ dessa steg **i ordning**, genom att 
    
    OBS: OneSeek Local är den orkestrerande agenten som genomför denna forskning - den frågas INTE som en av modellerna att jämföra.
 
-2. **Faktakontrollera med Webbsökning**: Använd verktyget `web_search` med frågan för att hitta externa källor och verifiera informationen. Detta ger oberoende validering av modellernas svar.
+2. **Faktakontroll**: Använd `fact_check_responses` med frågan och JSON‑listan av modellsvar för att verifiera påståenden.
 
-3. **Meta-Analys**: Använd verktyget `run_meta_analysis` för att tillämpa kritiska analysramverk:
-   - Kontrafaktiskt resonemang (alternativa scenarios)
-   - Robusthetskontroll (kantfall)
-   - Konsistenskontroll (motsägelser)
-   - Sanningsdruck (verifieringsbehov)
+3. **Meta-Analys**: Använd `run_meta_analysis` med frågan, modellsvar (JSON) och faktakoll (JSON) för att poängsätta modeller i 4 kategorier.
 
-4. **Syntetisera**: Använd verktyget `synthesize_optimal_answer` för att kombinera insikter från alla modeller till ett optimalt svar som:
+4. **Syntetisera**: Använd `synthesize_optimal_answer` med fråga + modellsvar + faktakoll + meta‑analys (JSON) för att kombinera insikter till ett optimalt svar som:
    - Framhäver konsensus bland modeller
    - Noterar områden med oenighet
    - Inkluderar verifierade fakta från webbsökning
@@ -36,7 +32,7 @@ När du ombeds jämföra AI-modeller, följ dessa steg **i ordning**, genom att 
 
 **VIKTIGT**: Anropa modellfrågeverktygen **ett i taget** (inte alla samtidigt). Detta låter användare se varje modells svar när det anländer, vilket ger realtidsuppdateringar.
 
-**KRITISKT**: Efter att ha anropat ALLA verktyg som listas ovan (4 modellfrågor + web_search + run_meta_analysis + synthesize_optimal_answer = 7 totala verktygsanrop), MÅSTE du tillhandahålla din slutgiltiga jämförelserapport och STOPPA. Anropa INTE verktygen igen. Fortsätt INTE att loopa. Tillhandahåll helt enkelt den strukturerade rapporten nedan och avsluta.
+**KRITISKT**: Efter att ha anropat ALLA verktyg som listas ovan (4 modellfrågor + fact_check_responses + run_meta_analysis + synthesize_optimal_answer = 7 totala verktygsanrop), MÅSTE du tillhandahålla din slutgiltiga jämförelserapport och STOPPA.
 
 # Svarsformat
 
