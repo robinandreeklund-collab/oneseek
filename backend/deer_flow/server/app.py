@@ -6,6 +6,7 @@ import base64
 import json
 import logging
 import os
+import time
 from typing import Annotated, Any, List, Optional, cast
 from uuid import uuid4
 
@@ -66,7 +67,12 @@ from backend.deer_flow.server.rag_request import (
     RAGResourceRequest,
     RAGResourcesResponse,
 )
-from backend.deer_flow.tools import OpenAITTS
+from backend.deer_flow.tools import (
+    OpenAITTS,
+    clear_workspace_files,
+    get_workspace_files,
+    set_current_run_id,
+)
 from backend.deer_flow.utils.json_utils import sanitize_args
 from backend.deer_flow.utils.log_sanitizer import (
     sanitize_agent_name,
@@ -584,18 +590,26 @@ async def _process_message_chunk(message_chunk, message_metadata, thread_id, age
             event_stream_message["tool_call_chunks"] = []
             
             # Track tool calls for sidebar
+            new_actions = []
             if tool_tracker:
                 for tc in message_chunk.tool_calls:
-                    tool_tracker.add_tool_call(
+                    action = tool_tracker.add_tool_call(
                         tc.get("id", ""),
                         tc.get("name", "unknown"),
                         tc.get("args", {})
                     )
+                    if action:
+                        new_actions.append(action)
             
             logger.debug(
                 f"[{safe_thread_id}] AIMessage has tool_calls, yielding tool_calls event"
             )
             yield _make_event("tool_calls", event_stream_message)
+            if new_actions:
+                yield _make_event("data", {
+                    "tool_actions": new_actions,
+                    "live_update": True
+                })
         else:
             yield _make_event("message_chunk", event_stream_message)
     elif isinstance(message_chunk, AIMessageChunk):
@@ -611,13 +625,16 @@ async def _process_message_chunk(message_chunk, message_metadata, thread_id, age
             event_stream_message["tool_calls"] = message_chunk.tool_calls
             
             # Track tool calls for sidebar
+            new_actions = []
             if tool_tracker:
                 for tc in message_chunk.tool_calls:
-                    tool_tracker.add_tool_call(
+                    action = tool_tracker.add_tool_call(
                         tc.get("id", ""),
                         tc.get("name", "unknown"),
                         tc.get("args", {})
                     )
+                    if action:
+                        new_actions.append(action)
             
             # Process tool_call_chunks with proper index-based grouping
             processed_chunks = _process_tool_call_chunks(
@@ -633,6 +650,11 @@ async def _process_message_chunk(message_chunk, message_metadata, thread_id, age
             
             logger.debug(f"[{safe_thread_id}] Yielding tool_calls event")
             yield _make_event("tool_calls", event_stream_message)
+            if new_actions:
+                yield _make_event("data", {
+                    "tool_actions": new_actions,
+                    "live_update": True
+                })
         elif message_chunk.tool_call_chunks:
             # AI Message - Tool Call Chunks (streaming)
             chunks_count = len(message_chunk.tool_call_chunks)
@@ -728,8 +750,9 @@ def extract_citations_from_event(event: Any, safe_thread_id: str = "unknown") ->
 class ToolActionTracker:
     """Tracks tool calls and results to emit tool_actions in frontend format."""
     
-    def __init__(self, thread_id: str):
+    def __init__(self, thread_id: str, run_id: Optional[str] = None):
         self.thread_id = thread_id
+        self.run_id = run_id or thread_id
         self.tool_calls = {}  # tool_call_id -> {tool_name, tool_input, timestamp}
         self.tool_actions = []  # List of completed tool actions
         self.pending_calls = set()  # Set of tool_call_ids waiting for results
@@ -742,39 +765,73 @@ class ToolActionTracker:
         if len(text) > max_chars:
             return text[:max_chars] + "... [truncated]"
         return text
+
+    def _is_error_output(self, tool_output: Any) -> bool:
+        if tool_output is None:
+            return False
+        output_text = str(tool_output).strip()
+        if not output_text:
+            return False
+        lowered = output_text.lower()
+        if output_text.startswith("✗"):
+            return True
+        error_markers = ("error", "exception", "traceback", "failed", "tool disabled")
+        return any(marker in lowered for marker in error_markers)
         
-    def add_tool_call(self, tool_call_id: str, tool_name: str, tool_input: Any):
-        """Record a new tool call."""
+    def add_tool_call(self, tool_call_id: str, tool_name: str, tool_input: Any) -> Optional[dict]:
+        """Record a new tool call and return its action payload if new."""
         if tool_call_id not in self.tool_calls:
             tool_input_text = json.dumps(tool_input) if isinstance(tool_input, dict) else str(tool_input)
             tool_input_text = self._truncate(tool_input_text, self.max_input_chars)
-            self.tool_calls[tool_call_id] = {
+            action = {
                 "tool_call_id": tool_call_id,
                 "tool_name": tool_name,
                 "tool_input": tool_input_text,
                 "tool_output": None,
-                "status": "running"
+                "status": "running",
+                "start_time": time.time(),
             }
+            self.tool_calls[tool_call_id] = action
             self.pending_calls.add(tool_call_id)
             logger.debug(f"[{self.thread_id}] ToolActionTracker: Added tool call {tool_call_id} ({tool_name})")
+            return action.copy()
+        return None
     
-    def add_tool_result(self, tool_call_id: str, tool_output: Any):
-        """Record the result for a tool call."""
+    def add_tool_result(self, tool_call_id: str, tool_output: Any) -> Optional[dict]:
+        """Record the result for a tool call and return updated action if found."""
         if tool_call_id in self.tool_calls:
             tool_output_text = str(tool_output) if tool_output else ""
             tool_output_text = self._truncate(tool_output_text, self.max_output_chars)
             self.tool_calls[tool_call_id]["tool_output"] = tool_output_text
-            self.tool_calls[tool_call_id]["status"] = "complete"
+            self.tool_calls[tool_call_id]["status"] = (
+                "error" if self._is_error_output(tool_output_text) else "success"
+            )
+            self.tool_calls[tool_call_id]["end_time"] = time.time()
+            self.tool_calls[tool_call_id]["duration"] = (
+                self.tool_calls[tool_call_id]["end_time"]
+                - self.tool_calls[tool_call_id]["start_time"]
+            )
             if tool_call_id in self.pending_calls:
                 self.pending_calls.remove(tool_call_id)
+            
+            try:
+                workspace_files = get_workspace_files(self.run_id)
+            except Exception as e:
+                logger.debug(
+                    f"[{self.thread_id}] Failed to fetch workspace files: {e}"
+                )
+                workspace_files = []
+            
+            if workspace_files:
+                self.tool_calls[tool_call_id]["workspace_files"] = workspace_files[-200:]
             
             # Add to completed actions
             self.tool_actions.append(self.tool_calls[tool_call_id])
             logger.debug(f"[{self.thread_id}] ToolActionTracker: Completed tool call {tool_call_id}")
-            return True
+            return self.tool_calls[tool_call_id].copy()
         else:
             logger.warning(f"[{self.thread_id}] ToolActionTracker: Received result for unknown tool_call_id: {tool_call_id}")
-            return False
+            return None
     
     def get_tool_actions(self) -> List[dict]:
         """Get all tool actions in frontend format."""
@@ -792,7 +849,8 @@ async def _stream_graph_events(
     collected_citations = []
     
     # Track tool actions for real-time sidebar
-    tool_tracker = ToolActionTracker(safe_thread_id)
+    tool_tracker = ToolActionTracker(safe_thread_id, run_id=thread_id)
+    prev_action_count = 0
     
     try:
         event_count = 0
@@ -858,7 +916,6 @@ async def _stream_graph_events(
                 f"step={safe_step}"
             )
 
-            prev_action_count = 0
             async for event in _process_message_chunk(
                 message_chunk, message_metadata, thread_id, agent, tool_tracker
             ):
@@ -966,6 +1023,11 @@ async def _astream_workflow_generator(
         f"interrupt_feedback={safe_feedback}, "
         f"interrupt_before_tools={interrupt_before_tools}"
     )
+    
+    # Initialize workspace tracking for this run
+    set_current_run_id(thread_id)
+    clear_workspace_files(thread_id)
+    logger.debug(f"[{safe_thread_id}] Initialized workspace tracking for run_id={safe_thread_id}")
     
     # Process initial messages
     logger.debug(f"[{safe_thread_id}] Processing {len(messages)} initial messages")

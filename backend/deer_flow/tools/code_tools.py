@@ -6,6 +6,7 @@ Code-related tools for the Coder node in LangGraph.
 Provides Linux sandbox, file system management, and React preview capabilities.
 """
 
+import contextvars
 import logging
 import os
 import subprocess
@@ -27,10 +28,15 @@ logger = logging.getLogger(__name__)
 _workspace_files_by_run: Dict[str, List[Dict[str, Any]]] = {}
 _workspace_files_lock = threading.Lock()
 _current_run_id: Dict[int, str] = {}  # Maps thread_id to run_id
+_run_id_var: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "workspace_run_id",
+    default=None,
+)
 
 
 def set_current_run_id(run_id: str):
     """Set the current run_id for this thread."""
+    _run_id_var.set(run_id)
     thread_id = threading.get_ident()
     _current_run_id[thread_id] = run_id
     logger.info(f"Set run_id={run_id} for thread={thread_id}")
@@ -38,6 +44,9 @@ def set_current_run_id(run_id: str):
 
 def get_current_run_id() -> str:
     """Get the current run_id for this thread, or 'default' if not set."""
+    run_id = _run_id_var.get()
+    if run_id:
+        return run_id
     thread_id = threading.get_ident()
     return _current_run_id.get(thread_id, "default")
 
@@ -322,12 +331,14 @@ def file_system_tool(
             if content is None:
                 return f"✗ No content provided for write operation"
             
+            existed = target_path.exists()
             target_path.parent.mkdir(parents=True, exist_ok=True)
             target_path.write_text(content, encoding='utf-8')
             
             # Track this file operation
             file_size = len(content.encode('utf-8'))
-            track_workspace_file(path, operation, file_size, content)
+            operation_label = "created" if not existed else "modified"
+            track_workspace_file(path, operation_label, file_size, content)
             
             return f"✓ Successfully wrote {len(content)} bytes to '{path}'"
         
@@ -349,15 +360,22 @@ def file_system_tool(
                 return f"✗ Path not found: {path}"
             
             if target_path.is_file():
+                try:
+                    file_size = target_path.stat().st_size
+                except OSError:
+                    file_size = 0
+                track_workspace_file(path, "deleted", file_size)
                 target_path.unlink()
                 return f"✓ Deleted file: {path}"
             elif target_path.is_dir():
                 import shutil
+                track_workspace_file(path, "deleted_dir", 0)
                 shutil.rmtree(target_path)
                 return f"✓ Deleted directory: {path}"
         
         elif operation == "create_dir":
             target_path.mkdir(parents=True, exist_ok=True)
+            track_workspace_file(path, "created_dir", 0)
             return f"✓ Created directory: {path}"
         
         else:

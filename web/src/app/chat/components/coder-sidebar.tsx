@@ -44,11 +44,140 @@ import type { ToolCallRuntime, WorkspaceFile } from "~/core/messages";
 import { closeCoder, useMessage, useStore } from "~/core/store";
 import { cn } from "~/lib/utils";
 
+type Translator = ReturnType<typeof useTranslations>;
+
 function isToolCallError(result?: string) {
+  if (typeof result !== "string") return false;
+  const trimmed = result.trim();
+  if (!trimmed) return false;
+  const normalized = trimmed.toLowerCase();
   return (
-    typeof result === "string" &&
-    (result.trim().startsWith("Error:") || result.trim().startsWith("ERROR:"))
+    trimmed.startsWith("✗") ||
+    normalized.startsWith("error") ||
+    normalized.includes("error executing") ||
+    normalized.includes("exception") ||
+    normalized.includes("traceback") ||
+    normalized.includes("tool disabled") ||
+    normalized.startsWith("failed") ||
+    normalized.includes("failed:")
   );
+}
+
+function getToolStatusLabel(toolCall: ToolCallRuntime, t: Translator) {
+  if (toolCall.status === "error") return t("statusError");
+  if (toolCall.result) {
+    return isToolCallError(toolCall.result)
+      ? t("statusError")
+      : t("statusSuccess");
+  }
+  if (toolCall.status === "running") return t("statusRunning");
+  if (
+    toolCall.status === "complete" ||
+    toolCall.status === "completed" ||
+    toolCall.status === "success"
+  ) {
+    return t("statusSuccess");
+  }
+  return t("statusPending");
+}
+
+function sanitizePreviewUrl(value?: string | null) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol === "http:" || url.protocol === "https:") {
+      return url.toString();
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function extractPreviewUrl(result?: string) {
+  if (!result) return null;
+  const trimmed = result.trim();
+  if (!trimmed) return null;
+
+  try {
+    const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+    const candidate =
+      (typeof parsed.preview_url === "string" && parsed.preview_url) ||
+      (typeof parsed.previewUrl === "string" && parsed.previewUrl) ||
+      (typeof parsed.url === "string" && parsed.url);
+    const sanitized = sanitizePreviewUrl(candidate);
+    if (sanitized) return sanitized;
+  } catch {
+    // Not JSON, fall through to regex-based extraction.
+  }
+
+  const patterns = [
+    /preview_url["':\s]+["']?(https?:\/\/[^\s'"]+)/i,
+    /preview url[:\s]+(https?:\/\/[^\s'"]+)/i,
+  ];
+  for (const pattern of patterns) {
+    const match = pattern.exec(trimmed);
+    const sanitized = sanitizePreviewUrl(match?.[1]);
+    if (sanitized) return sanitized;
+  }
+
+  const rawUrlMatch = /(https?:\/\/[^\s'"]+)/.exec(trimmed);
+  return sanitizePreviewUrl(rawUrlMatch?.[1]);
+}
+
+function formatOperationLabel(operation?: string) {
+  const normalized = (operation ?? "unknown").toLowerCase();
+  const labels: Record<string, string> = {
+    created: "new",
+    modified: "modified",
+    deleted: "deleted",
+    deleted_dir: "deleted",
+    created_dir: "created",
+    write: "modified",
+  };
+  return labels[normalized] ?? normalized;
+}
+
+function getOperationBadgeClass(operation?: string) {
+  const normalized = (operation ?? "unknown").toLowerCase();
+  if (normalized.startsWith("delete")) {
+    return "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-200";
+  }
+  if (normalized === "created" || normalized === "new") {
+    return "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200";
+  }
+  if (normalized === "modified" || normalized === "write") {
+    return "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200";
+  }
+  return "";
+}
+
+function formatTimestamp(value?: string) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString();
+}
+
+function getLanguageFromFilePath(path?: string) {
+  if (!path) return "text";
+  const extension = path.split(".").pop()?.toLowerCase();
+  const mapping: Record<string, string> = {
+    ts: "typescript",
+    tsx: "tsx",
+    js: "javascript",
+    jsx: "jsx",
+    json: "json",
+    py: "python",
+    md: "markdown",
+    html: "html",
+    css: "css",
+    scss: "scss",
+    sh: "bash",
+    yml: "yaml",
+    yaml: "yaml",
+  };
+  return extension ? mapping[extension] ?? "text" : "text";
 }
 
 export function CoderSidebar({
@@ -229,20 +358,10 @@ function PythonToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
     return (toolCall.args as { code?: string }).code;
   }, [toolCall.args]);
   const { resolvedTheme } = useTheme();
-  const statusLabel = useMemo(() => {
-    if (toolCall.result) {
-      return isToolCallError(toolCall.result)
-        ? t("statusError")
-        : t("statusSuccess");
-    }
-    if (toolCall.status === "running") {
-      return t("statusRunning");
-    }
-    if (toolCall.status === "complete" || toolCall.status === "completed") {
-      return t("statusSuccess");
-    }
-    return t("statusPending");
-  }, [toolCall.result, toolCall.status, t]);
+  const statusLabel = useMemo(
+    () => getToolStatusLabel(toolCall, t),
+    [toolCall, t],
+  );
 
   return (
     <section className="mt-4 pl-4">
@@ -315,20 +434,10 @@ function FileSystemToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
     }
     return undefined;
   }, [toolCall.args, toolCall.argsChunks]);
-  const statusLabel = useMemo(() => {
-    if (toolCall.result) {
-      return isToolCallError(toolCall.result)
-        ? t("statusError")
-        : t("statusSuccess");
-    }
-    if (toolCall.status === "running") {
-      return t("statusRunning");
-    }
-    if (toolCall.status === "complete" || toolCall.status === "completed") {
-      return t("statusSuccess");
-    }
-    return t("statusPending");
-  }, [toolCall.result, toolCall.status, t]);
+  const statusLabel = useMemo(
+    () => getToolStatusLabel(toolCall, t),
+    [toolCall, t],
+  );
 
   return (
     <section className="mt-4 pl-4">
@@ -352,20 +461,10 @@ function FileSystemToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
 
 function ReactSandboxToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
   const t = useTranslations("chat.coder");
-  const statusLabel = useMemo(() => {
-    if (toolCall.result) {
-      return isToolCallError(toolCall.result)
-        ? t("statusError")
-        : t("statusSuccess");
-    }
-    if (toolCall.status === "running") {
-      return t("statusRunning");
-    }
-    if (toolCall.status === "complete" || toolCall.status === "completed") {
-      return t("statusSuccess");
-    }
-    return t("statusPending");
-  }, [toolCall.result, toolCall.status, t]);
+  const statusLabel = useMemo(
+    () => getToolStatusLabel(toolCall, t),
+    [toolCall, t],
+  );
 
   return (
     <section className="mt-4 pl-4">
@@ -390,20 +489,10 @@ function GenericToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
   const t = useTranslations("chat.coder");
   const tool = useMemo(() => findMCPTool(toolCall.name), [toolCall.name]);
   const { resolvedTheme } = useTheme();
-  const statusLabel = useMemo(() => {
-    if (toolCall.result) {
-      return isToolCallError(toolCall.result)
-        ? t("statusError")
-        : t("statusSuccess");
-    }
-    if (toolCall.status === "running") {
-      return t("statusRunning");
-    }
-    if (toolCall.status === "complete" || toolCall.status === "completed") {
-      return t("statusSuccess");
-    }
-    return t("statusPending");
-  }, [toolCall.result, toolCall.status, t]);
+  const statusLabel = useMemo(
+    () => getToolStatusLabel(toolCall, t),
+    [toolCall, t],
+  );
 
   return (
     <section className="mt-4 pl-4">
@@ -463,10 +552,7 @@ function GenericToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
 function ToolCallResult({ result }: { result: string }) {
   const t = useTranslations("chat.coder");
   const { resolvedTheme } = useTheme();
-  const hasError = useMemo(
-    () => result.trim().startsWith("Error:") || result.trim().startsWith("ERROR:"),
-    [result],
-  );
+  const hasError = useMemo(() => isToolCallError(result), [result]);
 
   return (
     <>
@@ -500,12 +586,18 @@ function CoderPreviewBlock({ sessionId }: { sessionId: string }) {
   const workspaceFilesByMessage = useStore((state) => state.coderWorkspaceFiles);
   const previewHtml = useMemo(() => {
     if (!activityIds) return null;
+    let truncatedFallback: string | null = null;
     for (const activityId of [...activityIds].reverse()) {
       const workspaceFiles = workspaceFilesByMessage.get(activityId) ?? [];
       for (const file of workspaceFiles) {
         if (!file.path.endsWith(".html")) continue;
         if (file.content?.trim()) {
-          return file.content;
+          if (!file.truncated) {
+            return file.content;
+          }
+          if (!truncatedFallback) {
+            truncatedFallback = file.content;
+          }
         }
       }
       const message = messages.get(activityId);
@@ -522,7 +614,7 @@ function CoderPreviewBlock({ sessionId }: { sessionId: string }) {
         }
       }
     }
-    return null;
+    return truncatedFallback;
   }, [activityIds, messages, workspaceFilesByMessage]);
 
   const hasPreviewError = useMemo(() => {
@@ -532,7 +624,7 @@ function CoderPreviewBlock({ sessionId }: { sessionId: string }) {
       if (!message?.toolCalls) continue;
       for (const toolCall of message.toolCalls) {
         if (toolCall.name !== "react_sandbox_tool") continue;
-        if (isToolCallError(toolCall.result)) {
+        if (toolCall.status === "error" || isToolCallError(toolCall.result)) {
           return true;
         }
       }
@@ -549,37 +641,8 @@ function CoderPreviewBlock({ sessionId }: { sessionId: string }) {
 
       for (const toolCall of message.toolCalls) {
         if (toolCall.name === "react_sandbox_tool" && toolCall.result) {
-          try {
-            const result = JSON.parse(toolCall.result);
-            if (result.preview_url) {
-              // Validate URL format and protocol
-              try {
-                const url = new URL(result.preview_url);
-                if (url.protocol === "http:" || url.protocol === "https:") {
-                  return result.preview_url;
-                }
-              } catch {
-                // Invalid URL format
-                return null;
-              }
-            }
-          } catch {
-            // Not JSON, try to extract URL with more robust pattern
-            const urlMatch = /preview_url["':\s]+["']?(https?:\/\/[^\s'"]+)["']?/.exec(
-              toolCall.result,
-            );
-            const previewUrlFromMatch = urlMatch?.[1];
-            if (previewUrlFromMatch) {
-              try {
-                const url = new URL(previewUrlFromMatch);
-                if (url.protocol === "http:" || url.protocol === "https:") {
-                  return previewUrlFromMatch;
-                }
-              } catch {
-                return null;
-              }
-            }
-          }
+          const candidate = extractPreviewUrl(toolCall.result);
+          if (candidate) return candidate;
         }
       }
     }
@@ -591,6 +654,7 @@ function CoderPreviewBlock({ sessionId }: { sessionId: string }) {
         {previewUrl ? (
           <iframe
             src={previewUrl}
+            key={previewUrl}
             className="h-full w-full rounded-lg border"
             title="React App Preview"
             sandbox="allow-scripts"
@@ -598,6 +662,7 @@ function CoderPreviewBlock({ sessionId }: { sessionId: string }) {
         ) : previewHtml ? (
           <iframe
             srcDoc={previewHtml}
+            key={previewHtml}
             className="h-full w-full rounded-lg border"
             title="HTML Preview"
             sandbox="allow-scripts"
@@ -631,12 +696,6 @@ function CoderFilesBlock({ sessionId }: { sessionId: string }) {
     if (!activityIds) return [];
 
     for (const activityId of activityIds) {
-      const workspaceFiles = workspaceFilesByMessage.get(activityId) ?? [];
-      if (workspaceFiles.length > 0) {
-        workspaceFiles.forEach((file) => {
-          fileMap.set(file.path, file);
-        });
-      }
       const message = messages.get(activityId);
       if (!message?.toolCalls) continue;
 
@@ -656,9 +715,27 @@ function CoderFilesBlock({ sessionId }: { sessionId: string }) {
           content: args.content ?? toolCall.result ?? "",
         });
       }
+
+      const workspaceFiles = workspaceFilesByMessage.get(activityId) ?? [];
+      if (workspaceFiles.length > 0) {
+        workspaceFiles.forEach((file) => {
+          const existing = fileMap.get(file.path);
+          fileMap.set(file.path, {
+            ...existing,
+            ...file,
+            content: file.content ?? existing?.content,
+            operation: file.operation ?? existing?.operation,
+          });
+        });
+      }
     }
 
-    return Array.from(fileMap.values());
+    return Array.from(fileMap.values()).sort((a, b) => {
+      const aTime = a.modified ? new Date(a.modified).getTime() : 0;
+      const bTime = b.modified ? new Date(b.modified).getTime() : 0;
+      if (aTime !== bTime) return bTime - aTime;
+      return a.path.localeCompare(b.path);
+    });
   }, [activityIds, messages, workspaceFilesByMessage]);
 
   return (
@@ -679,10 +756,23 @@ function CoderFilesBlock({ sessionId }: { sessionId: string }) {
                 onClick={() => setSelectedFile(file)}
               >
                 <FileText className="h-4 w-4 shrink-0" />
-                <span className="truncate font-mono text-sm">{file.path}</span>
+                <div className="min-w-0">
+                  <span className="block truncate font-mono text-sm">
+                    {file.path}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {formatTimestamp(file.modified) ?? "—"}
+                    {typeof file.size === "number" && (
+                      <> • {file.size} bytes</>
+                    )}
+                  </span>
+                </div>
               </button>
-              <Badge variant="secondary">
-                {file.operation ?? "unknown"}
+              <Badge
+                variant="secondary"
+                className={cn("shrink-0", getOperationBadgeClass(file.operation))}
+              >
+                {formatOperationLabel(file.operation)}
               </Badge>
             </motion.li>
           ))}
@@ -705,12 +795,20 @@ function CoderFilesBlock({ sessionId }: { sessionId: string }) {
           <DialogHeader>
             <DialogTitle>{selectedFile?.path}</DialogTitle>
             <DialogDescription>
-              {selectedFile?.operation ?? "unknown"}
+              {[
+                formatOperationLabel(selectedFile?.operation),
+                formatTimestamp(selectedFile?.modified),
+                typeof selectedFile?.size === "number"
+                  ? `${selectedFile.size} bytes`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" • ")}
             </DialogDescription>
           </DialogHeader>
           <div className="bg-accent max-h-[60vh] overflow-auto rounded-md p-4 text-sm">
             <SyntaxHighlighter
-              language="text"
+              language={getLanguageFromFilePath(selectedFile?.path)}
               style={resolvedTheme === "dark" ? dark : docco}
               customStyle={{
                 background: "transparent",
