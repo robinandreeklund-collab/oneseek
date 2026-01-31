@@ -2711,8 +2711,29 @@ async def ai_comparison_node(
             Step(
                 need_search=False,
                 step_type=StepType.AI_QUERY,
-                title="Fråga AI‑modeller",
-                description="Samla in svar från varje modell i tur och ordning.",
+                title="GPT‑3.5",
+                description="Model: gpt-3.5-turbo",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_QUERY,
+                title="Gemini 2.5 Flash",
+                description="Model: gemini-2.5-flash",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_QUERY,
+                title="DeepSeek Chat",
+                description="Model: deepseek-chat",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_QUERY,
+                title="Grok‑4 Fast Reasoning",
+                description="Model: grok-4-fast-reasoning",
                 execution_res=None,
             ),
             Step(
@@ -2750,8 +2771,29 @@ async def ai_comparison_node(
             Step(
                 need_search=False,
                 step_type=StepType.AI_QUERY,
-                title="Query AI Models",
-                description="Collect responses from each AI model sequentially.",
+                title="GPT-3.5",
+                description="Model: gpt-3.5-turbo",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_QUERY,
+                title="Gemini 2.5 Flash",
+                description="Model: gemini-2.5-flash",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_QUERY,
+                title="DeepSeek Chat",
+                description="Model: deepseek-chat",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_QUERY,
+                title="Grok-4 Fast Reasoning",
+                description="Model: grok-4-fast-reasoning",
                 execution_res=None,
             ),
             Step(
@@ -2971,16 +3013,34 @@ async def ai_compare_query_node(
 ) -> Command[Literal["ai_compare_team"]]:
     """Query AI models sequentially and store responses."""
     configurable = Configuration.from_runnable_config(config)
+    from backend.deer_flow.prompts.planner_model import Plan, StepType
     set_ai_comparison_context(
         max_search_results=configurable.max_search_results,
         resources=state.get("resources", []),
     )
-    tools = [
-        query_gpt35,
-        query_gemini_flash,
-        query_deepseek,
-        query_grok4,
-    ]
+    current_plan = state.get("current_plan")
+    current_step = None
+    if isinstance(current_plan, Plan):
+        for step in current_plan.steps:
+            if not step.execution_res and step.step_type == StepType.AI_QUERY:
+                current_step = step
+                break
+
+    model_tool_map = {
+        "gpt-3.5-turbo": query_gpt35,
+        "gemini-2.5-flash": query_gemini_flash,
+        "deepseek-chat": query_deepseek,
+        "grok-4-fast-reasoning": query_grok4,
+    }
+    selected_tool = None
+    if current_step:
+        step_text = f"{current_step.title} {current_step.description}".lower()
+        for model_key, tool in model_tool_map.items():
+            if model_key in step_text or model_key.replace("-", " ") in step_text:
+                selected_tool = tool
+                break
+
+    tools = [selected_tool] if selected_tool else list(model_tool_map.values())
     result = await _setup_and_execute_agent_step(
         state,
         config,
@@ -3004,13 +3064,23 @@ async def ai_compare_query_node(
             if result.update.get("messages")
             else ""
         )
-        responses = payload.get("responses", [])
-    responses_json = json.dumps(responses, ensure_ascii=False)
+        if isinstance(payload, dict):
+            if payload.get("responses"):
+                responses = payload.get("responses", [])
+            elif payload.get("response"):
+                responses = [payload.get("response")]
+    existing = state.get("ai_compare_responses", [])
+    merged = {resp.get("model"): resp for resp in existing if isinstance(resp, dict)}
+    for resp in responses:
+        if isinstance(resp, dict):
+            merged[resp.get("model")] = resp
+    merged_responses = [resp for resp in merged.values() if resp]
+    responses_json = json.dumps(merged_responses, ensure_ascii=False)
     return Command(
         update={
             **preserve_state_meta_fields(state),
             **result.update,
-            "ai_compare_responses": responses,
+            "ai_compare_responses": merged_responses,
             "ai_compare_responses_json": responses_json,
         },
         goto=result.goto,

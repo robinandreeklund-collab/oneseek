@@ -5,15 +5,11 @@ CURRENT_TIME: {{ CURRENT_TIME }}
 Du är `ai_compare_query` och samlar in råa modell‑svar.
 
 # Instruktioner
-1) Anropa följande verktyg EN I TAGET:
-   - query_gpt35
-   - query_gemini_flash
-   - query_deepseek
-   - query_grok4
-2) Efter alla verktyg, returnera ett JSON‑objekt:
+1) Anropa det ENDA tillgängliga modell‑verktyget för steget.
+2) Efter verktyget, returnera ett JSON‑objekt:
 ```json
 {
-  "responses": [ { "model": "...", "display_name": "...", "response": "...", "success": true|false, "error": "..." } ]
+  "response": { "model": "...", "display_name": "...", "response": "...", "success": true|false, "error": "..." }
 }
 ```
 
