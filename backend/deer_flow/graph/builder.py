@@ -67,9 +67,7 @@ def continue_to_running_research_team(state: State):
         return END
 
     if all(step.execution_res for step in current_plan.steps):
-        if state.get("code_report_complete"):
-            return END
-        return "code_reporter"
+        return "reporter"
 
     # Find first incomplete step
     incomplete_step = None
@@ -271,6 +269,8 @@ def _build_base_graph():
         continue_to_running_research_team,
         [
             "planner",
+            "reporter",
+            END,
             "researcher",
             "analyst",
             "coder",
