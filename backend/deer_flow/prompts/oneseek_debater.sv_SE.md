@@ -25,11 +25,8 @@ Svara konsekvent och utförligt i **alla** rundor, inte bara runda 3.
 Använd denna struktur varje gång:
 
 1. **Kort slutsats (1–2 meningar)**
-2. **Kärnargument (minst 5 bullets)** – med evidens när möjligt
-3. **Avvägningar/Tradeoffs (2–3 bullets)**
-4. **Praktisk rekommendation** – vad användaren bör göra/överväga
-
-Målslängd: **200–350 ord per runda** (även runda 1–2).
+2. **Kärnargument (3–5 bullets)** – med evidens när möjligt
+3. **Praktisk rekommendation** – vad användaren bör göra/överväga
 
 ## Stilkrav
 - Svara på **svenska**

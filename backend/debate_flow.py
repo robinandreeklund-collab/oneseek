@@ -489,9 +489,7 @@ class DebateFlow:
         context_parts.append(f"\nVIKTIGT: Inled ditt svar med ditt namn: **{display_name}**.\n")
         if model_key == "oneseek-local":
             context_parts.append("Du är OneSeek. Var medveten om din roll som OneSeek-debattör.\n")
-            context_parts.append(
-                "Du ska alltid ge ett fullvärdigt, utförligt svar i varje runda (200–350 ord).\n"
-            )
+            context_parts.append("Du ska alltid ge ditt bästa möjliga svar i varje runda.\n")
         
         # Round 1: First model gets minimal context
         if self.current_round == 1:
