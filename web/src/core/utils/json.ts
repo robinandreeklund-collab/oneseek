@@ -84,7 +84,11 @@ export function parseJSON<T>(json: string | null | undefined, fallback: T) {
     try {
       return JSON.parse(raw) as T;
     } catch {
-      // If standard parse fails, try best-effort parser for incomplete/streaming JSON
+      // Only attempt best-effort parsing if it looks like JSON
+      const trimmed = raw.trim();
+      if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+        return fallback;
+      }
       try {
         return parse(raw) as T;
       } catch {

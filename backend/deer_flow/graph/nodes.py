@@ -3047,7 +3047,12 @@ async def ai_compare_query_node(
 
     query = state.get("research_topic", "")
     tool_call_id = uuid4().hex
-    tool_args = {"query": query, "model_key": selected_model}
+    tool_args = {
+        "query": query,
+        "model_key": selected_model,
+        "user_query": query,
+        "locale": state.get("locale", "en-US"),
+    }
     try:
         tool_output = await selected_tool.ainvoke(tool_args)
     except Exception as exc:
@@ -3099,7 +3104,7 @@ async def ai_compare_query_node(
             tool_calls=[
                 {
                     "id": tool_call_id,
-                    "name": getattr(selected_tool, "name", "unknown"),
+                    "name": "query_model_in_round",
                     "args": tool_args,
                 }
             ],
@@ -3107,7 +3112,7 @@ async def ai_compare_query_node(
         ToolMessage(
             content=ui_text or str(tool_output),
             tool_call_id=tool_call_id,
-            name=getattr(selected_tool, "name", "unknown"),
+            name="query_model_in_round",
         ),
     ]
     return Command(

@@ -192,6 +192,7 @@ export const useStore = create<{
       if (!targetMessage) {
         const toolName = action.tool_name ?? "unknown";
         const fallbackAgent =
+          toolName === "query_model_in_round" ||
           toolName === "query_gpt35" ||
           toolName === "query_gemini_flash" ||
           toolName === "query_deepseek" ||
