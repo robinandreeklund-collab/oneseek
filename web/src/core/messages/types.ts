@@ -13,6 +13,7 @@ export type AgentName =
   | "code_reviewer"
   | "code_refiner"
   | "code_tester"
+  | "code_reporter"
   | "reporter"
   | "podcast"
   | "analyst"

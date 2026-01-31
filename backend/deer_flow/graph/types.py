@@ -68,3 +68,7 @@ class State(MessagesState):
     external_ai_responses: str = ""
     debate_pending_model: dict[str, Any] | None = None
     debate_model_ids: list[str] = field(default_factory=list)
+    
+    # Code mode
+    enable_code_mode: bool = False
+    code_report_complete: bool = False

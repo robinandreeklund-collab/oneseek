@@ -268,6 +268,7 @@ export async function sendMessage(
         settings.enableBackgroundInvestigation ?? true,
       enable_ai_comparison: settings.enableAiComparison ?? false,
       enable_debate_mode: settings.enableDebateMode ?? false,
+      enable_code_mode: settings.enableCodeMode ?? false,
       enable_web_search: settings.enableWebSearch ?? true,
       max_plan_iterations: settings.maxPlanIterations,
       max_step_num: settings.maxStepNum,
@@ -442,7 +443,8 @@ function appendMessage(message: Message) {
     message.agent === "code_architect" ||
     message.agent === "code_reviewer" ||
     message.agent === "code_refiner" ||
-    message.agent === "code_tester"
+    message.agent === "code_tester" ||
+    message.agent === "code_reporter"
   ) {
     if (!getOngoingCoderSessionId()) {
       const id = message.id;

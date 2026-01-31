@@ -89,6 +89,9 @@ class ChatRequest(BaseModel):
     enable_debate_mode: Optional[bool] = Field(
         False, description="Whether to enable multi-round debate engine mode"
     )
+    enable_code_mode: Optional[bool] = Field(
+        False, description="Whether to force code-only chain"
+    )
 
 
 class TTSRequest(BaseModel):

@@ -335,6 +335,7 @@ async def chat_stream(request: ChatRequest):
             request.interrupt_before_tools,
             request.enable_ai_comparison,
             request.enable_debate_mode,
+            request.enable_code_mode,
         ),
         media_type="text/event-stream",
     )
@@ -1200,6 +1201,7 @@ async def _astream_workflow_generator(
     interrupt_before_tools: Optional[List[str]] = None,
     enable_ai_comparison: bool = False,
     enable_debate_mode: bool = False,
+    enable_code_mode: bool = False,
 ):
     safe_thread_id = sanitize_thread_id(thread_id)
     safe_feedback = sanitize_log_input(interrupt_feedback) if interrupt_feedback else ""
@@ -1249,6 +1251,11 @@ async def _astream_workflow_generator(
         logger.info(f"[{safe_thread_id}] Debate mode enabled, using DEBATE report style")
         report_style = ReportStyle.DEBATE
     
+    if enable_code_mode:
+        enable_ai_comparison = False
+        enable_debate_mode = False
+        logger.info(f"[{safe_thread_id}] Code mode enabled - forcing code chain")
+    
     workflow_input = {
         "messages": messages,
         "plan_iterations": 0,
@@ -1265,6 +1272,7 @@ async def _astream_workflow_generator(
         "locale": locale,
         "enable_ai_comparison": enable_ai_comparison,
         "enable_debate_mode": enable_debate_mode,
+        "enable_code_mode": enable_code_mode,
     }
 
     if not auto_accepted_plan and interrupt_feedback:

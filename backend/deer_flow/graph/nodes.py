@@ -259,6 +259,8 @@ def preserve_state_meta_fields(state: State) -> dict:
         "research_topic": state.get("research_topic", ""),
         "clarified_research_topic": state.get("clarified_research_topic", ""),
         "plan_source": state.get("plan_source", "planner"),
+        "enable_code_mode": state.get("enable_code_mode", False),
+        "code_report_complete": state.get("code_report_complete", False),
         "clarification_history": state.get("clarification_history", []),
         "enable_clarification": state.get("enable_clarification", False),
         "max_clarification_rounds": state.get("max_clarification_rounds", 3),
@@ -1174,6 +1176,16 @@ def coordinator_node(
     """Coordinator node that communicate with customers and handle clarification."""
     logger.info("Coordinator talking.")
     configurable = Configuration.from_runnable_config(config)
+
+    if state.get("enable_code_mode"):
+        logger.info("[coordinator_node] Code mode enabled, routing to code_planner")
+        return Command(
+            update={
+                "research_topic": state.get("research_topic", ""),
+                **preserve_state_meta_fields(state),
+            },
+            goto="code_planner",
+        )
 
     # Check if clarification is enabled
     enable_clarification = state.get("enable_clarification", False)
@@ -2524,6 +2536,29 @@ async def code_tester_node(
         config,
         "code_tester",
         tools,
+    )
+
+
+async def code_reporter_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["__end__"]]:
+    """Code reporter node that outputs a code-focused summary."""
+    logger.info("Code reporter generating code-focused summary.")
+    configurable = Configuration.from_runnable_config(config)
+    locale = state.get("locale", "en-US")
+
+    messages = apply_prompt_template("code_reporter", state, configurable, locale)
+    llm = get_llm_by_type(AGENT_LLM_MAP.get("code_reporter", "basic"))
+    response = llm.invoke(messages)
+    content = strip_think_tags(get_message_content(response) or "")
+
+    return Command(
+        update={
+            "messages": [AIMessage(content=content, name="code_reporter")],
+            "code_report_complete": True,
+            **preserve_state_meta_fields(state),
+        },
+        goto="__end__",
     )
 
 

@@ -16,6 +16,7 @@ const DEFAULT_SETTINGS: SettingsState = {
     enableBackgroundInvestigation: false,
     enableAiComparison: false,
     enableDebateMode: false,
+    enableCodeMode: false,
     enableWebSearch: true,
     maxPlanIterations: 1,
     maxStepNum: 3,
@@ -36,6 +37,7 @@ export type SettingsState = {
     enableBackgroundInvestigation: boolean;
     enableAiComparison: boolean;
     enableDebateMode: boolean;
+    enableCodeMode: boolean;
     enableWebSearch: boolean;
     maxPlanIterations: number;
     maxStepNum: number;
@@ -186,6 +188,16 @@ export function setEnableDebateMode(value: boolean) {
     general: {
       ...state.general,
       enableDebateMode: value,
+    },
+  }));
+  saveSettings();
+}
+
+export function setEnableCodeMode(value: boolean) {
+  useSettingsStore.setState((state) => ({
+    general: {
+      ...state.general,
+      enableCodeMode: value,
     },
   }));
   saveSettings();

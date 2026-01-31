@@ -14,6 +14,7 @@ from .nodes import (
     code_refiner_node,
     code_researcher_node,
     code_reviewer_node,
+    code_reporter_node,
     code_tester_node,
     code_team_node,
     coder_node,
@@ -60,7 +61,9 @@ def continue_to_running_research_team(state: State):
         return END
 
     if all(step.execution_res for step in current_plan.steps):
-        return END
+        if state.get("code_report_complete"):
+            return END
+        return "code_reporter"
 
     # Find first incomplete step
     incomplete_step = None
@@ -174,6 +177,7 @@ def _build_base_graph():
     builder.add_node("code_refiner", code_refiner_node)
     builder.add_node("tester", tester_node)
     builder.add_node("code_tester", code_tester_node)
+    builder.add_node("code_reporter", code_reporter_node)
     builder.add_node("human_feedback", human_feedback_node)
     
     # Add debate chain nodes (using real external AI models)
@@ -235,6 +239,7 @@ def _build_base_graph():
             "code_reviewer",
             "code_refiner",
             "code_tester",
+            "code_reporter",
         ],
     )
     # Changed from END to human_feedback to ensure debate_complete flag is checked
