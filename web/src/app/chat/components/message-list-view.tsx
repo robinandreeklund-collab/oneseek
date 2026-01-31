@@ -588,6 +588,8 @@ function PlanCard({
   waitForFeedback?: boolean;
 }) {
   const t = useTranslations("chat.research");
+  const locale = useLocale();
+  const isSwedish = locale.startsWith("sv");
   const plan = useMemo<{
     title?: string;
     thought?: string;
@@ -637,17 +639,28 @@ function PlanCard({
   const shouldShowPlan = hasMainContent || message.isStreaming;
   const handleAccept = useCallback(async () => {
     if (onSendMessage) {
+      const greetings = isSwedish
+        ? ["Toppen", "Låter bra", "Ser bra ut", "Grymt", "Kanon"]
+        : GREETINGS;
       const feedback = isDebatePlan
         ? `accepted|models=${selectedModels.join(",")}`
         : "accepted";
+      const intro = greetings[Math.floor(Math.random() * greetings.length)];
+      const followup = isSwedish
+        ? Math.random() > 0.5
+          ? "Då kör vi."
+          : "Nu kör vi."
+        : Math.random() > 0.5
+          ? "Let's get started."
+          : "Let's start.";
       onSendMessage(
-        `${GREETINGS[Math.floor(Math.random() * GREETINGS.length)]}! ${Math.random() > 0.5 ? "Let's get started." : "Let's start."}`,
+        `${intro}! ${followup}`,
         {
           interruptFeedback: feedback,
         },
       );
     }
-  }, [isDebatePlan, onSendMessage, selectedModels]);
+  }, [isDebatePlan, onSendMessage, selectedModels, isSwedish]);
   return (
     <div className={cn("w-full", className)}>
       {reasoningContent && (
