@@ -624,7 +624,7 @@ function appendResearchActivity(message: Message) {
         ]),
       });
     }
-    if (message.agent === "reporter") {
+    if (message.agent === "reporter" || message.agent === "ai_compare_reporter") {
       useStore.setState({
         researchReportIds: new Map(useStore.getState().researchReportIds).set(
           researchId,

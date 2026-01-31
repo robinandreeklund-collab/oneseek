@@ -5,7 +5,7 @@ import { PythonOutlined } from "@ant-design/icons";
 import { motion } from "framer-motion";
 import { LRUCache } from "lru-cache";
 import { BookOpenText, FileText, PencilRuler, Search } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useTheme } from "next-themes";
 import React, { useMemo } from "react";
 import SyntaxHighlighter from "react-syntax-highlighter";
@@ -107,7 +107,7 @@ const ActivityMessage = React.memo(({ messageId }: { messageId: string }) => {
       return <PlanCard message={message} />;
     }
     // Skip reporter messages (they're shown in the Report tab)
-    if (message.agent !== "reporter" && message.content) {
+    if (message.agent !== "reporter" && message.agent !== "ai_compare_reporter" && message.content) {
       return (
         <div className="px-4 py-2">
           <Markdown animated checkLinkCredibility>
@@ -124,6 +124,8 @@ ActivityMessage.displayName = "ActivityMessage";
 // Component to display the research plan
 const PlanCard = React.memo(({ message }: { message: Message }) => {
   const t = useTranslations("chat.research");
+  const locale = useLocale();
+  const isSwedish = locale.startsWith("sv");
   const plan = useMemo<{
     title?: string;
     thought?: string;
@@ -153,12 +155,16 @@ const PlanCard = React.memo(({ message }: { message: Message }) => {
           {!hasContent && message.isStreaming && (
             <div className="flex items-center gap-2 text-sm opacity-70">
               <LoadingAnimation className="mx-0 my-0" />
-              <span>Creating research plan...</span>
+              <span>
+                {isSwedish ? "Skapar plan..." : "Creating research plan..."}
+              </span>
             </div>
           )}
           {!hasContent && !message.isStreaming && (
             <div className="text-sm opacity-50">
-              No plan content available
+              {isSwedish
+                ? "Ingen planinformation tillgänglig"
+                : "No plan content available"}
             </div>
           )}
           {hasContent && plan.thought && (
@@ -573,6 +579,8 @@ function PythonToolCallResult({ result }: { result: string }) {
 function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
   const tool = useMemo(() => findMCPTool(toolCall.name), [toolCall.name]);
   const { resolvedTheme } = useTheme();
+  const locale = useLocale();
+  const isSwedish = locale.startsWith("sv");
   const modelIconKey = useMemo(() => {
     if (toolCall.name === "query_model_in_round") {
       const args = toolCall.args as { model_key?: string };
@@ -598,25 +606,27 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
       if (model.includes("(ID:")) {
         model = model.split("(ID:")[0]?.trim() || model;
       }
-      return `Waiting for ${model}...`;
+      return isSwedish ? `Väntar på ${model}...` : `Waiting for ${model}...`;
     } else if (toolCall.name === "query_gpt35") {
-      return "Waiting for GPT-3.5...";
+      return isSwedish ? "Väntar på GPT-3.5..." : "Waiting for GPT-3.5...";
     } else if (toolCall.name === "query_gemini_flash") {
-      return "Waiting for Gemini 2.5 Flash...";
+      return isSwedish ? "Väntar på Gemini 2.5 Flash..." : "Waiting for Gemini 2.5 Flash...";
     } else if (toolCall.name === "query_deepseek") {
-      return "Waiting for DeepSeek...";
+      return isSwedish ? "Väntar på DeepSeek..." : "Waiting for DeepSeek...";
     } else if (toolCall.name === "query_grok4") {
-      return "Waiting for Grok-4...";
+      return isSwedish ? "Väntar på Grok-4..." : "Waiting for Grok-4...";
     } else if (toolCall.name === "start_debate_round") {
         const args = toolCall.args as { round_number?: number };
-        return `Starting Round ${args.round_number ?? ""}...`;
+        return isSwedish
+          ? `Startar runda ${args.round_number ?? ""}...`
+          : `Starting Round ${args.round_number ?? ""}...`;
     } else if (toolCall.name === "collect_debate_votes") {
-        return "Collecting votes from all models...";
+        return isSwedish ? "Samlar röster från alla modeller..." : "Collecting votes from all models...";
     }
     
     // Default: just function name
     return `${toolCall.name}()`;
-  }, [toolCall.name, toolCall.args]);
+  }, [toolCall.name, toolCall.args, isSwedish]);
 
   // Is this a debate tool that has finished running?
   // If so, we might want to change the text from "Waiting..." to "Responded"
@@ -628,18 +638,18 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
            if (model.includes("(ID:")) {
              model = model.split("(ID:")[0]?.trim() || model;
            }
-           return `${model} responded`;
+           return isSwedish ? `${model} svarade` : `${model} responded`;
        }
-       if (toolCall.name === "query_gpt35") return "GPT-3.5 responded";
-       if (toolCall.name === "query_gemini_flash") return "Gemini 2.5 Flash responded";
-       if (toolCall.name === "query_deepseek") return "DeepSeek responded";
-       if (toolCall.name === "query_grok4") return "Grok-4 responded";
-       if (toolCall.name === "start_debate_round") return "Round started";
-       if (toolCall.name === "collect_debate_votes") return "Votes collected";
-       return `Executed ${toolCall.name}()`;
+       if (toolCall.name === "query_gpt35") return isSwedish ? "GPT-3.5 svarade" : "GPT-3.5 responded";
+       if (toolCall.name === "query_gemini_flash") return isSwedish ? "Gemini 2.5 Flash svarade" : "Gemini 2.5 Flash responded";
+       if (toolCall.name === "query_deepseek") return isSwedish ? "DeepSeek svarade" : "DeepSeek responded";
+       if (toolCall.name === "query_grok4") return isSwedish ? "Grok-4 svarade" : "Grok-4 responded";
+       if (toolCall.name === "start_debate_round") return isSwedish ? "Runda startad" : "Round started";
+       if (toolCall.name === "collect_debate_votes") return isSwedish ? "Röster insamlade" : "Votes collected";
+       return isSwedish ? `Körde ${toolCall.name}()` : `Executed ${toolCall.name}()`;
     }
-    return `Running ${displayName}`;
-  }, [displayName, toolCall.name, toolCall.result, toolCall.args]);
+    return isSwedish ? `Kör ${displayName}` : `Running ${displayName}`;
+  }, [displayName, toolCall.name, toolCall.result, toolCall.args, isSwedish]);
 
   return (
     <section className="mt-4 pl-4">

@@ -11,7 +11,7 @@ import {
   Lightbulb,
   Wrench,
 } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 
 import { LoadingAnimation } from "~/components/deer-flow/loading-animation";
@@ -348,6 +348,8 @@ function ResearchCard({
   onToggleResearch?: () => void;
 }) {
   const t = useTranslations("chat.research");
+  const locale = useLocale();
+  const isSwedish = locale.startsWith("sv");
   const reportId = useStore((state) => state.researchReportIds.get(researchId));
   const hasReport = reportId !== undefined;
   const reportGenerating = useStore(
@@ -616,10 +618,17 @@ function PlanCard({
     }
     const plannerName = formatPlannerName(message.agent);
     if (plannerName) {
-      return `Start ${plannerName}`;
+      const normalized = plannerName.toLowerCase();
+      const displayName =
+        normalized === "ai comparison"
+          ? isSwedish
+            ? "AI-jämförelse"
+            : "AI comparison"
+          : plannerName;
+      return isSwedish ? `Starta ${displayName}` : `Start ${displayName}`;
     }
     return t("startResearch");
-  }, [isDebatePlan, message.agent, t]);
+  }, [isDebatePlan, message.agent, t, isSwedish]);
 
   // Check if thinking: has reasoning content but no main content yet
   const isThinking = Boolean(reasoningContent && !hasMainContent);
@@ -671,7 +680,9 @@ function PlanCard({
               {!hasMainContent && message.isStreaming && (
                 <div className="flex items-center gap-2 text-sm opacity-70 p-4">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
-                  <span>Creating research plan...</span>
+                  <span>
+                    {isSwedish ? "Skapar plan..." : "Creating research plan..."}
+                  </span>
                 </div>
               )}
               {hasMainContent && (
