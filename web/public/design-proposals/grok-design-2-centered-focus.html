@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grok-Inspired 2: Centered Focus</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #ffffff;
+            color: #1a1a1a;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* Top navigation */
+        .top-nav {
+            height: 56px;
+            border-bottom: 1px solid #e5e5e5;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            background: #ffffff;
+        }
+        
+        .logo-area {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        
+        .logo {
+            font-size: 20px;
+            font-weight: 700;
+            color: #1a1a1a;
+        }
+        
+        .nav-tabs {
+            display: flex;
+            gap: 4px;
+        }
+        
+        .nav-tab {
+            padding: 8px 16px;
+            background: transparent;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            color: #666;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .nav-tab:hover {
+            background: #f5f5f5;
+            color: #1a1a1a;
+        }
+        
+        .nav-tab.active {
+            background: #f0f0f0;
+            color: #1a1a1a;
+            font-weight: 600;
+        }
+        
+        .nav-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        
+        .action-btn {
+            padding: 8px 16px;
+            background: transparent;
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
+            font-size: 14px;
+            color: #1a1a1a;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .action-btn:hover {
+            background: #f5f5f5;
+        }
+        
+        .action-btn.primary {
+            background: #2563eb;
+            border-color: #2563eb;
+            color: white;
+        }
+        
+        .action-btn.primary:hover {
+            background: #1d4ed8;
+        }
+        
+        /* Main content */
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-y: auto;
+            padding: 40px 20px;
+        }
+        
+        .content-wrapper {
+            max-width: 750px;
+            width: 100%;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        
+        .welcome-header {
+            text-align: center;
+            margin-bottom: 48px;
+        }
+        
+        .welcome-icon {
+            width: 64px;
+            height: 64px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            margin: 0 auto 20px;
+        }
+        
+        h1 {
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: #1a1a1a;
+        }
+        
+        .subtitle {
+            font-size: 18px;
+            color: #666;
+        }
+        
+        /* Capability cards */
+        .capabilities {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 48px;
+        }
+        
+        .capability-card {
+            padding: 20px;
+            background: #fafafa;
+            border: 1px solid #e5e5e5;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .capability-card:hover {
+            background: #f5f5f5;
+            border-color: #d4d4d4;
+            transform: translateY(-2px);
+        }
+        
+        .capability-icon {
+            font-size: 24px;
+            margin-bottom: 12px;
+        }
+        
+        .capability-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: #1a1a1a;
+        }
+        
+        .capability-desc {
+            font-size: 13px;
+            color: #666;
+            line-height: 1.4;
+        }
+        
+        /* Input section */
+        .input-section {
+            position: relative;
+        }
+        
+        .input-container {
+            background: white;
+            border: 2px solid #e5e5e5;
+            border-radius: 16px;
+            padding: 16px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            transition: all 0.2s;
+        }
+        
+        .input-container:focus-within {
+            border-color: #2563eb;
+            box-shadow: 0 4px 20px rgba(37,99,235,0.15);
+        }
+        
+        .input-box {
+            display: flex;
+            align-items: flex-end;
+            gap: 12px;
+        }
+        
+        textarea {
+            flex: 1;
+            border: none;
+            outline: none;
+            font-size: 15px;
+            font-family: inherit;
+            resize: none;
+            min-height: 24px;
+            max-height: 200px;
+            color: #1a1a1a;
+        }
+        
+        textarea::placeholder {
+            color: #999;
+        }
+        
+        .send-button {
+            width: 40px;
+            height: 40px;
+            background: #2563eb;
+            border: none;
+            border-radius: 10px;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+        
+        .send-button:hover {
+            background: #1d4ed8;
+            transform: scale(1.05);
+        }
+        
+        .send-button:disabled {
+            background: #e5e5e5;
+            cursor: not-allowed;
+            transform: scale(1);
+        }
+        
+        .input-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 12px;
+            padding: 0 4px;
+        }
+        
+        .input-options {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .option-btn {
+            padding: 6px 12px;
+            background: transparent;
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #666;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .option-btn:hover {
+            background: #f5f5f5;
+            color: #1a1a1a;
+        }
+        
+        .input-info {
+            font-size: 12px;
+            color: #999;
+        }
+        
+        /* Example prompts */
+        .example-prompts {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        .prompt-chip {
+            padding: 8px 16px;
+            background: white;
+            border: 1px solid #e5e5e5;
+            border-radius: 20px;
+            font-size: 13px;
+            color: #666;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .prompt-chip:hover {
+            background: #f5f5f5;
+            color: #1a1a1a;
+            border-color: #d4d4d4;
+        }
+    </style>
+</head>
+<body>
+    <nav class="top-nav">
+        <div class="logo-area">
+            <div class="logo">OneSeek</div>
+            <div class="nav-tabs">
+                <button class="nav-tab active">Chat</button>
+                <button class="nav-tab">Projekt</button>
+                <button class="nav-tab">Historik</button>
+            </div>
+        </div>
+        
+        <div class="nav-actions">
+            <button class="action-btn">🎤 Voice</button>
+            <button class="action-btn primary">+ Ny chat</button>
+        </div>
+    </nav>
+    
+    <main class="main">
+        <div class="content-wrapper">
+            <div class="welcome-header">
+                <div class="welcome-icon">🤖</div>
+                <h1>Hej! Hur kan jag hjälpa dig idag?</h1>
+                <p class="subtitle">Ställ en fråga eller välj från förslag nedan</p>
+            </div>
+            
+            <div class="capabilities">
+                <div class="capability-card">
+                    <div class="capability-icon">🔍</div>
+                    <div class="capability-title">Deep Research</div>
+                    <div class="capability-desc">Hitta och analysera information från hela webben</div>
+                </div>
+                
+                <div class="capability-card">
+                    <div class="capability-icon">💡</div>
+                    <div class="capability-title">Brainstorming</div>
+                    <div class="capability-desc">Generera kreativa idéer och koncept</div>
+                </div>
+                
+                <div class="capability-card">
+                    <div class="capability-icon">📝</div>
+                    <div class="capability-title">Skriv & Redigera</div>
+                    <div class="capability-desc">Skapa och förbättra innehåll</div>
+                </div>
+                
+                <div class="capability-card">
+                    <div class="capability-icon">💻</div>
+                    <div class="capability-title">Kod & Debug</div>
+                    <div class="capability-desc">Hjälp med programmering och felsökning</div>
+                </div>
+                
+                <div class="capability-card">
+                    <div class="capability-icon">📊</div>
+                    <div class="capability-title">Analys & Data</div>
+                    <div class="capability-desc">Analysera data och skapa visualiseringar</div>
+                </div>
+                
+                <div class="capability-card">
+                    <div class="capability-icon">🎓</div>
+                    <div class="capability-title">Lär & Förstå</div>
+                    <div class="capability-desc">Förklara komplexa ämnen enkelt</div>
+                </div>
+            </div>
+            
+            <div class="input-section">
+                <div class="input-container">
+                    <div class="input-box">
+                        <textarea placeholder="Skriv ditt meddelande här..." rows="1"></textarea>
+                        <button class="send-button" disabled>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                <path d="M5 12h14M12 5l7 7-7 7"/>
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <div class="input-footer">
+                        <div class="input-options">
+                            <button class="option-btn">📎 Fil</button>
+                            <button class="option-btn">🖼️ Bild</button>
+                            <button class="option-btn">🎨 Skapa</button>
+                        </div>
+                        <div class="input-info">Grok-2 • Realtime</div>
+                    </div>
+                </div>
+                
+                <div class="example-prompts">
+                    <div class="prompt-chip">💡 Förklara kvantdatorer</div>
+                    <div class="prompt-chip">🚀 Senaste tech-nyheter</div>
+                    <div class="prompt-chip">✍️ Hjälp mig skriva en artikel</div>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <script>
+        const textarea = document.querySelector('textarea');
+        const sendButton = document.querySelector('.send-button');
+        
+        textarea.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = this.scrollHeight + 'px';
+            sendButton.disabled = this.value.trim() === '';
+        });
+    </script>
+</body>
+</html>

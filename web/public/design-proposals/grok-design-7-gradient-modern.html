@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grok Design 7 - Gradient Modern</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #1a1a2e;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3);
+        }
+
+        .header {
+            padding: 16px 24px;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            backdrop-filter: blur(10px);
+        }
+
+        .header-title {
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+
+        .header-subtitle {
+            font-size: 12px;
+            opacity: 0.8;
+            margin-top: 2px;
+        }
+
+        .header-right {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .badge {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            backdrop-filter: blur(10px);
+        }
+
+        .messages-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .messages-area::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .messages-area::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .messages-area::-webkit-scrollbar-thumb {
+            background: rgba(102, 126, 234, 0.3);
+            border-radius: 4px;
+        }
+
+        .message-group {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            margin-bottom: 8px;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message-group.user {
+            justify-content: flex-end;
+        }
+
+        .message-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 700;
+            color: white;
+            flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        .message-avatar.user {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .message-content {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-width: 65%;
+        }
+
+        .message-content.user {
+            align-items: flex-end;
+        }
+
+        .message {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 14px;
+            line-height: 1.5;
+            word-wrap: break-word;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        .message.user {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 2px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .timestamp {
+            font-size: 12px;
+            color: #999;
+            margin-top: 4px;
+        }
+
+        .suggestions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .suggestion-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+            border: 1.5px solid rgba(102, 126, 234, 0.3);
+            border-radius: 20px;
+            padding: 8px 14px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: #667eea;
+            white-space: nowrap;
+            font-weight: 500;
+        }
+
+        .suggestion-chip:hover {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%);
+            border-color: #667eea;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+        }
+
+        .input-area {
+            padding: 20px 24px;
+            border-top: 1px solid rgba(102, 126, 234, 0.1);
+            background: rgba(255, 255, 255, 0.8);
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+
+        .input-wrapper {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: white;
+            border: 2px solid rgba(102, 126, 234, 0.2);
+            border-radius: 12px;
+            padding: 12px 16px;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .input-wrapper:focus-within {
+            border-color: #667eea;
+            box-shadow: 0 4px 16px rgba(102, 126, 234, 0.2);
+        }
+
+        .input-wrapper input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: #1a1a2e;
+            font-size: 14px;
+            outline: none;
+            padding: 0;
+        }
+
+        .input-wrapper input::placeholder {
+            color: #ccc;
+        }
+
+        .action-btn {
+            width: 40px;
+            height: 40px;
+            border: none;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 18px;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        .action-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
+        }
+
+        .action-btn:active {
+            transform: translateY(0);
+        }
+
+        .icon-btn {
+            width: 40px;
+            height: 40px;
+            border: 2px solid rgba(102, 126, 234, 0.2);
+            background: white;
+            border-radius: 10px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            transition: all 0.3s ease;
+            color: #667eea;
+        }
+
+        .icon-btn:hover {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.05);
+        }
+
+        /* Mobile responsive */
+        @media (max-width: 768px) {
+            .message-content {
+                max-width: 80%;
+            }
+
+            .header-title {
+                font-size: 16px;
+            }
+
+            .messages-area {
+                padding: 16px 16px;
+                gap: 10px;
+            }
+
+            .input-area {
+                padding: 16px;
+            }
+
+            .suggestion-chip {
+                padding: 6px 12px;
+                font-size: 11px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-left">
+                <div class="header-icon">✨</div>
+                <div>
+                    <div class="header-title">Grok Gradient</div>
+                    <div class="header-subtitle">Your creative AI partner</div>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="badge">Online</div>
+            </div>
+        </div>
+
+        <div class="messages-area">
+            <div class="message-group">
+                <div class="message-avatar">G</div>
+                <div class="message-content">
+                    <div class="message">🌟 Welcome! I'm Grok, your creative AI companion. What would you like to explore today?</div>
+                    <div class="suggestions">
+                        <span class="suggestion-chip">💡 Brainstorm Ideas</span>
+                        <span class="suggestion-chip">🎨 Design Review</span>
+                        <span class="suggestion-chip">📝 Writing Help</span>
+                        <span class="suggestion-chip">🚀 Project Planning</span>
+                    </div>
+                    <div class="timestamp">Just now</div>
+                </div>
+            </div>
+
+            <div class="message-group user">
+                <div class="message-content user">
+                    <div class="message">Help me design a modern portfolio website</div>
+                    <div class="timestamp">12:30 PM</div>
+                </div>
+                <div class="message-avatar user">You</div>
+            </div>
+
+            <div class="message-group">
+                <div class="message-avatar">G</div>
+                <div class="message-content">
+                    <div class="message">🎨 Great idea! Here's a modern portfolio approach:</div>
+                    <div class="message">
+                        <strong>Design Principles:</strong><br/>
+                        • Hero section with gradient background<br/>
+                        • Projects in card/grid layout<br/>
+                        • Smooth scrolling animations<br/>
+                        • Dark mode support
+                    </div>
+                    <div class="message">
+                        <strong>Tech Stack:</strong><br/>
+                        React + Tailwind CSS + Framer Motion
+                    </div>
+                    <div class="suggestions">
+                        <span class="suggestion-chip">Show color palettes</span>
+                        <span class="suggestion-chip">Component breakdown</span>
+                        <span class="suggestion-chip">Animation examples</span>
+                    </div>
+                    <div class="timestamp">12:31 PM</div>
+                </div>
+            </div>
+
+            <div class="message-group user">
+                <div class="message-content user">
+                    <div class="message">What color schemes work best for a tech portfolio?</div>
+                    <div class="timestamp">12:32 PM</div>
+                </div>
+                <div class="message-avatar user">You</div>
+            </div>
+
+            <div class="message-group">
+                <div class="message-avatar">G</div>
+                <div class="message-content">
+                    <div class="message">
+                        🎯 Top color schemes for tech portfolios:<br/><br/>
+                        <strong>Option 1: Purple-Blue Gradient</strong><br/>
+                        Modern, professional, eye-catching<br/><br/>
+                        <strong>Option 2: Dark with Neon Accents</strong><br/>
+                        Bold, creative, tech-forward<br/><br/>
+                        <strong>Option 3: Minimalist Monochrome</strong><br/>
+                        Clean, sophisticated, timeless
+                    </div>
+                    <div class="suggestions">
+                        <span class="suggestion-chip">Generate CSS</span>
+                        <span class="suggestion-chip">See live demo</span>
+                        <span class="suggestion-chip">More options</span>
+                    </div>
+                    <div class="timestamp">12:33 PM</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="input-area">
+            <div class="input-wrapper">
+                <span>📎</span>
+                <input type="text" placeholder="Ask me anything creative..." />
+            </div>
+            <button class="icon-btn">🎨</button>
+            <button class="action-btn">⬆️</button>
+        </div>
+    </div>
+</body>
+</html>

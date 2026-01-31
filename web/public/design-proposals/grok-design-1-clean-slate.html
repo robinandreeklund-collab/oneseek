@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grok-Inspired 1: Clean Slate</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', sans-serif;
+            background: #0d0d0d;
+            color: #e8e8e8;
+            height: 100vh;
+            display: flex;
+        }
+        
+        /* Sidebar */
+        .sidebar {
+            width: 260px;
+            background: #1a1a1a;
+            border-right: 1px solid #2a2a2a;
+            display: flex;
+            flex-direction: column;
+            padding: 16px;
+        }
+        
+        .logo {
+            font-size: 24px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 24px;
+            padding: 8px 12px;
+        }
+        
+        .new-chat-btn {
+            width: 100%;
+            padding: 12px 16px;
+            background: #2563eb;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-bottom: 16px;
+            transition: background 0.2s;
+        }
+        
+        .new-chat-btn:hover {
+            background: #1d4ed8;
+        }
+        
+        .conversations {
+            flex: 1;
+            overflow-y: auto;
+        }
+        
+        .conversation-item {
+            padding: 10px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #a0a0a0;
+            margin-bottom: 4px;
+            transition: background 0.2s;
+        }
+        
+        .conversation-item:hover {
+            background: #252525;
+            color: #fff;
+        }
+        
+        .conversation-item.active {
+            background: #2a2a2a;
+            color: #fff;
+        }
+        
+        /* Main chat area */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* Top bar */
+        .top-bar {
+            height: 60px;
+            border-bottom: 1px solid #2a2a2a;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+        }
+        
+        .model-selector {
+            padding: 8px 16px;
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 8px;
+            color: #e8e8e8;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        
+        .top-bar-actions {
+            display: flex;
+            gap: 12px;
+        }
+        
+        .icon-btn {
+            width: 36px;
+            height: 36px;
+            background: transparent;
+            border: 1px solid #2a2a2a;
+            border-radius: 8px;
+            color: #a0a0a0;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        
+        .icon-btn:hover {
+            background: #1a1a1a;
+            color: #fff;
+        }
+        
+        /* Chat messages area */
+        .chat-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .welcome-state {
+            max-width: 700px;
+            text-align: center;
+            margin: auto;
+        }
+        
+        .welcome-title {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: #fff;
+        }
+        
+        .welcome-subtitle {
+            font-size: 16px;
+            color: #a0a0a0;
+            margin-bottom: 32px;
+        }
+        
+        .suggestions {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 32px;
+        }
+        
+        .suggestion-card {
+            padding: 16px;
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 12px;
+            text-align: left;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .suggestion-card:hover {
+            background: #252525;
+            border-color: #3a3a3a;
+        }
+        
+        .suggestion-icon {
+            font-size: 20px;
+            margin-bottom: 8px;
+        }
+        
+        .suggestion-text {
+            font-size: 14px;
+            color: #e8e8e8;
+            line-height: 1.4;
+        }
+        
+        /* Input area */
+        .input-area {
+            padding: 0 24px 24px;
+            max-width: 800px;
+            margin: 0 auto;
+            width: 100%;
+        }
+        
+        .input-wrapper {
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 12px;
+            padding: 4px;
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+            transition: border-color 0.2s;
+        }
+        
+        .input-wrapper:focus-within {
+            border-color: #2563eb;
+        }
+        
+        .input-tools {
+            display: flex;
+            gap: 4px;
+            padding: 8px;
+        }
+        
+        .tool-btn {
+            width: 32px;
+            height: 32px;
+            background: transparent;
+            border: none;
+            border-radius: 6px;
+            color: #a0a0a0;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        
+        .tool-btn:hover {
+            background: #252525;
+            color: #fff;
+        }
+        
+        .input-field {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: #e8e8e8;
+            font-size: 15px;
+            padding: 12px;
+            resize: none;
+            min-height: 44px;
+            max-height: 200px;
+            font-family: inherit;
+        }
+        
+        .input-field::placeholder {
+            color: #606060;
+        }
+        
+        .send-btn {
+            width: 36px;
+            height: 36px;
+            background: #2563eb;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 4px;
+            transition: background 0.2s;
+        }
+        
+        .send-btn:hover {
+            background: #1d4ed8;
+        }
+        
+        .send-btn:disabled {
+            background: #2a2a2a;
+            cursor: not-allowed;
+        }
+        
+        /* Features bar below input */
+        .features-bar {
+            display: flex;
+            gap: 12px;
+            margin-top: 12px;
+            justify-content: center;
+        }
+        
+        .feature-chip {
+            padding: 6px 12px;
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 16px;
+            font-size: 13px;
+            color: #a0a0a0;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .feature-chip:hover {
+            background: #252525;
+            color: #fff;
+            border-color: #3a3a3a;
+        }
+        
+        .feature-chip.active {
+            background: #1e40af;
+            color: #fff;
+            border-color: #2563eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="logo">OneSeek</div>
+        <button class="new-chat-btn">+ Ny konversation</button>
+        
+        <div class="conversations">
+            <div class="conversation-item active">Senaste chatten</div>
+            <div class="conversation-item">Hur fungerar AI?</div>
+            <div class="conversation-item">Python hjälp</div>
+            <div class="conversation-item">Researchprojekt</div>
+            <div class="conversation-item">Idébrainstorming</div>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <div class="top-bar">
+            <select class="model-selector">
+                <option>Grok-2</option>
+                <option>Grok-2 Mini</option>
+                <option>Grok-1</option>
+            </select>
+            
+            <div class="top-bar-actions">
+                <button class="icon-btn" title="Voice">🎤</button>
+                <button class="icon-btn" title="Settings">⚙️</button>
+            </div>
+        </div>
+        
+        <div class="chat-area">
+            <div class="welcome-state">
+                <h1 class="welcome-title">Vad kan jag hjälpa dig med?</h1>
+                <p class="welcome-subtitle">Jag kan hjälpa dig med research, kodning, idéer och mycket mer</p>
+                
+                <div class="suggestions">
+                    <div class="suggestion-card">
+                        <div class="suggestion-icon">🔍</div>
+                        <div class="suggestion-text">Analysera senaste trender inom AI</div>
+                    </div>
+                    <div class="suggestion-card">
+                        <div class="suggestion-icon">💻</div>
+                        <div class="suggestion-text">Hjälp mig skriva Python-kod</div>
+                    </div>
+                    <div class="suggestion-card">
+                        <div class="suggestion-icon">📊</div>
+                        <div class="suggestion-text">Skapa en datavisualisering</div>
+                    </div>
+                    <div class="suggestion-card">
+                        <div class="suggestion-icon">✍️</div>
+                        <div class="suggestion-text">Skriv ett kreativt innehåll</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="input-area">
+            <div class="input-wrapper">
+                <div class="input-tools">
+                    <button class="tool-btn" title="Ladda upp fil">📎</button>
+                    <button class="tool-btn" title="Bild">🖼️</button>
+                    <button class="tool-btn" title="Kod">💻</button>
+                </div>
+                <textarea class="input-field" placeholder="Skriv ett meddelande..."></textarea>
+                <button class="send-btn" disabled>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </button>
+            </div>
+            
+            <div class="features-bar">
+                <div class="feature-chip">Realtime sökning</div>
+                <div class="feature-chip">Deep research</div>
+                <div class="feature-chip">Kreativ mode</div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const input = document.querySelector('.input-field');
+        const sendBtn = document.querySelector('.send-btn');
+        
+        input.addEventListener('input', () => {
+            sendBtn.disabled = input.value.trim() === '';
+            input.style.height = 'auto';
+            input.style.height = input.scrollHeight + 'px';
+        });
+    </script>
+</body>
+</html>
