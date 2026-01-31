@@ -1,4 +1,3 @@
-import Image from "next/image";
 import React from "react";
 
 import { cn } from "~/lib/utils";
@@ -29,17 +28,17 @@ export function DebateModelIcon({ modelKey, className, size = 20 }: ModelIconPro
     return (
       <span
         className={cn(
-          "inline-flex items-center justify-center rounded-full border border-border bg-muted",
+          "inline-flex items-center justify-center rounded-full border border-border bg-white/90",
           className,
         )}
         style={{ width: size, height: size }}
       >
-        <Image
+        <img
           src="/oneseek-logo.svg"
           alt="OneSeek"
           width={size - 6}
           height={size - 6}
-          className="object-contain"
+          className="h-auto w-auto object-contain"
         />
       </span>
     );
@@ -50,17 +49,17 @@ export function DebateModelIcon({ modelKey, className, size = 20 }: ModelIconPro
     return (
       <span
         className={cn(
-          "inline-flex items-center justify-center rounded-full border border-border bg-background",
+          "inline-flex items-center justify-center rounded-full border border-border bg-white/90",
           className,
         )}
         style={{ width: size, height: size }}
       >
-        <Image
+        <img
           src={iconSrc}
           alt={modelKey}
           width={size - 4}
           height={size - 4}
-          className="object-contain"
+          className="h-auto w-auto object-contain"
         />
       </span>
     );
