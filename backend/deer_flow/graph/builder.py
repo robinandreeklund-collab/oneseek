@@ -10,6 +10,8 @@ from .nodes import (
     ai_comparison_node,
     analyst_node,
     background_investigation_node,
+    code_refiner_node,
+    code_reviewer_node,
     coder_node,
     code_planner_node,
     coordinator_node,
@@ -74,6 +76,10 @@ def continue_to_running_research_team(state: State):
         return "coder"
     if incomplete_step.step_type == StepType.TESTING:
         return "tester"
+    if incomplete_step.step_type == StepType.REVIEW:
+        return "code_reviewer"
+    if incomplete_step.step_type == StepType.REFACTOR:
+        return "code_refiner"
     return "planner"
 
 
@@ -118,6 +124,8 @@ def _build_base_graph():
     builder.add_node("researcher", researcher_node)
     builder.add_node("analyst", analyst_node)
     builder.add_node("coder", coder_node)
+    builder.add_node("code_reviewer", code_reviewer_node)
+    builder.add_node("code_refiner", code_refiner_node)
     builder.add_node("tester", tester_node)
     builder.add_node("human_feedback", human_feedback_node)
     
@@ -160,7 +168,15 @@ def _build_base_graph():
     builder.add_conditional_edges(
         "research_team",
         continue_to_running_research_team,
-        ["planner", "researcher", "analyst", "coder", "tester"],
+        [
+            "planner",
+            "researcher",
+            "analyst",
+            "coder",
+            "code_reviewer",
+            "code_refiner",
+            "tester",
+        ],
     )
     # Changed from END to human_feedback to ensure debate_complete flag is checked
     # This prevents debate from restarting after completion

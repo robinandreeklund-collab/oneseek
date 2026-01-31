@@ -8,6 +8,8 @@ export type AgentName =
   | "coordinator"
   | "researcher"
   | "coder"
+  | "code_reviewer"
+  | "code_refiner"
   | "reporter"
   | "podcast"
   | "analyst"

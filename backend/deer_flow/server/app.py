@@ -12,6 +12,7 @@ import subprocess
 import sys
 import time
 import zipfile
+from pathlib import Path
 from typing import Annotated, Any, List, Optional, cast
 from uuid import uuid4
 
@@ -432,9 +433,27 @@ async def workspace_run(request: WorkspacePathRequest):
             raise HTTPException(status_code=400, detail="Path outside workspace")
         if not target_path.exists():
             raise HTTPException(status_code=404, detail="File not found")
+        python_override = (
+            os.getenv("WORKSPACE_VENV_PYTHON")
+            or os.getenv("CODE_WORKSPACE_PYTHON")
+        )
+        if not python_override:
+            venv_root = (
+                os.getenv("WORKSPACE_VENV_PATH")
+                or os.getenv("CODE_WORKSPACE_ROOT")
+            )
+            if venv_root:
+                venv_path = Path(venv_root) / "workspace_venv"
+                candidate = (
+                    venv_path / "Scripts" / "python.exe"
+                    if os.name == "nt"
+                    else venv_path / "bin" / "python"
+                )
+                if candidate.exists():
+                    python_override = str(candidate)
         try:
             result = subprocess.run(
-                [sys.executable, str(target_path)],
+                [python_override or sys.executable, str(target_path)],
                 cwd=workspace_root,
                 capture_output=True,
                 text=True,

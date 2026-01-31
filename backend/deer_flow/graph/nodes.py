@@ -257,6 +257,7 @@ def preserve_state_meta_fields(state: State) -> dict:
         "locale": state.get("locale", "en-US"),
         "research_topic": state.get("research_topic", ""),
         "clarified_research_topic": state.get("clarified_research_topic", ""),
+        "plan_source": state.get("plan_source", "planner"),
         "clarification_history": state.get("clarification_history", []),
         "enable_clarification": state.get("enable_clarification", False),
         "max_clarification_rounds": state.get("max_clarification_rounds", 3),
@@ -623,6 +624,7 @@ def planner_node(
             update={
                 "messages": [AIMessage(content=full_response, name="planner")],
                 "current_plan": new_plan,
+                "plan_source": "planner",
                 **preserve_state_meta_fields(state),
             },
             goto="reporter",
@@ -634,6 +636,7 @@ def planner_node(
             update={
                 "messages": [AIMessage(content=full_response, name="planner")],
                 "current_plan": full_response,
+                "plan_source": "planner",
                 **preserve_state_meta_fields(state),
             },
             goto="ai_comparison",
@@ -643,6 +646,7 @@ def planner_node(
         update={
             "messages": [AIMessage(content=full_response, name="planner")],
             "current_plan": full_response,
+            "plan_source": "planner",
             **preserve_state_meta_fields(state),
         },
         goto="human_feedback",
@@ -739,6 +743,7 @@ def debate_planner_node(
             update={
                 "messages": [AIMessage(content=json.dumps(curr_plan, ensure_ascii=False, indent=2), name="planner")],
                 "current_plan": new_plan,
+                "plan_source": "code_planner",
                 **preserve_state_meta_fields(state),
             },
             goto="reporter",
@@ -754,6 +759,7 @@ def debate_planner_node(
         update={
             "messages": [AIMessage(content=full_response, name="planner")],
             "current_plan": full_response,  # Pass as JSON string like planner does
+            "plan_source": "code_planner",
             **preserve_state_meta_fields(state),
         },
         goto="human_feedback",
@@ -849,6 +855,7 @@ def code_planner_node(
             update={
                 "messages": [AIMessage(content=json.dumps(curr_plan, ensure_ascii=False, indent=2), name="planner")],
                 "current_plan": new_plan,
+                "plan_source": "debate_planner",
                 **preserve_state_meta_fields(state),
             },
             goto="reporter",
@@ -864,6 +871,7 @@ def code_planner_node(
         update={
             "messages": [AIMessage(content=full_response, name="planner")],
             "current_plan": full_response,  # Pass as JSON string like planner does
+            "plan_source": "debate_planner",
             **preserve_state_meta_fields(state),
         },
         goto="human_feedback",
@@ -2354,6 +2362,48 @@ async def coder_node(
     return Command(
         update=updated_state,
         goto="human_feedback"
+    )
+
+
+async def code_reviewer_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["research_team"]]:
+    """Code reviewer node that inspects changes and flags risks."""
+    logger.info("Code reviewer is analyzing code changes.")
+    logger.debug("[code_reviewer_node] Starting code reviewer agent")
+
+    tools = []
+    try:
+        from backend.deer_flow.tools.code_tools import file_system_tool
+        tools.append(file_system_tool)
+    except Exception as e:
+        logger.debug(f"[code_reviewer_node] file_system_tool unavailable: {e}")
+
+    return await _setup_and_execute_agent_step(
+        state,
+        config,
+        "code_reviewer",
+        tools,
+    )
+
+
+async def code_refiner_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["research_team"]]:
+    """Code refiner node that cleans up and formats code changes."""
+    logger.info("Code refiner is refining code changes.")
+    logger.debug("[code_refiner_node] Starting code refiner agent")
+
+    from backend.deer_flow.tools.code_tools import get_code_tools
+
+    tools = [python_repl_tool]
+    tools.extend(get_code_tools())
+
+    return await _setup_and_execute_agent_step(
+        state,
+        config,
+        "code_refiner",
+        tools,
     )
 
 

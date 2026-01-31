@@ -436,7 +436,11 @@ function appendMessage(message: Message) {
       openResearch(id);
     }
     appendResearchActivity(message);
-  } else if (message.agent === "coder") {
+  } else if (
+    message.agent === "coder" ||
+    message.agent === "code_reviewer" ||
+    message.agent === "code_refiner"
+  ) {
     if (!getOngoingCoderSessionId()) {
       const id = message.id;
       appendCoderSession(id);

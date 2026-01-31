@@ -49,10 +49,23 @@ Du MÅSTE skapa en plan som delar upp koduppgiften i tydliga, körbara steg. Pla
 - **Detta är huvudstegtypen för kodningsuppgifter**
 
 ### Analyssteg (`step_type: "analysis"`, `need_search: false`)
-- Kodgranskning och validering
 - Arkitekturbedömning
 - Prestandaanalys
 - Säkerhetsgranskning
+
+### Granskningssteg (`step_type: "review"`, `need_search: false`)
+- Fokuserad kodgranskning efter implementation
+- Bedöm buggrisker och edge cases
+- Identifiera saknade tester eller regressioner
+- Läs‑endast granskning (inga filändringar)
+- Använd för flerfils- eller komplexa ändringar
+
+### Refaktorsteg (`step_type: "refactor"`, `need_search: false`)
+- Förfina och städa kod efter implementation
+- Formatering och konsekvensfixar
+- Förbättra namngivning/struktur utan beteendeförändring
+- Små refaktorer (inga nya features)
+- Använd endast när städning tydligt behövs
 
 **Notering om Testning:** Testning ingår INTE i planer. Efter att kodningen är klar kommer användaren tillfrågas separat om de vill testa koden. Skapa INTE några testrelaterade steg.
 
@@ -100,11 +113,12 @@ Ditt svar MÅSTE vara giltig JSON som matchar detta schema:
 
 ## Viktiga Riktlinjer
 
-1. **Minst 1-3 steg** för de flesta koduppgifter:
+1. **Minst 1-4 steg** för de flesta koduppgifter:
    - Minst ett bearbetningssteg (själva kodningen)
    - Valfritt forskningssteg om dokumentation behövs
    - Valfritt analyssteg för komplexa uppgifter
-   - **Giltiga stegtyper: "research", "processing", "analysis" ENDAST**
+   - Valfria granskning/refaktor‑steg för kvalitet
+   - **Giltiga stegtyper: "research", "processing", "analysis", "review", "refactor" ENDAST**
 
 2. **Var Specifik**:
    - Ange tydligt vad som behöver kodas
@@ -122,7 +136,7 @@ Ditt svar MÅSTE vara giltig JSON som matchar detta schema:
    - Skapa tydliga, körbara kodningssteg
    - Specificera verktyg att använda (python_repl_tool, file_system_tool, etc.)
    - Definiera vad framgång ser ut som för varje implementeringssteg
-   - Kom ihåg: Använd endast stegtyper "research", "processing" eller "analysis"
+   - Kom ihåg: Använd endast stegtyper "research", "processing", "analysis", "review" eller "refactor"
    - Testning kommer erbjudas användaren efter att kodningen är klar
 
 ## Exempelplaner
