@@ -195,7 +195,7 @@ function CoderActivityItem({ messageId }: { messageId: string }) {
     const toolCallComponents = message.toolCalls
       .slice()
       .sort((a, b) => {
-        // Keep in-progress tool calls visible before completed ones.
+        // Sort in-progress tool calls (no result) before completed ones (with result).
         if (a.result && !b.result) return 1;
         if (!a.result && b.result) return -1;
         return 0;
@@ -392,7 +392,9 @@ function GenericToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
   const { resolvedTheme } = useTheme();
   const statusLabel = useMemo(() => {
     if (toolCall.result) {
-      return t("statusSuccess");
+      return isToolCallError(toolCall.result)
+        ? t("statusError")
+        : t("statusSuccess");
     }
     if (toolCall.status === "running") {
       return t("statusRunning");

@@ -169,9 +169,7 @@ export const useStore = create<{
     const currentMessages = useStore.getState().messages;
     const updatedMessages = new Map(currentMessages);
     const updatedMessageIds = new Set<string>();
-    const toolActions = actions.filter(
-      (action) => action && typeof action.tool_call_id === "string",
-    );
+    const toolActions = actions.filter((action) => action != null);
     const updatedWorkspaceFiles = new Map(useStore.getState().coderWorkspaceFiles);
 
     toolActions.forEach((action) => {
