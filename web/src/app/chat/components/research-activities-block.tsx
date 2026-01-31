@@ -32,6 +32,7 @@ import type { Message, ToolCallRuntime } from "~/core/messages";
 import { useMessage, useStore } from "~/core/store";
 import { parseJSON } from "~/core/utils";
 import { cn } from "~/lib/utils";
+import { DebateModelIcon } from "./debate-model-icon";
 
 // Performance optimization constants
 const MAX_ANIMATED_ITEMS = 10; // Only animate first 10 items
@@ -572,6 +573,17 @@ function PythonToolCallResult({ result }: { result: string }) {
 function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
   const tool = useMemo(() => findMCPTool(toolCall.name), [toolCall.name]);
   const { resolvedTheme } = useTheme();
+  const modelIconKey = useMemo(() => {
+    if (toolCall.name === "query_model_in_round") {
+      const args = toolCall.args as { model_key?: string };
+      return args.model_key;
+    }
+    if (toolCall.name === "query_gpt35") return "gpt-3.5-turbo";
+    if (toolCall.name === "query_gemini_flash") return "gemini-2.5-flash";
+    if (toolCall.name === "query_deepseek") return "deepseek-chat";
+    if (toolCall.name === "query_grok4") return "grok-4-fast-reasoning";
+    return undefined;
+  }, [toolCall.args, toolCall.name]);
   
   // Custom display name for debate tools
   const displayName = useMemo(() => {
@@ -587,6 +599,14 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
         model = model.split("(ID:")[0]?.trim() || model;
       }
       return `Waiting for ${model}...`;
+    } else if (toolCall.name === "query_gpt35") {
+      return "Waiting for GPT-3.5...";
+    } else if (toolCall.name === "query_gemini_flash") {
+      return "Waiting for Gemini 2.5 Flash...";
+    } else if (toolCall.name === "query_deepseek") {
+      return "Waiting for DeepSeek...";
+    } else if (toolCall.name === "query_grok4") {
+      return "Waiting for Grok-4...";
     } else if (toolCall.name === "start_debate_round") {
         const args = toolCall.args as { round_number?: number };
         return `Starting Round ${args.round_number ?? ""}...`;
@@ -610,6 +630,10 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
            }
            return `${model} responded`;
        }
+       if (toolCall.name === "query_gpt35") return "GPT-3.5 responded";
+       if (toolCall.name === "query_gemini_flash") return "Gemini 2.5 Flash responded";
+       if (toolCall.name === "query_deepseek") return "DeepSeek responded";
+       if (toolCall.name === "query_grok4") return "Grok-4 responded";
        if (toolCall.name === "start_debate_round") return "Round started";
        if (toolCall.name === "collect_debate_votes") return "Votes collected";
        return `Executed ${toolCall.name}()`;
@@ -625,7 +649,11 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
             <AccordionTrigger>
               <Tooltip title={tool?.description}>
                 <div className="flex items-center font-medium italic">
-                  <PencilRuler size={16} className={"mr-2"} />
+                  {modelIconKey ? (
+                    <DebateModelIcon modelKey={modelIconKey} size={16} className="mr-2" />
+                  ) : (
+                    <PencilRuler size={16} className={"mr-2"} />
+                  )}
                   <RainbowText
                     className="pr-0.5 text-base font-medium italic"
                     animated={toolCall.result === undefined}
