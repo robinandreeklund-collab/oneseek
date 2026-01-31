@@ -85,7 +85,11 @@ export function parseJSON<T>(json: string | null | undefined, fallback: T) {
       return JSON.parse(raw) as T;
     } catch {
       // If standard parse fails, try best-effort parser for incomplete/streaming JSON
-      return parse(raw) as T;
+      try {
+        return parse(raw) as T;
+      } catch {
+        return fallback;
+      }
     }
   } catch {
     // Fallback: return fallback value for completely malformed JSON
