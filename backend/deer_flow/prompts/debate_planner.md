@@ -10,25 +10,25 @@ You MUST create a plan with EXACTLY 4 steps that orchestrate a multi-model debat
 
 ## Step 1: Round 1 - Initial Arguments
 - Title: "Round 1: Initial Arguments"  
-- Description: All AI models (GPT-3.5, Gemini, DeepSeek, Grok-4, OneSeek) provide their initial arguments on the topic. Each model presents its perspective sequentially in randomized order. After the round, internal fact-check + synthesis run and are stored for round 2.
+- Description: All AI models (GPT-3.5, Gemini, DeepSeek, Grok-4, OneSeek) provide their initial arguments on the topic. Each model presents its perspective sequentially in randomized order.
 - step_type: "research"
 - need_search: false
 
 ## Step 2: Round 2 - Development and Counter-Arguments
 - Title: "Round 2: Development and Counter-Arguments"
-- Description: Based on Round 1 + internal results, all AI models develop their positions and present counter-arguments. Models respond one at a time, building upon the debate chain. After the round, internal fact-check + synthesis run and are stored for round 3.
+- Description: Based on Round 1 arguments, all AI models develop their positions and present counter-arguments to other perspectives. Models respond one at a time, building upon the debate chain.
 - step_type: "research"  
 - need_search: false
 
 ## Step 3: Round 3 - Final Positions and Synthesis
 - Title: "Round 3: Final Positions and Synthesis"
-- Description: All AI models present their final positions with cumulative context from rounds 1–2 (including internal results). OneSeek provides a master synthesis that weighs all perspectives and internal fact-checks.
+- Description: All AI models present their final positions. OneSeek provides a comprehensive synthesis that weighs all perspectives, fact-checks claims via web search, and presents a balanced conclusion.
 - step_type: "research"
 - need_search: false
 
 ## Step 4: Democratic Voting
 - Title: "Voting: Democratic Selection"
-- Description: All AI models (including OneSeek) vote on the best answer from round 3. Votes are tallied and a winner is declared based on majority vote. Self-voting is not allowed.
+- Description: External AI models (excluding OneSeek) vote on which argument was most compelling and well-reasoned. Votes are tallied and a winner is declared based on majority vote.
 - step_type: "research"
 - need_search: false
 
@@ -37,8 +37,7 @@ You MUST create a plan with EXACTLY 4 steps that orchestrate a multi-model debat
 For debate mode:
 - ALWAYS set `has_enough_context` to false (the debate itself will generate the context)
 - The debate tools will handle all model interactions, not web search
-- Internal fact-check + synthesis run after every round and are carried forward cumulatively **only for OneSeek**
-- This process is internal to OneSeek and should not be shared externally
+- OneSeek will perform internal fact-checking during Round 3 using its own research tools
 
 ## Required Planning Structure
 
@@ -54,25 +53,25 @@ You MUST create a plan with EXACTLY 4 steps following this JSON schema:
     {
       "need_search": false,
       "title": "Runda 1: Initiala argument",
-      "description": "Starta Runda 1 där alla AI-modeller (GPT-3.5, Gemini, DeepSeek, Grok-4, OneSeek) ger sina initiala argument. Varje modell presenterar sitt perspektiv sekventiellt i slumpmässig ordning. Efter rundan körs intern faktakontroll + syntes som sparas till runda 2.",
+      "description": "Starta Runda 1 där alla AI-modeller (GPT-3.5, Gemini, DeepSeek, Grok-4, OneSeek) ger sina initiala argument. Varje modell presenterar sitt perspektiv sekventiellt i slumpmässig ordning.",
       "step_type": "research"
     },
     {
       "need_search": false,
       "title": "Runda 2: Utveckling och motargument",
-      "description": "Baserat på Runda 1 + interna resultat utvecklar alla AI-modeller sina positioner och presenterar motargument mot andra perspektiv. Modeller svarar en i taget och bygger vidare på debattkedjan. Efter rundan körs intern faktakontroll + syntes som sparas till runda 3.",
+      "description": "Baserat på Runda 1-argument utvecklar alla AI-modeller sina positioner och presenterar motargument mot andra perspektiv. Modeller svarar en i taget och bygger vidare på debattkedjan.",
       "step_type": "research"
     },
     {
       "need_search": false,
       "title": "Runda 3: Slutliga positioner och syntes",
-      "description": "Alla AI-modeller presenterar sina slutliga positioner med kumulativ kontext från runda 1–2 (inkl. interna resultat). OneSeek skapar en master‑syntes som väger alla perspektiv och interna faktakontroller.",
+      "description": "Alla AI-modeller presenterar sina slutliga positioner. OneSeek skapar en omfattande syntes som väger alla perspektiv, faktakollar påståenden via webbsökning och presenterar en balanserad slutsats.",
       "step_type": "research"
     },
     {
       "need_search": false,
       "title": "Röstning: Demokratiskt val",
-      "description": "Alla AI-modeller (inkl. OneSeek) röstar på det bästa svaret från runda 3. Röster räknas samman och en vinnare utses baserat på majoritetsröst. Självröstning är inte tillåten.",
+      "description": "Externa AI-modeller (exkl. OneSeek) röstar på vilket argument som var mest övertygande och välgrundat. Röster räknas samman och en vinnare utses baserat på majoritetsröst.",
       "step_type": "research"
     }
   ]
@@ -85,8 +84,7 @@ You MUST create a plan with EXACTLY 4 steps following this JSON schema:
 - Adjust the language (Swedish/English) based on the locale
 - The researcher will execute these steps using specialized debate tools
 - Each AI model will be queried as a separate tool call during execution
-- Internal fact-check + synthesis run after every round and are carried forward cumulatively **only for OneSeek**
-- This is an internal OneSeek process and should not be shared externally
+- OneSeek will perform internal fact-checking using web search during Round 3
 - **DO NOT** create additional research steps or modify the 4-step structure
 
 ## Language and Locale
