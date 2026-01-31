@@ -10,9 +10,11 @@ from .nodes import (
     ai_comparison_node,
     analyst_node,
     background_investigation_node,
+    code_architect_node,
     code_refiner_node,
     code_researcher_node,
     code_reviewer_node,
+    code_tester_node,
     code_team_node,
     coder_node,
     code_planner_node,
@@ -112,7 +114,7 @@ def continue_to_running_code_team(state: State):
     if incomplete_step.step_type == StepType.RESEARCH:
         return "code_researcher"
     if incomplete_step.step_type == StepType.ANALYSIS:
-        return "code_reviewer"
+        return "code_architect"
     if incomplete_step.step_type == StepType.PROCESSING:
         return "coder"
     if incomplete_step.step_type == StepType.REVIEW:
@@ -120,7 +122,7 @@ def continue_to_running_code_team(state: State):
     if incomplete_step.step_type == StepType.REFACTOR:
         return "code_refiner"
     if incomplete_step.step_type == StepType.TESTING:
-        return "tester"
+        return "code_tester"
     return "planner"
 
 
@@ -167,9 +169,11 @@ def _build_base_graph():
     builder.add_node("analyst", analyst_node)
     builder.add_node("coder", coder_node)
     builder.add_node("code_researcher", code_researcher_node)
+    builder.add_node("code_architect", code_architect_node)
     builder.add_node("code_reviewer", code_reviewer_node)
     builder.add_node("code_refiner", code_refiner_node)
     builder.add_node("tester", tester_node)
+    builder.add_node("code_tester", code_tester_node)
     builder.add_node("human_feedback", human_feedback_node)
     
     # Add debate chain nodes (using real external AI models)
@@ -190,7 +194,7 @@ def _build_base_graph():
     # debate_orchestrator manages rounds and routes between debate_team and reporter
     #
     # Code planner mode follows structured code development workflow:
-    # coordinator → code_planner → human_feedback → code_team → coder/tester/reviewer/refiner → reporter
+    # coordinator → code_planner → human_feedback → code_team → coder/code_architect/code_reviewer/code_refiner/code_tester → reporter
     #
     # Code router: coordinator can route directly to coder for simple code questions
     # coordinator → coder → __end__ (direct response)
@@ -226,10 +230,11 @@ def _build_base_graph():
             "planner",
             "reporter",
             "code_researcher",
+            "code_architect",
             "coder",
             "code_reviewer",
             "code_refiner",
-            "tester",
+            "code_tester",
         ],
     )
     # Changed from END to human_feedback to ensure debate_complete flag is checked

@@ -14,6 +14,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 # MCP adapters import moved to conditional block where it's used
 # from langchain_mcp_adapters.client import MultiServerMCPClient
+from langgraph.graph import END
 from langgraph.types import Command, interrupt
 
 from backend.deer_flow.agents import create_agent
@@ -742,6 +743,19 @@ def debate_planner_node(
     # Validate and fix plan to ensure web search requirements are met (matching planner_node)
     if isinstance(curr_plan, dict):
         curr_plan = validate_and_fix_plan(curr_plan, configurable.enforce_web_search, configurable.enable_web_search)
+        # Enforce code planner rule: never use research steps
+        steps = curr_plan.get("steps", [])
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+            if step.get("step_type") == "research" or step.get("need_search"):
+                step["step_type"] = "processing"
+                step["need_search"] = False
+                step["description"] = (
+                    "Include any necessary documentation lookup as part of implementation. "
+                    + (step.get("description") or "")
+                ).strip()
+        curr_plan["steps"] = steps
     
     # Check if plan has enough context (matching planner_node)
     if isinstance(curr_plan, dict) and curr_plan.get("has_enough_context"):
@@ -1082,7 +1096,23 @@ def human_feedback_node(
         new_plan = json.loads(repair_json_output(current_plan_content))
         # Validate and fix plan to ensure web search requirements are met
         configurable = Configuration.from_runnable_config(config)
-        new_plan = validate_and_fix_plan(new_plan, configurable.enforce_web_search, configurable.enable_web_search)
+        enforce_web_search = configurable.enforce_web_search
+        if state.get("plan_source") == "code_planner":
+            enforce_web_search = False
+        new_plan = validate_and_fix_plan(new_plan, enforce_web_search, configurable.enable_web_search)
+        if state.get("plan_source") == "code_planner":
+            steps = new_plan.get("steps", [])
+            for step in steps:
+                if not isinstance(step, dict):
+                    continue
+                if step.get("step_type") == "research" or step.get("need_search"):
+                    step["step_type"] = "processing"
+                    step["need_search"] = False
+                    step["description"] = (
+                        "Include any necessary documentation lookup as part of implementation. "
+                        + (step.get("description") or "")
+                    ).strip()
+            new_plan["steps"] = steps
         
         if selected_models:
             from backend.debate_flow import DEBATE_MODELS
@@ -2436,6 +2466,28 @@ async def code_reviewer_node(
     )
 
 
+async def code_architect_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["research_team"]]:
+    """Code architect node that evaluates design and architecture."""
+    logger.info("Code architect is reviewing architecture.")
+    logger.debug("[code_architect_node] Starting code architect agent")
+
+    tools = []
+    try:
+        from backend.deer_flow.tools.code_tools import file_system_tool
+        tools.append(file_system_tool)
+    except Exception as e:
+        logger.debug(f"[code_architect_node] file_system_tool unavailable: {e}")
+
+    return await _setup_and_execute_agent_step(
+        state,
+        config,
+        "code_architect",
+        tools,
+    )
+
+
 async def code_refiner_node(
     state: State, config: RunnableConfig
 ) -> Command[Literal["research_team"]]:
@@ -2452,6 +2504,25 @@ async def code_refiner_node(
         state,
         config,
         "code_refiner",
+        tools,
+    )
+
+
+async def code_tester_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["research_team"]]:
+    """Code tester node that runs test tools only."""
+    logger.info("Code tester is running tests.")
+    logger.debug("[code_tester_node] Starting code tester agent")
+
+    from backend.deer_flow.tools.test_tools import get_test_tools
+
+    tools = get_test_tools()
+
+    return await _setup_and_execute_agent_step(
+        state,
+        config,
+        "code_tester",
         tools,
     )
 

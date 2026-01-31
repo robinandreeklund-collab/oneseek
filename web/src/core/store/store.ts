@@ -439,8 +439,10 @@ function appendMessage(message: Message) {
   } else if (
     message.agent === "coder" ||
     message.agent === "code_researcher" ||
+    message.agent === "code_architect" ||
     message.agent === "code_reviewer" ||
-    message.agent === "code_refiner"
+    message.agent === "code_refiner" ||
+    message.agent === "code_tester"
   ) {
     if (!getOngoingCoderSessionId()) {
       const id = message.id;
