@@ -217,10 +217,10 @@ function CoderActivityItem({ messageId }: { messageId: string }) {
 
 function PythonToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
   const t = useTranslations("chat.coder");
-  const { resolvedTheme } = useTheme();
   const code = useMemo<string | undefined>(() => {
     return (toolCall.args as { code?: string }).code;
   }, [toolCall.args]);
+  const { resolvedTheme } = useTheme();
   const statusLabel = useMemo(() => {
     if (toolCall.result) {
       return toolCall.result.trim().startsWith("Error:")
@@ -474,7 +474,7 @@ function ToolCallResult({ result }: { result: string }) {
             boxShadow: "none",
           }}
         >
-          {result.trim() ?? "(empty)"}
+          {result.trim() || "(empty)"}
         </SyntaxHighlighter>
       </div>
     </>
@@ -708,7 +708,7 @@ function CoderFilesBlock({ sessionId }: { sessionId: string }) {
                 boxShadow: "none",
               }}
             >
-              {(selectedFile?.content?.trim() ?? "") || "(empty)"}
+              {selectedFile?.content?.trim() || "(empty)"}
             </SyntaxHighlighter>
           </div>
           {selectedFile?.truncated && (

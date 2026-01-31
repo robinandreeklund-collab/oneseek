@@ -38,12 +38,12 @@ function getLocaleFromCookie(): string {
 // Helper function to get translated podcast prompt
 function getPodcastPromptTranslation(): string {
   const locale = getLocaleFromCookie();
-   const translations: Record<string, string> = {
+  const translations: Record<string, string> = {
     "en": "Please generate a podcast for the above research.",
     "sv": "Vänligen generera en podcast för ovanstående forskning.",
     "zh": "请为以上研究生成播客。"
   };
-   return translations[locale] ?? translations.en!;
+  return translations[locale] ?? translations["en"]!;
 }
 
 
