@@ -107,6 +107,13 @@
         height: 100%;
       }
 
+      .main-inner {
+        position: relative;
+        height: 100%;
+        margin-right: 0;
+        transition: margin-right 0.25s ease;
+      }
+
       .topbar {
         position: absolute;
         top: 16px;
@@ -278,7 +285,7 @@
       }
 
       .chat-area {
-        width: min(740px, 82vw);
+        width: min(720px, calc(100% - 120px));
         margin: 0 auto;
         padding-top: 92px;
         display: flex;
@@ -305,6 +312,37 @@
         gap: 8px;
         color: var(--muted-2);
         font-size: 12px;
+      }
+
+      .tool-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        color: #bdbdbd;
+        font-size: 12px;
+      }
+
+      .tool-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 1px solid #262626;
+        background: #0f0f0f;
+        color: #d4d4d4;
+        box-shadow: var(--glow);
+      }
+
+      .tool-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #37d399;
+      }
+
+      .tool-dot.waiting {
+        background: #8a8a8a;
       }
 
       .meta-actions {
@@ -413,7 +451,7 @@
         bottom: 28px;
         left: 50%;
         transform: translateX(-50%);
-        width: min(740px, 82vw);
+        width: min(720px, calc(100% - 120px));
       }
 
       .composer .prompt {
@@ -467,6 +505,38 @@
         margin-bottom: 16px;
       }
 
+      .sidebar-tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+      }
+
+      .sidebar-tab {
+        border: 1px solid #262626;
+        background: #0f0f0f;
+        color: #cfcfcf;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+      }
+
+      .sidebar-tab.active {
+        background: #151515;
+        border-color: #2f2f2f;
+        color: #f1f1f1;
+      }
+
+      .sidebar-panel {
+        display: none;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .sidebar-panel.active {
+        display: flex;
+      }
+
       .sidebar-item {
         display: flex;
         align-items: center;
@@ -481,8 +551,8 @@
         transform: translateX(0);
       }
 
-      body[data-view="sidebar"] .main {
-        padding-right: var(--sidebar-width);
+      body[data-view="sidebar"] .main-inner {
+        margin-right: var(--sidebar-width);
       }
 
     </style>
@@ -564,46 +634,47 @@
       </aside>
 
       <main class="main">
-        <div class="topbar topbar-landing">
-          <div class="icon-btn" aria-hidden="true">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M12 3a5 5 0 0 1 5 5v4l2 3H5l2-3V8a5 5 0 0 1 5-5z"
-                stroke="currentColor"
-                stroke-width="2"
-              />
-            </svg>
+        <div class="main-inner">
+          <div class="topbar topbar-landing">
+            <div class="icon-btn" aria-hidden="true">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M12 3a5 5 0 0 1 5 5v4l2 3H5l2-3V8a5 5 0 0 1 5-5z"
+                  stroke="currentColor"
+                  stroke-width="2"
+                />
+              </svg>
+            </div>
+            <div class="ghost">Privat</div>
           </div>
-          <div class="ghost">Privat</div>
-        </div>
 
-        <div class="topbar topbar-chat">
-          <div class="icon-btn" aria-hidden="true">···</div>
-          <div class="ghost share">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M12 5v10m0 0l-4-4m4 4l4-4"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-              <path d="M5 19h14" stroke="currentColor" stroke-width="2" />
-            </svg>
-            Dela
+          <div class="topbar topbar-chat">
+            <div class="icon-btn" aria-hidden="true">···</div>
+            <div class="ghost share">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M12 5v10m0 0l-4-4m4 4l4-4"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <path d="M5 19h14" stroke="currentColor" stroke-width="2" />
+              </svg>
+              Dela
+            </div>
+            <div class="icon-btn" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M12 20l7-7-2-2-7 7-4 1 1-4 7-7 2 2"
+                  stroke="currentColor"
+                  stroke-width="2"
+                />
+              </svg>
+            </div>
           </div>
-          <div class="icon-btn" aria-hidden="true">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M12 20l7-7-2-2-7 7-4 1 1-4 7-7 2 2"
-                stroke="currentColor"
-                stroke-width="2"
-              />
-            </svg>
-          </div>
-        </div>
 
-        <section class="view view-landing">
+          <section class="view view-landing">
           <div class="hero">
             <div class="brand">
               <svg class="brand-mark" viewBox="0 0 64 64" fill="none">
@@ -682,9 +753,9 @@
               </button>
             </div>
           </div>
-        </section>
+          </section>
 
-        <section class="view view-chat">
+          <section class="view view-chat">
           <div class="chat-area">
             <div class="message-row">
               <div class="assistant-text">Hej! 😄 Vad lägger du på idag?</div>
@@ -715,6 +786,18 @@
                   </div>
                 </div>
                 <span>733ms · Snabb</span>
+              </div>
+              <div class="tool-actions">
+                <span>Verktyg</span>
+                <div class="tool-pill">
+                  <span class="tool-dot"></span> web_search · kör
+                </div>
+                <div class="tool-pill">
+                  <span class="tool-dot"></span> retriever · klar
+                </div>
+                <div class="tool-pill">
+                  <span class="tool-dot waiting"></span> synth · väntar
+                </div>
               </div>
               <div class="suggestion">
                 <span>↳</span> Berätta om svenska traditioner
@@ -798,7 +881,8 @@ while True:
               </div>
             </div>
           </div>
-        </section>
+          </section>
+        </div>
       </main>
 
       <aside class="sidebar">
@@ -807,47 +891,112 @@ while True:
           <h4>Tankar</h4>
           <div class="icon-btn" aria-hidden="true">✕</div>
         </div>
-        <div class="sidebar-item">
-          <span>⚡</span> Körd python-kod
+        <div class="sidebar-tabs">
+          <button class="sidebar-tab active" data-panel-target="research">
+            Djupforskning
+          </button>
+          <button class="sidebar-tab" data-panel-target="debate">Debatt</button>
+          <button class="sidebar-tab" data-panel-target="compare">
+            AI-jämförelse
+          </button>
+        </div>
+        <div class="sidebar-panel active" data-panel="research">
+          <div class="sidebar-item">
+            <span>🧠</span> Planering · kör
+          </div>
+          <div class="sidebar-item">
+            <span>🌐</span> web_search · kör
+          </div>
+          <div class="sidebar-item">
+            <span>📚</span> retriever · klar
+          </div>
+          <div class="sidebar-item">
+            <span>🧾</span> rapport · väntar
+          </div>
+        </div>
+        <div class="sidebar-panel" data-panel="debate">
+          <div class="sidebar-item">
+            <span>⚡</span> start_debate_round · klar
+          </div>
+          <div class="sidebar-item">
+            <span>💬</span> query_model_in_round · kör
+          </div>
+          <div class="sidebar-item">
+            <span>🧪</span> fact_checker · väntar
+          </div>
+          <div class="sidebar-item">
+            <span>🧩</span> synthesizer · väntar
+          </div>
+        </div>
+        <div class="sidebar-panel" data-panel="compare">
+          <div class="sidebar-item">
+            <span>🚀</span> query_models · kör
+          </div>
+          <div class="sidebar-item">
+            <span>✅</span> fact_check · väntar
+          </div>
+          <div class="sidebar-item">
+            <span>🧠</span> meta_analysis · väntar
+          </div>
+          <div class="sidebar-item">
+            <span>✨</span> synthesis · väntar
+          </div>
         </div>
       </aside>
     </div>
     <script>
       (() => {
         const resizer = document.querySelector("[data-resizer]");
-        if (!resizer) return;
-        const minWidth = 260;
-        const maxWidth = 520;
-        let dragging = false;
+        if (resizer) {
+          const minWidth = 260;
+          const maxWidth = 520;
+          let dragging = false;
 
-        const onMove = (event) => {
-          if (!dragging) return;
-          const nextWidth = Math.min(
-            maxWidth,
-            Math.max(minWidth, window.innerWidth - event.clientX)
-          );
-          document.documentElement.style.setProperty(
-            "--sidebar-width",
-            `${nextWidth}px`
-          );
-        };
+          const onMove = (event) => {
+            if (!dragging) return;
+            const nextWidth = Math.min(
+              maxWidth,
+              Math.max(minWidth, window.innerWidth - event.clientX)
+            );
+            document.documentElement.style.setProperty(
+              "--sidebar-width",
+              `${nextWidth}px`
+            );
+          };
 
-        const stopDrag = () => {
-          if (!dragging) return;
-          dragging = false;
-          document.body.style.cursor = "";
-          document.body.style.userSelect = "";
-        };
+          const stopDrag = () => {
+            if (!dragging) return;
+            dragging = false;
+            document.body.style.cursor = "";
+            document.body.style.userSelect = "";
+          };
 
-        resizer.addEventListener("mousedown", (event) => {
-          dragging = true;
-          document.body.style.cursor = "col-resize";
-          document.body.style.userSelect = "none";
-          event.preventDefault();
+          resizer.addEventListener("mousedown", (event) => {
+            dragging = true;
+            document.body.style.cursor = "col-resize";
+            document.body.style.userSelect = "none";
+            event.preventDefault();
+          });
+
+          window.addEventListener("mousemove", onMove);
+          window.addEventListener("mouseup", stopDrag);
+        }
+
+        const tabs = document.querySelectorAll("[data-panel-target]");
+        const panels = document.querySelectorAll("[data-panel]");
+        tabs.forEach((tab) => {
+          tab.addEventListener("click", () => {
+            const target = tab.getAttribute("data-panel-target");
+            tabs.forEach((btn) => btn.classList.remove("active"));
+            tab.classList.add("active");
+            panels.forEach((panel) => {
+              panel.classList.toggle(
+                "active",
+                panel.getAttribute("data-panel") === target
+              );
+            });
+          });
         });
-
-        window.addEventListener("mousemove", onMove);
-        window.addEventListener("mouseup", stopDrag);
       })();
     </script>
   </body>
