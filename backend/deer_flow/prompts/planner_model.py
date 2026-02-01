@@ -12,6 +12,13 @@ class StepType(str, Enum):
     ANALYSIS = "analysis"
     PROCESSING = "processing"
     TESTING = "testing"
+    REVIEW = "review"
+    REFACTOR = "refactor"
+    AI_QUERY = "ai_query"
+    AI_FACT_CHECK = "ai_fact_check"
+    AI_META = "ai_meta"
+    AI_SYNTH = "ai_synth"
+    AI_REPORT = "ai_report"
 
 
 class Step(BaseModel):

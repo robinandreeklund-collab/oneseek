@@ -3,7 +3,7 @@
 
 "use client";
 
-import { Settings } from "lucide-react";
+import { Code, Settings } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { Lightbulb } from "lucide-react";
@@ -16,6 +16,7 @@ import {
   setEnableDeepThinking,
   setEnableBackgroundInvestigation,
   setEnableAiComparison,
+  setEnableCodeMode,
   setEnableDebateMode,
   useSettingsStore,
 } from "~/core/store";
@@ -36,6 +37,7 @@ export function ModesDropUp() {
   const debateMode = useSettingsStore(
     (state) => state.general.enableDebateMode,
   );
+  const codeMode = useSettingsStore((state) => state.general.enableCodeMode);
 
   const modes = [
     {
@@ -65,6 +67,13 @@ export function ModesDropUp() {
       enabled: debateMode,
       toggle: () => setEnableDebateMode(!debateMode),
       tooltip: t("debateModeTooltip.description"),
+    },
+    {
+      icon: <Code className="h-4 w-4" />,
+      label: t("coderMode"),
+      enabled: codeMode,
+      toggle: () => setEnableCodeMode(!codeMode),
+      tooltip: t("coderModeTooltip.description"),
     },
   ];
 

@@ -24,6 +24,7 @@ class State(MessagesState):
     resources: list[Resource] = []
     plan_iterations: int = 0
     current_plan: Plan | str = None
+    plan_source: str = "planner"
     final_report: str = ""
     auto_accepted_plan: bool = False
     enable_background_investigation: bool = True
@@ -51,6 +52,18 @@ class State(MessagesState):
     # AI Comparison / Debate OS mode
     enable_ai_comparison: bool = False  # Enable AI comparison mode
     comparison_results: dict[str, Any] | None = None  # Results from AI comparison
+
+    # AI comparison chain state
+    ai_compare_responses: list[dict[str, Any]] = field(default_factory=list)
+    ai_compare_responses_json: str | None = None
+    ai_compare_fact_check: dict[str, Any] | None = None
+    ai_compare_fact_check_json: str | None = None
+    ai_compare_meta: dict[str, Any] | None = None
+    ai_compare_meta_json: str | None = None
+    ai_compare_synthesis: dict[str, Any] | None = None
+    ai_compare_synthesis_json: str | None = None
+    ai_compare_report_complete: bool = False
+    ai_compare_pending_tool: dict[str, Any] | None = None
     
     # Multi-Round Debate Engine mode
     enable_debate_mode: bool = False  # Enable multi-round debate mode
@@ -67,3 +80,7 @@ class State(MessagesState):
     external_ai_responses: str = ""
     debate_pending_model: dict[str, Any] | None = None
     debate_model_ids: list[str] = field(default_factory=list)
+    
+    # Code mode
+    enable_code_mode: bool = False
+    code_report_complete: bool = False

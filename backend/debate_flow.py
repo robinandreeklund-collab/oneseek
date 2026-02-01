@@ -741,7 +741,8 @@ class DebateFlow:
     async def collect_votes(
         self,
         user_query: str,
-        round_3_responses: List[Dict[str, Any]]
+        round_3_responses: List[Dict[str, Any]],
+        allowed_models: List[str] | None = None,
     ) -> Dict[str, Any]:
         """
         Collect votes from external models on best answer from round 3.
@@ -788,6 +789,38 @@ class DebateFlow:
         
         # Ask each model to vote (including OneSeek)
         available_models = list(self.models.keys())
+        if allowed_models:
+            allowed_set = set(allowed_models)
+            available_models = [m for m in available_models if m in allowed_set]
+
+        def _tokenize(text: str) -> set[str]:
+            import re
+            return {t for t in re.findall(r"\b\w+\b", text.lower()) if len(t) > 2}
+
+        def _closest_model_to_oneseek() -> str | None:
+            oneseek_resp = None
+            for resp in round_3_responses:
+                if resp.get("model") == "oneseek-local":
+                    oneseek_resp = resp.get("response", "")
+                    break
+            if not oneseek_resp:
+                return None
+            oneseek_tokens = _tokenize(oneseek_resp)
+            best_model = None
+            best_score = -1.0
+            for resp in round_3_responses:
+                model_key = resp.get("model")
+                if not model_key or model_key == "oneseek-local":
+                    continue
+                response_text = resp.get("response", "")
+                candidate_tokens = _tokenize(response_text)
+                if not candidate_tokens:
+                    continue
+                score = len(oneseek_tokens & candidate_tokens) / max(len(oneseek_tokens | candidate_tokens), 1)
+                if score > best_score:
+                    best_score = score
+                    best_model = model_key
+            return best_model
         
         for model_key in available_models:
             if model_key not in self.models:
@@ -808,6 +841,11 @@ class DebateFlow:
                 vote_prompt = voting_context
                 if model_idx is not None:
                     vote_prompt += f" (Du är svar [{model_idx}], rösta inte på dig själv)"
+                if model_key == "oneseek-local":
+                    vote_prompt += (
+                        "\nDu är OneSeek. Du FÅR INTE rösta på ditt eget svar. "
+                        "Rösta istället på det svar som är mest likt ditt eget resonemang."
+                    )
                 
                 logger.info(f"Asking {display_name} to vote")
                 
@@ -828,8 +866,23 @@ class DebateFlow:
                     
                     # Prevent self-voting
                     if vote_idx == model_idx:
-                        logger.warning(f"{display_name} tried to vote for itself, invalidating")
-                        vote_parsed = "INVALID (self-vote)"
+                        if model_key == "oneseek-local":
+                            fallback_model = _closest_model_to_oneseek()
+                            if fallback_model:
+                                voted_for = DEBATE_MODELS.get(fallback_model, {}).get(
+                                    "display_name", fallback_model
+                                )
+                                votes[voted_for] = votes.get(voted_for, 0) + 1
+                                vote_parsed = voted_for
+                                logger.warning(
+                                    f"{display_name} self-vote redirected to closest model {voted_for}"
+                                )
+                            else:
+                                logger.warning(f"{display_name} tried to vote for itself, invalidating")
+                                vote_parsed = "INVALID (self-vote)"
+                        else:
+                            logger.warning(f"{display_name} tried to vote for itself, invalidating")
+                            vote_parsed = "INVALID (self-vote)"
                     
                     # Valid vote
                     elif 0 <= vote_idx < len(round_3_responses):

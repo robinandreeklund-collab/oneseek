@@ -5,6 +5,8 @@ These tools enable the AI comparison agent to query multiple models,
 perform fact-checking, run meta-analysis, and synthesize optimal answers.
 """
 
+import contextvars
+import json
 import logging
 from typing import Any
 from langchain_core.tools import tool
@@ -12,6 +14,32 @@ from langchain_core.tools import tool
 from backend.ai_comparison_flow import get_ai_comparison_flow
 
 logger = logging.getLogger(__name__)
+
+_ai_comparison_context: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVar(
+    "ai_comparison_context",
+    default={"max_search_results": 3, "resources": []},
+)
+
+
+def set_ai_comparison_context(max_search_results: int = 3, resources: list[Any] | None = None):
+    _ai_comparison_context.set(
+        {
+            "max_search_results": max_search_results,
+            "resources": resources or [],
+        }
+    )
+
+
+def _get_flow():
+    context = _ai_comparison_context.get()
+    return get_ai_comparison_flow(
+        max_search_results=context.get("max_search_results", 3),
+        resources=context.get("resources", []),
+    )
+
+
+def _safe_json_dump(payload: dict[str, Any]) -> str:
+    return json.dumps(payload, ensure_ascii=False)
 
 
 @tool
@@ -26,20 +54,38 @@ async def query_gpt35(query: str) -> str:
         The response from GPT-3.5 Turbo
     """
     try:
-        comparison_flow = get_ai_comparison_flow(max_search_results=3, resources=[])
+        comparison_flow = _get_flow()
         response = await comparison_flow.query_single_model("gpt-3.5-turbo", query)
         
         if response["success"]:
-            content = response["response"][:800]
-            if len(response["response"]) > 800:
-                content += "... [response truncated for brevity]"
-            return f"**GPT-3.5 Response:**\n\n{content}"
+            content = response["response"]
+            payload = {
+                "model": "gpt-3.5-turbo",
+                "display_name": "GPT-3.5 (OpenAI)",
+                "response": content,
+                "success": True,
+            }
+            return _safe_json_dump(payload)
         else:
-            return f"**GPT-3.5 Error:** {response['error']}"
+            return _safe_json_dump(
+                {
+                    "model": "gpt-3.5-turbo",
+                    "display_name": "GPT-3.5 (OpenAI)",
+                    "error": response.get("error"),
+                    "success": False,
+                }
+            )
         
     except Exception as e:
         logger.error(f"Error querying GPT-3.5: {e}", exc_info=True)
-        return f"Error querying GPT-3.5: {str(e)}"
+        return _safe_json_dump(
+            {
+                "model": "gpt-3.5-turbo",
+                "display_name": "GPT-3.5 (OpenAI)",
+                "error": str(e),
+                "success": False,
+            }
+        )
 
 
 @tool
@@ -54,20 +100,38 @@ async def query_gemini_flash(query: str) -> str:
         The response from Gemini 2.5 Flash
     """
     try:
-        comparison_flow = get_ai_comparison_flow(max_search_results=3, resources=[])
+        comparison_flow = _get_flow()
         response = await comparison_flow.query_single_model("gemini-2.5-flash", query)
         
         if response["success"]:
-            content = response["response"][:800]
-            if len(response["response"]) > 800:
-                content += "... [response truncated for brevity]"
-            return f"**Gemini 2.5 Flash Response:**\n\n{content}"
+            content = response["response"]
+            payload = {
+                "model": "gemini-2.5-flash",
+                "display_name": "Gemini 2.5 Flash (Google)",
+                "response": content,
+                "success": True,
+            }
+            return _safe_json_dump(payload)
         else:
-            return f"**Gemini 2.5 Flash Error:** {response['error']}"
+            return _safe_json_dump(
+                {
+                    "model": "gemini-2.5-flash",
+                    "display_name": "Gemini 2.5 Flash (Google)",
+                    "error": response.get("error"),
+                    "success": False,
+                }
+            )
         
     except Exception as e:
         logger.error(f"Error querying Gemini 2.5 Flash: {e}", exc_info=True)
-        return f"Error querying Gemini 2.5 Flash: {str(e)}"
+        return _safe_json_dump(
+            {
+                "model": "gemini-2.5-flash",
+                "display_name": "Gemini 2.5 Flash (Google)",
+                "error": str(e),
+                "success": False,
+            }
+        )
 
 
 @tool
@@ -82,20 +146,38 @@ async def query_deepseek(query: str) -> str:
         The response from DeepSeek Chat
     """
     try:
-        comparison_flow = get_ai_comparison_flow(max_search_results=3, resources=[])
+        comparison_flow = _get_flow()
         response = await comparison_flow.query_single_model("deepseek-chat", query)
         
         if response["success"]:
-            content = response["response"][:800]
-            if len(response["response"]) > 800:
-                content += "... [response truncated for brevity]"
-            return f"**DeepSeek Response:**\n\n{content}"
+            content = response["response"]
+            payload = {
+                "model": "deepseek-chat",
+                "display_name": "DeepSeek Chat",
+                "response": content,
+                "success": True,
+            }
+            return _safe_json_dump(payload)
         else:
-            return f"**DeepSeek Error:** {response['error']}"
+            return _safe_json_dump(
+                {
+                    "model": "deepseek-chat",
+                    "display_name": "DeepSeek Chat",
+                    "error": response.get("error"),
+                    "success": False,
+                }
+            )
         
     except Exception as e:
         logger.error(f"Error querying DeepSeek: {e}", exc_info=True)
-        return f"Error querying DeepSeek: {str(e)}"
+        return _safe_json_dump(
+            {
+                "model": "deepseek-chat",
+                "display_name": "DeepSeek Chat",
+                "error": str(e),
+                "success": False,
+            }
+        )
 
 
 @tool
@@ -110,93 +192,63 @@ async def query_grok4(query: str) -> str:
         The response from Grok-4 Fast Reasoning
     """
     try:
-        comparison_flow = get_ai_comparison_flow(max_search_results=3, resources=[])
+        comparison_flow = _get_flow()
         response = await comparison_flow.query_single_model("grok-4-fast-reasoning", query)
         
         if response["success"]:
-            content = response["response"][:800]
-            if len(response["response"]) > 800:
-                content += "... [response truncated for brevity]"
-            return f"**Grok-4 Response:**\n\n{content}"
+            content = response["response"]
+            payload = {
+                "model": "grok-4-fast-reasoning",
+                "display_name": "Grok-4 Fast Reasoning (xAI)",
+                "response": content,
+                "success": True,
+            }
+            return _safe_json_dump(payload)
         else:
-            return f"**Grok-4 Error:** {response['error']}"
+            return _safe_json_dump(
+                {
+                    "model": "grok-4-fast-reasoning",
+                    "display_name": "Grok-4 Fast Reasoning (xAI)",
+                    "error": response.get("error"),
+                    "success": False,
+                }
+            )
         
     except Exception as e:
         logger.error(f"Error querying Grok-4: {e}", exc_info=True)
-        return f"Error querying Grok-4: {str(e)}"
+        return _safe_json_dump(
+            {
+                "model": "grok-4-fast-reasoning",
+                "display_name": "Grok-4 Fast Reasoning (xAI)",
+                "error": str(e),
+                "success": False,
+            }
+        )
 
 
 @tool
-async def fact_check_responses(query: str, model_responses_summary: str) -> str:
+async def fact_check_responses(query: str, model_responses_json: str) -> str:
     """
     Perform fact-checking on AI model responses using web search and RAG tools.
     
     Args:
         query: The original question
-        model_responses_summary: Summary of what the models said (for context)
+        model_responses_json: JSON list of model responses
         
     Returns:
         Fact-checking results with sources and verification status
     """
     try:
-        comparison_flow = get_ai_comparison_flow(max_search_results=3, resources=[])
-        
-        # For fact-checking, we need the actual response objects, but we only have summary
-        # This is a simplified version - in practice, the agent would call query_all_ai_models first
+        comparison_flow = _get_flow()
         logger.info("Fact-checking analysis initiated")
-        
-        # Run fact-check (this would ideally use the full responses, but we work with what we have)
-        analysis = await comparison_flow.analyze_with_fact_check(query, [])
-        
-        # Parse and format search results nicely
-        import json
-        result = f"## Fact-Check Analysis\n\n"
-        
-        sources = analysis.get('sources', [])
-        if sources:
-            # Parse JSON if it's a string
-            parsed_sources = []
-            for source in sources:
-                if isinstance(source, str):
-                    try:
-                        source_data = json.loads(source)
-                        if isinstance(source_data, dict) and 'results' in source_data:
-                            parsed_sources.extend(source_data['results'])
-                        else:
-                            parsed_sources.append(source_data)
-                    except json.JSONDecodeError:
-                        # If it's not JSON, treat it as plain text
-                        parsed_sources.append({'content': source})
-                else:
-                    parsed_sources.append(source)
-            
-            result += f"**Sources Found**: {len(parsed_sources)}\n\n"
-            result += "### Search Results:\n\n"
-            
-            for i, source in enumerate(parsed_sources[:5], 1):  # Limit to first 5
-                if isinstance(source, dict):
-                    title = source.get('title', 'No title')
-                    url = source.get('url', '')
-                    content = source.get('content', '')
-                    
-                    result += f"**{i}. {title}**\n"
-                    if url:
-                        result += f"🔗 {url}\n"
-                    if content:
-                        # Truncate content to reasonable length
-                        content_preview = content[:200] + "..." if len(content) > 200 else content
-                        result += f"📄 {content_preview}\n"
-                    result += "\n"
-                else:
-                    result += f"{i}. {str(source)[:200]}...\n\n"
-        else:
-            result += "**Sources Found**: 0\n\n"
-            result += "No search results were found for fact-checking.\n\n"
-        
-        if analysis.get("fact_check_summary"):
-            result += f"### Summary:\n{analysis['fact_check_summary']}\n"
-        
-        return result
+
+        try:
+            responses = json.loads(model_responses_json) if model_responses_json else []
+        except json.JSONDecodeError:
+            responses = []
+
+        analysis = await comparison_flow.analyze_with_fact_check(query, responses)
+        return _safe_json_dump(analysis)
         
     except Exception as e:
         logger.error(f"Error in fact-checking: {e}", exc_info=True)
@@ -204,7 +256,7 @@ async def fact_check_responses(query: str, model_responses_summary: str) -> str:
 
 
 @tool
-async def run_meta_analysis(query: str, responses_context: str) -> str:
+async def run_meta_analysis(query: str, model_responses_json: str, analysis_json: str) -> str:
     """
     Run 4 meta-analysis agents with dimensional scoring (1-10) on each AI model response.
     
@@ -216,48 +268,28 @@ async def run_meta_analysis(query: str, responses_context: str) -> str:
     
     Args:
         query: The original question
-        responses_context: Context about the model responses
+        model_responses_json: JSON list of model responses
+        analysis_json: JSON fact-check analysis results
         
     Returns:
         Meta-analysis results with dimensional scores from all four analytical frameworks
     """
     try:
-        comparison_flow = get_ai_comparison_flow(max_search_results=3, resources=[])
+        comparison_flow = _get_flow()
         
         logger.info("Starting 4-category meta-agent analysis with dimensional scoring")
         
-        # Run meta-agents (they now use the new 4-category system)
-        meta_results = await comparison_flow.run_meta_agents(query, [], {})
-        
-        # Format results
-        result = f"## Meta-Analysis Results (4 Categories)\n\n"
-        successful = sum(1 for v in meta_results.values() if v.get("success"))
-        result += f"**Completed**: {successful}/4 meta-agent categories\n\n"
-        
-        # Map agent names to display names
-        agent_display_names = {
-            "cognitive_properties": "Kognitiva Egenskaper (Cognitive Properties)",
-            "integrity_objectivity": "Integritet & Objektivitet (Integrity & Objectivity)",
-            "stability_emotional": "Stabilitet & Emotionell Profil (Stability & Emotional Profile)",
-            "adaptivity_system": "Adaptivitet & Systemroll (Adaptivity & System Role)",
-        }
-        
-        for agent_name, agent_result in meta_results.items():
-            status = "✓" if agent_result.get("success") else "✗"
-            display_name = agent_display_names.get(agent_name, agent_name.replace("_", " ").title())
-            result += f"### {status} {display_name}\n\n"
-            
-            if agent_result.get("success"):
-                analysis = agent_result.get("analysis", "No analysis available")
-                # Show more of the analysis since it contains scores
-                analysis_preview = analysis[:500] if len(analysis) > 500 else analysis
-                if len(analysis) > 500:
-                    analysis_preview += "... [truncated for brevity]"
-                result += f"{analysis_preview}\n\n"
-            else:
-                result += f"Error: {agent_result.get('error', 'Unknown error')}\n\n"
-        
-        return result
+        try:
+            responses = json.loads(model_responses_json) if model_responses_json else []
+        except json.JSONDecodeError:
+            responses = []
+        try:
+            analysis = json.loads(analysis_json) if analysis_json else {}
+        except json.JSONDecodeError:
+            analysis = {}
+
+        meta_results = await comparison_flow.run_meta_agents(query, responses, analysis)
+        return _safe_json_dump(meta_results)
         
     except Exception as e:
         logger.error(f"Error in meta-analysis: {e}", exc_info=True)
@@ -267,45 +299,46 @@ async def run_meta_analysis(query: str, responses_context: str) -> str:
 @tool
 async def synthesize_optimal_answer(
     query: str,
-    model_responses: str,
-    fact_check_results: str,
-    meta_analysis: str
+    model_responses_json: str,
+    analysis_json: str,
+    meta_json: str,
+    locale: str = "en-US",
 ) -> str:
     """
     Synthesize an optimal answer by combining insights from all models, fact-checking, and meta-analysis.
     
     Args:
         query: The original question
-        model_responses: Summary of what each model said
-        fact_check_results: Fact-checking findings
-        meta_analysis: Meta-analysis insights
+        model_responses_json: JSON list of model responses
+        analysis_json: JSON fact-check analysis results
+        meta_json: JSON meta-analysis results
+        locale: Output locale (e.g., sv-SE)
         
     Returns:
         Synthesized optimal answer with sources and reasoning
     """
     try:
-        comparison_flow = get_ai_comparison_flow(max_search_results=3, resources=[])
+        comparison_flow = _get_flow()
         
         logger.info("Synthesizing optimal answer")
         
-        # Run synthesis
-        synthesis = await comparison_flow.synthesize_optimal_answer(query, [], {}, {})
-        
-        # Format result
-        result = f"## Optimal Synthesized Answer\n\n"
-        
-        if synthesis.get("success"):
-            result += f"{synthesis.get('synthesis', 'No synthesis generated')}\n\n"
-            result += f"### Confidence: {synthesis.get('confidence', 'N/A')}\n\n"
-            
-            if synthesis.get("sources"):
-                result += "### Sources:\n"
-                for source in synthesis.get("sources", [])[:10]:
-                    result += f"- {source}\n"
-        else:
-            result += f"Synthesis failed: {synthesis.get('error', 'Unknown error')}\n"
-        
-        return result
+        try:
+            responses = json.loads(model_responses_json) if model_responses_json else []
+        except json.JSONDecodeError:
+            responses = []
+        try:
+            analysis = json.loads(analysis_json) if analysis_json else {}
+        except json.JSONDecodeError:
+            analysis = {}
+        try:
+            meta_results = json.loads(meta_json) if meta_json else {}
+        except json.JSONDecodeError:
+            meta_results = {}
+
+        synthesis = await comparison_flow.synthesize_optimal_answer(
+            query, responses, analysis, meta_results, locale=locale
+        )
+        return _safe_json_dump(synthesis)
         
     except Exception as e:
         logger.error(f"Error in synthesis: {e}", exc_info=True)
@@ -333,7 +366,8 @@ def get_ai_comparison_tools():
         query_gemini_flash,
         query_deepseek,
         query_grok4,
-        web_search,  # Direct web search for fact-checking
+        fact_check_responses,
+        web_search,  # Direct web search for fact-checking (optional)
         run_meta_analysis,
         synthesize_optimal_answer,
     ]

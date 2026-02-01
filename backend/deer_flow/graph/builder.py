@@ -8,8 +8,21 @@ from backend.deer_flow.prompts.planner_model import StepType
 
 from .nodes import (
     ai_comparison_node,
+    ai_compare_fact_check_node,
+    ai_compare_meta_node,
+    ai_compare_query_node,
+    ai_compare_reporter_node,
+    ai_compare_synth_node,
+    ai_compare_team_node,
     analyst_node,
     background_investigation_node,
+    code_architect_node,
+    code_refiner_node,
+    code_researcher_node,
+    code_reviewer_node,
+    code_reporter_node,
+    code_tester_node,
+    code_team_node,
     coder_node,
     code_planner_node,
     coordinator_node,
@@ -51,10 +64,10 @@ def continue_to_running_research_team(state: State):
             return "planner"
     
     if not current_plan or not current_plan.steps:
-        return "planner"
+        return END
 
     if all(step.execution_res for step in current_plan.steps):
-        return "planner"
+        return "reporter"
 
     # Find first incomplete step
     incomplete_step = None
@@ -75,6 +88,89 @@ def continue_to_running_research_team(state: State):
     if incomplete_step.step_type == StepType.TESTING:
         return "tester"
     return "planner"
+
+
+def continue_to_running_code_team(state: State):
+    current_plan = state.get("current_plan")
+
+    # Handle case where current_plan is a string
+    if isinstance(current_plan, str):
+        try:
+            plan_dict = json.loads(repair_json_output(current_plan))
+            plan_content = extract_plan_content(plan_dict)
+            plan_dict = json.loads(repair_json_output(plan_content))
+            current_plan = Plan.model_validate(plan_dict)
+        except Exception:
+            return "planner"
+
+    if not current_plan or not current_plan.steps:
+        return "planner"
+
+    if all(step.execution_res for step in current_plan.steps):
+        return "planner"
+
+    incomplete_step = None
+    for step in current_plan.steps:
+        if not step.execution_res:
+            incomplete_step = step
+            break
+
+    if not incomplete_step:
+        return "planner"
+
+    if incomplete_step.step_type == StepType.RESEARCH:
+        return "code_researcher"
+    if incomplete_step.step_type == StepType.ANALYSIS:
+        return "code_architect"
+    if incomplete_step.step_type == StepType.PROCESSING:
+        return "coder"
+    if incomplete_step.step_type == StepType.REVIEW:
+        return "code_reviewer"
+    if incomplete_step.step_type == StepType.REFACTOR:
+        return "code_refiner"
+    if incomplete_step.step_type == StepType.TESTING:
+        return "code_tester"
+    return "planner"
+
+
+def continue_to_running_ai_compare_team(state: State):
+    current_plan = state.get("current_plan")
+
+    if isinstance(current_plan, str):
+        try:
+            plan_dict = json.loads(repair_json_output(current_plan))
+            plan_content = extract_plan_content(plan_dict)
+            plan_dict = json.loads(repair_json_output(plan_content))
+            current_plan = Plan.model_validate(plan_dict)
+        except Exception:
+            return END
+
+    if not current_plan or not current_plan.steps:
+        return END
+
+    if all(step.execution_res for step in current_plan.steps):
+        return END
+
+    incomplete_step = None
+    for step in current_plan.steps:
+        if not step.execution_res:
+            incomplete_step = step
+            break
+
+    if not incomplete_step:
+        return END
+
+    if incomplete_step.step_type == StepType.AI_QUERY:
+        return "ai_compare_query"
+    if incomplete_step.step_type == StepType.AI_FACT_CHECK:
+        return "ai_compare_fact_check"
+    if incomplete_step.step_type == StepType.AI_META:
+        return "ai_compare_meta"
+    if incomplete_step.step_type == StepType.AI_SYNTH:
+        return "ai_compare_synth"
+    if incomplete_step.step_type == StepType.AI_REPORT:
+        return "ai_compare_reporter"
+    return END
 
 
 def _build_debate_team_subgraph():
@@ -115,10 +211,23 @@ def _build_base_graph():
     builder.add_node("planner", planner_node)
     builder.add_node("reporter", reporter_node)
     builder.add_node("research_team", research_team_node)
+    builder.add_node("code_team", code_team_node)
+    builder.add_node("ai_compare_team", ai_compare_team_node)
     builder.add_node("researcher", researcher_node)
     builder.add_node("analyst", analyst_node)
     builder.add_node("coder", coder_node)
+    builder.add_node("code_researcher", code_researcher_node)
+    builder.add_node("code_architect", code_architect_node)
+    builder.add_node("code_reviewer", code_reviewer_node)
+    builder.add_node("code_refiner", code_refiner_node)
     builder.add_node("tester", tester_node)
+    builder.add_node("code_tester", code_tester_node)
+    builder.add_node("code_reporter", code_reporter_node)
+    builder.add_node("ai_compare_query", ai_compare_query_node)
+    builder.add_node("ai_compare_fact_check", ai_compare_fact_check_node)
+    builder.add_node("ai_compare_meta", ai_compare_meta_node)
+    builder.add_node("ai_compare_synth", ai_compare_synth_node)
+    builder.add_node("ai_compare_reporter", ai_compare_reporter_node)
     builder.add_node("human_feedback", human_feedback_node)
     
     # Add debate chain nodes (using real external AI models)
@@ -130,20 +239,18 @@ def _build_base_graph():
     
     # Wire standard edges
     builder.add_edge("background_investigator", "planner")
-    # AI comparison returns Command(goto="reporter") to go directly to reporter.
-    # This avoids looping through research_team which would trigger researcher repeatedly.
-    # It executes all tools internally before routing to reporter.
+    # AI comparison uses a separate ai_compare_team chain with dedicated agents.
     #
     # NEW: Separate debate chain:
     # coordinator → debate_planner → human_feedback → debate_orchestrator → debate_team (proponent → opponent → fact_checker → synthesizer → moderator) → debate_orchestrator → reporter
     # debate_orchestrator manages rounds and routes between debate_team and reporter
     #
     # Code planner mode follows structured code development workflow:
-    # coordinator → code_planner → human_feedback → research_team → coder/tester (with code/test tools) → reporter
+    # coordinator → code_planner → human_feedback → code_team → coder/code_architect/code_reviewer/code_refiner/code_tester → reporter
     #
     # Code router: coordinator can route directly to coder for simple code questions
     # coordinator → coder → __end__ (direct response)
-    # The coder node determines whether to go to __end__ or research_team based on context
+    # The coder node determines whether to go to __end__ or code_team based on context
     
     # Debate chain edges - all routing is dynamic via Command objects
     # debate_planner routes to human_feedback
@@ -160,7 +267,42 @@ def _build_base_graph():
     builder.add_conditional_edges(
         "research_team",
         continue_to_running_research_team,
-        ["planner", "researcher", "analyst", "coder", "tester"],
+        [
+            "planner",
+            "reporter",
+            END,
+            "researcher",
+            "analyst",
+            "coder",
+            "tester",
+        ],
+    )
+    builder.add_conditional_edges(
+        "code_team",
+        continue_to_running_code_team,
+        [
+            "planner",
+            END,
+            "code_researcher",
+            "code_architect",
+            "coder",
+            "code_reviewer",
+            "code_refiner",
+            "code_tester",
+            "code_reporter",
+        ],
+    )
+    builder.add_conditional_edges(
+        "ai_compare_team",
+        continue_to_running_ai_compare_team,
+        [
+            END,
+            "ai_compare_query",
+            "ai_compare_fact_check",
+            "ai_compare_meta",
+            "ai_compare_synth",
+            "ai_compare_reporter",
+        ],
     )
     # Changed from END to human_feedback to ensure debate_complete flag is checked
     # This prevents debate from restarting after completion

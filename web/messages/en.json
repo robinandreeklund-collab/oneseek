@@ -135,6 +135,11 @@
         "title": "Multi-Round Debate: {status}",
         "description": "When enabled, all AI models (including OneSeek) participate in a 3-round debate with randomized order, sequential responses, and democratic voting. OneSeek provides synthesis in round 3."
       },
+      "coderMode": "Coder Mode",
+      "coderModeTooltip": {
+        "title": "Coder Mode: {status}",
+        "description": "When enabled, OneSeek routes all tasks through the code chain (planner → coder → tester) with code-focused output."
+      },
       "enhancePrompt": "Enhance prompt with AI",
       "modes": "Modes",
       "trendingQuestions": "Trending Questions",

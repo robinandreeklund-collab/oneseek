@@ -11,6 +11,7 @@ import { isPlannerAgent, mergeMessage } from "../messages";
 import type {
   Citation,
   Message,
+  Option,
   Resource,
   ToolAction,
   WorkspaceFile,
@@ -63,12 +64,14 @@ export const useStore = create<{
   coderSessionIds: string[];
   coderActivityIds: Map<string, string[]>;
   coderWorkspaceFiles: Map<string, WorkspaceFile[]>;
+  coderWorkspaceSnapshot: Map<string, WorkspaceFile[]>;
   ongoingCoderSessionId: string | null;
   openCoderSessionId: string | null;
   debateSessionIds: string[];
   debateActivityIds: Map<string, string[]>;
   ongoingDebateSessionId: string | null;
   openDebateSessionId: string | null;
+  planApprovalPending: boolean;
 
   appendMessage: (message: Message) => void;
   updateMessage: (message: Message) => void;
@@ -80,10 +83,12 @@ export const useStore = create<{
   openCoder: (sessionId: string | null) => void;
   closeCoder: () => void;
   setOngoingCoderSession: (sessionId: string | null) => void;
+  setCoderWorkspaceSnapshot: (sessionId: string, files: WorkspaceFile[]) => void;
   openDebate: (sessionId: string | null) => void;
   closeDebate: () => void;
   setOngoingDebateSession: (sessionId: string | null) => void;
   updateToolActions: (actions: ToolAction[], liveUpdate?: boolean) => void;
+  setPlanApprovalPending: (pending: boolean) => void;
 }>((set) => ({
   responding: false,
   threadId: THREAD_ID,
@@ -100,12 +105,14 @@ export const useStore = create<{
   coderSessionIds: [],
   coderActivityIds: new Map<string, string[]>(),
   coderWorkspaceFiles: new Map<string, WorkspaceFile[]>(),
+  coderWorkspaceSnapshot: new Map<string, WorkspaceFile[]>(),
   ongoingCoderSessionId: null,
   openCoderSessionId: null,
   debateSessionIds: [],
   debateActivityIds: new Map<string, string[]>(),
   ongoingDebateSessionId: null,
   openDebateSessionId: null,
+  planApprovalPending: false,
 
   appendMessage(message: Message) {
     set((state) => {
@@ -154,6 +161,14 @@ export const useStore = create<{
   setOngoingCoderSession(sessionId: string | null) {
     set({ ongoingCoderSessionId: sessionId });
   },
+  setCoderWorkspaceSnapshot(sessionId: string, files: WorkspaceFile[]) {
+    set((state) => ({
+      coderWorkspaceSnapshot: new Map(state.coderWorkspaceSnapshot).set(
+        sessionId,
+        files,
+      ),
+    }));
+  },
   openDebate(sessionId: string | null) {
     console.log("🎯 DEBUG openDebate called with sessionId=", sessionId);
     set({ openDebateSessionId: sessionId });
@@ -173,8 +188,73 @@ export const useStore = create<{
     const updatedWorkspaceFiles = new Map(useStore.getState().coderWorkspaceFiles);
 
     toolActions.forEach((action) => {
-      const targetMessage = findMessageByToolCallId(action.tool_call_id);
-      if (!targetMessage) return;
+      let targetMessage = findMessageByToolCallId(action.tool_call_id);
+      if (!targetMessage) {
+        const toolName = action.tool_name ?? "unknown";
+        const fallbackAgent =
+          toolName === "query_model_in_round" ||
+          toolName === "query_gpt35" ||
+          toolName === "query_gemini_flash" ||
+          toolName === "query_deepseek" ||
+          toolName === "query_grok4"
+            ? "ai_compare_query"
+            : toolName === "fact_check_responses"
+              ? "ai_compare_fact_check"
+              : toolName === "run_meta_analysis"
+                ? "ai_compare_meta"
+                : toolName === "synthesize_optimal_answer"
+                  ? "ai_compare_synth"
+                  : "researcher";
+        const toolInput = action.tool_input;
+        let args: Record<string, unknown> = {};
+        if (typeof toolInput === "string" && toolInput.trim()) {
+          const trimmed = toolInput.trim();
+          if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+            try {
+              const parsed = JSON.parse(trimmed);
+              args = typeof parsed === "object" && parsed ? (parsed as Record<string, unknown>) : {};
+            } catch {
+              args = { raw: toolInput };
+            }
+          } else {
+            args = { raw: toolInput };
+          }
+        }
+        const result =
+          action.tool_output !== undefined
+            ? typeof action.tool_output === "string"
+              ? action.tool_output
+              : JSON.stringify(action.tool_output, null, 2)
+            : undefined;
+        const toolCallMessageId = `tool-${action.tool_call_id}`;
+        if (!existsMessage(toolCallMessageId)) {
+          const message: Message = {
+            id: toolCallMessageId,
+            threadId: useStore.getState().threadId,
+            agent: fallbackAgent,
+            role: "assistant",
+            content: "",
+            contentChunks: [],
+            reasoningContent: "",
+            reasoningContentChunks: [],
+            isStreaming: action.status === "running",
+            toolCalls: [
+              {
+                id: action.tool_call_id,
+                name: toolName,
+                args,
+                result,
+                status: action.status,
+              },
+            ],
+          };
+          appendMessage(message);
+          updatedMessages.set(message.id, message);
+          updatedMessageIds.add(message.id);
+        }
+        targetMessage = findMessageByToolCallId(action.tool_call_id);
+        if (!targetMessage) return;
+      }
       const toolCalls = targetMessage.toolCalls ?? [];
       const updatedToolCalls = toolCalls.map((toolCall) => {
         if (toolCall.id !== action.tool_call_id) return toolCall;
@@ -218,6 +298,9 @@ export const useStore = create<{
       });
     }
   },
+  setPlanApprovalPending(pending: boolean) {
+    set({ planApprovalPending: pending });
+  },
 }));
 
 export async function sendMessage(
@@ -242,7 +325,22 @@ export async function sendMessage(
     });
   }
 
+  if (interruptFeedback && interruptFeedback.toLowerCase().startsWith("accepted")) {
+    useStore.getState().setPlanApprovalPending(false);
+  }
+
   const settings = getChatStreamSettings();
+  if (!settings.autoAcceptedPlan && !interruptFeedback) {
+    useStore.getState().setPlanApprovalPending(true);
+    useStore.getState().closeResearch();
+    useStore.getState().closeCoder();
+    useStore.getState().closeDebate();
+    useStore.getState().setOngoingResearch(null);
+    useStore.getState().setOngoingCoderSession(null);
+    useStore.getState().setOngoingDebateSession(null);
+  } else if (settings.autoAcceptedPlan) {
+    useStore.getState().setPlanApprovalPending(false);
+  }
   const stream = chatStream(
     content ?? "[REPLAY]",
     {
@@ -257,6 +355,7 @@ export async function sendMessage(
         settings.enableBackgroundInvestigation ?? true,
       enable_ai_comparison: settings.enableAiComparison ?? false,
       enable_debate_mode: settings.enableDebateMode ?? false,
+      enable_code_mode: settings.enableCodeMode ?? false,
       enable_web_search: settings.enableWebSearch ?? true,
       max_plan_iterations: settings.maxPlanIterations,
       max_step_num: settings.maxStepNum,
@@ -310,19 +409,91 @@ export async function sendMessage(
         }
         continue;
       }
+
+      if (type === "interrupt") {
+        const options = (data as { options?: Option[] }).options ?? [];
+        const isTestInterrupt = options.some(
+          (option) => option.value === "[TEST]" || option.value === "[SKIP]",
+        );
+        if (!isTestInterrupt) {
+          useStore.getState().setPlanApprovalPending(true);
+        }
+      }
       
-      // Handle tool_call_result specially: use the message that contains the tool call
-      if (type === "tool_call_result") {
+      // Handle tool_calls/tool_call_chunks: reuse existing message if possible
+      if (type === "tool_calls" || type === "tool_call_chunks") {
+        const toolCallId =
+          type === "tool_calls"
+            ? data.tool_calls?.[0]?.id
+            : data.tool_call_chunks?.[0]?.id;
+        message = toolCallId ? findMessageByToolCallId(toolCallId) : undefined;
+        if (message) {
+          messageId = message.id;
+        } else {
+          messageId = data.id;
+        }
+        
+        if (!existsMessage(messageId)) {
+          message = {
+            id: messageId,
+            threadId: data.thread_id,
+            agent: data.agent,
+            role: data.role,
+            content: "",
+            contentChunks: [],
+            reasoningContent: "",
+            reasoningContentChunks: [],
+            isStreaming: true,
+            interruptFeedback,
+          };
+          appendMessage(message);
+        }
+      } else if (type === "tool_call_result") {
         message = findMessageByToolCallId(data.tool_call_id);
         if (message) {
           // Use the found message's ID, not data.id
           messageId = message.id;
         } else {
-          // Shouldn't happen, but handle gracefully
-          if (process.env.NODE_ENV === "development") {
-            console.warn(`Tool call result without matching message: ${data.tool_call_id}`);
+          const toolName = (data.tool_name as string | undefined) ?? "unknown";
+          const fallbackAgent =
+            toolName === "query_model_in_round" ||
+            toolName === "query_gpt35" ||
+            toolName === "query_gemini_flash" ||
+            toolName === "query_deepseek" ||
+            toolName === "query_grok4"
+              ? "ai_compare_query"
+              : toolName === "fact_check_responses"
+                ? "ai_compare_fact_check"
+                : toolName === "run_meta_analysis"
+                  ? "ai_compare_meta"
+                  : toolName === "synthesize_optimal_answer"
+                    ? "ai_compare_synth"
+                    : "researcher";
+          const toolCallMessageId = `tool-${data.tool_call_id}`;
+          if (!existsMessage(toolCallMessageId)) {
+            const message: Message = {
+              id: toolCallMessageId,
+              threadId: data.thread_id,
+              agent: fallbackAgent,
+              role: "assistant",
+              content: "",
+              contentChunks: [],
+              reasoningContent: "",
+              reasoningContentChunks: [],
+              isStreaming: true,
+              toolCalls: [
+                {
+                  id: data.tool_call_id,
+                  name: toolName,
+                  args: {},
+                  result: data.content,
+                },
+              ],
+            };
+            appendMessage(message);
           }
-          continue; // Skip this event
+          message = getMessage(toolCallMessageId);
+          messageId = toolCallMessageId;
         }
       } else {
         // For other event types, use data.id
@@ -405,6 +576,15 @@ function findMessageByToolCallId(toolCallId: string) {
 }
 
 function appendMessage(message: Message) {
+  const settings = getChatStreamSettings();
+  const planApprovalPending = useStore.getState().planApprovalPending;
+  const canOpenSidebar = settings.autoAcceptedPlan || !planApprovalPending;
+  if (isPlannerAgent(message.agent) && !settings.autoAcceptedPlan) {
+    useStore.getState().setPlanApprovalPending(true);
+    useStore.getState().closeResearch();
+    useStore.getState().closeCoder();
+    useStore.getState().closeDebate();
+  }
   // DEBUG: Log all messages to trace debate flow
   if (message.agent?.includes("debate")) {
     console.log("🔍 DEBUG appendMessage: agent=", message.agent, "id=", message.id);
@@ -417,21 +597,38 @@ function appendMessage(message: Message) {
     message.agent === "reporter" ||
     message.agent === "researcher" ||
     message.agent === "analyst" ||
-    message.agent === "ai_comparison"
+    message.agent === "ai_comparison" ||
+    message.agent === "ai_compare_query" ||
+    message.agent === "ai_compare_fact_check" ||
+    message.agent === "ai_compare_meta" ||
+    message.agent === "ai_compare_synth" ||
+    message.agent === "ai_compare_reporter"
   ) {
-    if (!getOngoingResearchId()) {
-      const id = message.id;
-      appendResearch(id);
-      openResearch(id);
+    if (canOpenSidebar) {
+      if (!getOngoingResearchId()) {
+        const id = message.id;
+        appendResearch(id);
+        openResearch(id);
+      }
+      appendResearchActivity(message);
     }
-    appendResearchActivity(message);
-  } else if (message.agent === "coder") {
-    if (!getOngoingCoderSessionId()) {
-      const id = message.id;
-      appendCoderSession(id);
-      openCoder(id);
+  } else if (
+    message.agent === "coder" ||
+    message.agent === "code_researcher" ||
+    message.agent === "code_architect" ||
+    message.agent === "code_reviewer" ||
+    message.agent === "code_refiner" ||
+    message.agent === "code_tester" ||
+    message.agent === "code_reporter"
+  ) {
+    if (canOpenSidebar) {
+      if (!getOngoingCoderSessionId()) {
+        const id = message.id;
+        appendCoderSession(id);
+        openCoder(id);
+      }
+      appendCoderActivity(message);
     }
-    appendCoderActivity(message);
   } else if (
     message.agent === "debate_orchestrator" ||
     message.agent === "external_ai_caller" ||
@@ -440,13 +637,15 @@ function appendMessage(message: Message) {
     message.agent === "moderator"
   ) {
     console.log("🎯 DEBUG: debate message detected! agent=", message.agent, "Opening sidebar...");
-    if (!getOngoingDebateSessionId()) {
-      const id = message.id;
-      console.log("🎯 DEBUG: Calling appendDebateSession and openDebate with id=", id);
-      appendDebateSession(id);
-      openDebate(id);
+    if (canOpenSidebar) {
+      if (!getOngoingDebateSessionId()) {
+        const id = message.id;
+        console.log("🎯 DEBUG: Calling appendDebateSession and openDebate with id=", id);
+        appendDebateSession(id);
+        openDebate(id);
+      }
+      appendDebateActivity(message);
     }
-    appendDebateActivity(message);
   }
   useStore.getState().appendMessage(message);
 }
@@ -454,7 +653,7 @@ function appendMessage(message: Message) {
 function updateMessage(message: Message) {
   if (
     getOngoingResearchId() &&
-    message.agent === "reporter" &&
+    (message.agent === "reporter" || message.agent === "ai_compare_reporter") &&
     !message.isStreaming
   ) {
     useStore.getState().setOngoingResearch(null);
@@ -599,7 +798,7 @@ function appendResearchActivity(message: Message) {
         ]),
       });
     }
-    if (message.agent === "reporter") {
+    if (message.agent === "reporter" || message.agent === "ai_compare_reporter") {
       useStore.setState({
         researchReportIds: new Map(useStore.getState().researchReportIds).set(
           researchId,
@@ -792,6 +991,12 @@ export function useLastFeedbackMessageId() {
       for (let i = state.messageIds.length - 1; i >= 0; i--) {
         const message = state.messages.get(state.messageIds[i]!);
         if (message?.finishReason === "interrupt") {
+          const isCodeTestInterrupt = (message.options || []).some(
+            (option) => option.value === "[TEST]" || option.value === "[SKIP]",
+          );
+          if (isCodeTestInterrupt) {
+            return null;
+          }
           interruptIndex = i;
           break;
         }

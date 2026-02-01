@@ -518,6 +518,7 @@ Ge konkreta poäng (exakt siffra 1-10) och korta motiveringar för varje dimensi
         model_responses: List[Dict[str, Any]],
         analysis: Dict[str, Any],
         meta_results: Dict[str, Any],
+        locale: str = "en-US",
     ) -> Dict[str, Any]:
         """
         Synthesize an optimal answer from all model responses and analysis.
@@ -551,7 +552,27 @@ Ge konkreta poäng (exakt siffra 1-10) och korta motiveringar för varje dimensi
             for r in successful_responses
         ])
         
-        synthesis_prompt = f"""Synthesize an optimal answer to the following query based on multiple AI model responses and analysis.
+        if locale.startswith("sv"):
+            synthesis_prompt = f"""Syntetisera ett optimalt svar på följande fråga baserat på flera AI‑modell‑svar och analys.
+
+Fråga: {query}
+
+Modellsvar:
+{response_summary}
+
+Faktakoll: {len(analysis.get('sources', []))} källor
+Konsensuspunkter: {analysis.get('consensus_points', [])}
+
+Meta‑analys: Använd insikter från de fyra kategorierna (kognitiva egenskaper, integritet & objektivitet, stabilitet & emotionell profil, adaptivitet & systemroll).
+
+Svara på svenska och:
+1. Kombinera de bästa insikterna från alla modeller
+2. Ta hänsyn till faktakoll
+3. Redovisa konsensus och oenighet
+4. Håll det sakligt och balanserat
+"""
+        else:
+            synthesis_prompt = f"""Synthesize an optimal answer to the following query based on multiple AI model responses and analysis.
 
 Query: {query}
 
@@ -561,11 +582,7 @@ Model Responses:
 Fact-Check Sources: {len(analysis.get('sources', []))} sources found
 Consensus Points: {analysis.get('consensus_points', [])}
 
-Meta-Analysis:
-- Counterfactual: {"Available" if meta_results.get('counterfactual', {}).get('success') else "Not available"}
-- Robustness: {"Available" if meta_results.get('robustness', {}).get('success') else "Not available"}
-- Consistency: {"Available" if meta_results.get('consistency', {}).get('success') else "Not available"}
-- Truth Pressure: {"Available" if meta_results.get('truth_pressure', {}).get('success') else "Not available"}
+Meta-Analysis: Use the four-category meta analysis (cognitive properties, integrity & objectivity, stability & emotional profile, adaptivity & system role).
 
 Please provide a comprehensive, well-reasoned answer that:
 1. Combines the best insights from all model responses

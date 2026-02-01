@@ -11,7 +11,7 @@ import {
   Lightbulb,
   Wrench,
 } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 
 import { LoadingAnimation } from "~/components/deer-flow/loading-animation";
@@ -93,6 +93,12 @@ export function MessageListView({
     };
   }, []);
 
+  const isCodeTestInterrupt = useMemo(() => {
+    return (interruptMessage?.options || []).some(
+      (option) => option.value === "[TEST]" || option.value === "[SKIP]",
+    );
+  }, [interruptMessage]);
+
   return (
     <ScrollContainer
       className={cn("flex h-full w-full flex-col overflow-hidden", className)}
@@ -112,12 +118,64 @@ export function MessageListView({
             onToggleSidebar={handleToggleSidebar}
           />
         ))}
+        {isCodeTestInterrupt && interruptMessage && (
+          <li className="px-4 py-4">
+            <InterruptCard
+              message={interruptMessage}
+              onSendMessage={onSendMessage}
+            />
+          </li>
+        )}
         <div className="flex h-8 w-full shrink-0"></div>
       </ul>
       {responding && (noOngoingResearch || !ongoingResearchIsOpen) && (
         <LoadingAnimation className="ml-4" />
       )}
     </ScrollContainer>
+  );
+}
+
+function InterruptCard({
+  message,
+  onSendMessage,
+}: {
+  message: Message;
+  onSendMessage?: (
+    message: string,
+    options?: { interruptFeedback?: string },
+  ) => void;
+}) {
+  const options = message.options ?? [];
+
+  return (
+    <Card className="w-full">
+      <CardHeader>
+        <CardTitle>Feedback</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <Markdown animated={false}>{message.content}</Markdown>
+      </CardContent>
+      <CardFooter className="flex flex-wrap gap-2 justify-end">
+        {options.map((option) => (
+          <Button
+            key={option.value}
+            variant={option.value === "[TEST]" ? "default" : "outline"}
+            onClick={() => {
+              if (!onSendMessage) return;
+              const text =
+                option.value === "[TEST]"
+                  ? "Run tests"
+                  : option.value === "[SKIP]"
+                    ? "Skip testing"
+                    : option.text;
+              onSendMessage(text, { interruptFeedback: option.value });
+            }}
+          >
+            {option.text}
+          </Button>
+        ))}
+      </CardFooter>
+    </Card>
   );
 }
 
@@ -290,6 +348,8 @@ function ResearchCard({
   onToggleResearch?: () => void;
 }) {
   const t = useTranslations("chat.research");
+  const locale = useLocale();
+  const isSwedish = locale.startsWith("sv");
   const reportId = useStore((state) => state.researchReportIds.get(researchId));
   const hasReport = reportId !== undefined;
   const reportGenerating = useStore(
@@ -528,6 +588,8 @@ function PlanCard({
   waitForFeedback?: boolean;
 }) {
   const t = useTranslations("chat.research");
+  const locale = useLocale();
+  const isSwedish = locale.startsWith("sv");
   const plan = useMemo<{
     title?: string;
     thought?: string;
@@ -558,10 +620,17 @@ function PlanCard({
     }
     const plannerName = formatPlannerName(message.agent);
     if (plannerName) {
-      return `Start ${plannerName}`;
+      const normalized = plannerName.toLowerCase();
+      const displayName =
+        normalized === "ai comparison"
+          ? isSwedish
+            ? "AI-jämförelse"
+            : "AI comparison"
+          : plannerName;
+      return isSwedish ? `Starta ${displayName}` : `Start ${displayName}`;
     }
     return t("startResearch");
-  }, [isDebatePlan, message.agent, t]);
+  }, [isDebatePlan, message.agent, t, isSwedish]);
 
   // Check if thinking: has reasoning content but no main content yet
   const isThinking = Boolean(reasoningContent && !hasMainContent);
@@ -570,17 +639,28 @@ function PlanCard({
   const shouldShowPlan = hasMainContent || message.isStreaming;
   const handleAccept = useCallback(async () => {
     if (onSendMessage) {
+      const greetings = isSwedish
+        ? ["Toppen", "Låter bra", "Ser bra ut", "Grymt", "Kanon"]
+        : GREETINGS;
       const feedback = isDebatePlan
         ? `accepted|models=${selectedModels.join(",")}`
         : "accepted";
+      const intro = greetings[Math.floor(Math.random() * greetings.length)];
+      const followup = isSwedish
+        ? Math.random() > 0.5
+          ? "Då kör vi."
+          : "Nu kör vi."
+        : Math.random() > 0.5
+          ? "Let's get started."
+          : "Let's start.";
       onSendMessage(
-        `${GREETINGS[Math.floor(Math.random() * GREETINGS.length)]}! ${Math.random() > 0.5 ? "Let's get started." : "Let's start."}`,
+        `${intro}! ${followup}`,
         {
           interruptFeedback: feedback,
         },
       );
     }
-  }, [isDebatePlan, onSendMessage, selectedModels]);
+  }, [isDebatePlan, onSendMessage, selectedModels, isSwedish]);
   return (
     <div className={cn("w-full", className)}>
       {reasoningContent && (
@@ -613,7 +693,9 @@ function PlanCard({
               {!hasMainContent && message.isStreaming && (
                 <div className="flex items-center gap-2 text-sm opacity-70 p-4">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
-                  <span>Creating research plan...</span>
+                  <span>
+                    {isSwedish ? "Skapar plan..." : "Creating research plan..."}
+                  </span>
                 </div>
               )}
               {hasMainContent && (

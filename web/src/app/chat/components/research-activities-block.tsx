@@ -4,8 +4,8 @@
 import { PythonOutlined } from "@ant-design/icons";
 import { motion } from "framer-motion";
 import { LRUCache } from "lru-cache";
-import { BookOpenText, FileText, PencilRuler, Search } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { BookOpenText, CheckCircle2, FileText, Loader2, PencilRuler, Search } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 import { useTheme } from "next-themes";
 import React, { useMemo } from "react";
 import SyntaxHighlighter from "react-syntax-highlighter";
@@ -32,6 +32,7 @@ import type { Message, ToolCallRuntime } from "~/core/messages";
 import { useMessage, useStore } from "~/core/store";
 import { parseJSON } from "~/core/utils";
 import { cn } from "~/lib/utils";
+import { DebateModelIcon } from "./debate-model-icon";
 
 // Performance optimization constants
 const MAX_ANIMATED_ITEMS = 10; // Only animate first 10 items
@@ -47,10 +48,63 @@ export function ResearchActivitiesBlock({
   const activityIds = useStore((state) =>
     state.researchActivityIds.get(researchId),
   );
+  const messages = useStore((state) => state.messages);
   const ongoing = useStore((state) => state.ongoingResearchId === researchId);
+  const displayItems = useMemo(() => {
+    if (!activityIds) return [];
+    const items: Array<{ id: string; responseId?: string }> = [];
+    const consumed = new Set<string>();
+    const seenContent = new Set<string>();
+    for (let i = 0; i < activityIds.length; i += 1) {
+      const activityId = activityIds[i];
+      if (consumed.has(activityId)) continue;
+      const message = messages.get(activityId);
+      if (!message) {
+        items.push({ id: activityId });
+        continue;
+      }
+      if (message.agent === "ai_compare_query" && message.toolCalls?.length) {
+        let responseId: string | undefined;
+        for (let j = i + 1; j < activityIds.length; j += 1) {
+          const nextId = activityIds[j];
+          if (consumed.has(nextId)) continue;
+          const nextMessage = messages.get(nextId);
+          if (!nextMessage) continue;
+          if (nextMessage.agent === "ai_compare_query" && nextMessage.toolCalls?.length) {
+            break;
+          }
+          if (
+            nextMessage.agent === "ai_compare_query"
+            && !nextMessage.toolCalls?.length
+          ) {
+            const contentKey = (nextMessage.content ?? "")
+              .replace(/\s+/g, " ")
+              .trim();
+            if (contentKey && !seenContent.has(contentKey)) {
+              responseId = nextId;
+              seenContent.add(contentKey);
+            }
+            consumed.add(nextId);
+            break;
+          }
+        }
+        items.push({ id: activityId, responseId });
+        continue;
+      }
+      if (message.agent === "ai_compare_query" && !message.toolCalls?.length) {
+        const contentKey = (message.content ?? "").replace(/\s+/g, " ").trim();
+        if (!contentKey || seenContent.has(contentKey)) {
+          continue;
+        }
+        seenContent.add(contentKey);
+      }
+      items.push({ id: activityId });
+    }
+    return items;
+  }, [activityIds, messages]);
   
   // Guard against undefined activityIds
-  if (!activityIds || activityIds.length === 0) {
+  if (!activityIds || displayItems.length === 0) {
     return (
       <>
         {ongoing && <LoadingAnimation className="mx-4 my-12" />}
@@ -61,15 +115,16 @@ export function ResearchActivitiesBlock({
   return (
     <>
       <ul className={cn("flex flex-col py-4", className)}>
-        {activityIds.map(
-          (activityId, i) => {
+        {displayItems.map(
+          (item, i) => {
             // Performance optimization: limit animations for large lists
             const shouldAnimate = i < MAX_ANIMATED_ITEMS;
             const animationDelay = shouldAnimate ? Math.min(i * ANIMATION_DELAY_MULTIPLIER, 0.5) : 0;
-            
+            const message = messages.get(item.id);
+            const isAiCompareToolRow = message?.agent === "ai_compare_query" && Boolean(message.toolCalls?.length);
             return (
               <motion.li
-                key={activityId}
+                key={item.id}
                 style={{ transition: shouldAnimate ? "all 0.3s ease-out" : "none" }}
                 initial={shouldAnimate ? { opacity: 0, y: 24 } : { opacity: 1, y: 0 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -79,9 +134,18 @@ export function ResearchActivitiesBlock({
                   ease: "easeOut",
                 } : undefined}
               >
-                <ActivityMessage messageId={activityId} />
-                <ActivityListItem messageId={activityId} />
-                {i !== activityIds.length - 1 && <hr className="my-8" />}
+                {isAiCompareToolRow ? (
+                  <>
+                    <ActivityListItem messageId={item.id} />
+                    {item.responseId && <ActivityMessage messageId={item.responseId} />}
+                  </>
+                ) : (
+                  <>
+                    <ActivityMessage messageId={item.id} />
+                    <ActivityListItem messageId={item.id} />
+                  </>
+                )}
+                {i !== displayItems.length - 1 && <hr className="my-8" />}
               </motion.li>
             );
           },
@@ -105,8 +169,40 @@ const ActivityMessage = React.memo(({ messageId }: { messageId: string }) => {
     if (isPlannerAgent(message.agent)) {
       return <PlanCard message={message} />;
     }
+    const locale = useLocale();
+    const isSwedish = locale.startsWith("sv");
+    const agentLabelMap: Record<string, string> = {
+      ai_compare_query: isSwedish ? "Modellerna svarar" : "Model responses",
+      ai_compare_fact_check: isSwedish ? "Faktakoll" : "Fact check",
+      ai_compare_meta: isSwedish ? "Meta-analys" : "Meta analysis",
+      ai_compare_synth: isSwedish ? "Syntes" : "Synthesis",
+    };
+    if (message.agent === "ai_compare_query") {
+      const content = message.content?.trim() ?? "";
+      if (!content || !/^###\s+/m.test(content)) {
+        return null;
+      }
+    }
+    if (message.content && message.agent && agentLabelMap[message.agent]) {
+      const label = agentLabelMap[message.agent];
+      return (
+        <div className="px-4 py-2">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {label}
+          </div>
+          <Markdown animated checkLinkCredibility>
+            {message.content}
+          </Markdown>
+        </div>
+      );
+    }
     // Skip reporter messages (they're shown in the Report tab)
-    if (message.agent !== "reporter" && message.content) {
+    if (
+      message.agent !== "reporter" &&
+      message.agent !== "ai_compare_reporter" &&
+      message.agent !== "ai_compare_query" &&
+      message.content
+    ) {
       return (
         <div className="px-4 py-2">
           <Markdown animated checkLinkCredibility>
@@ -120,9 +216,12 @@ const ActivityMessage = React.memo(({ messageId }: { messageId: string }) => {
 });
 ActivityMessage.displayName = "ActivityMessage";
 
+
 // Component to display the research plan
 const PlanCard = React.memo(({ message }: { message: Message }) => {
   const t = useTranslations("chat.research");
+  const locale = useLocale();
+  const isSwedish = locale.startsWith("sv");
   const plan = useMemo<{
     title?: string;
     thought?: string;
@@ -152,12 +251,16 @@ const PlanCard = React.memo(({ message }: { message: Message }) => {
           {!hasContent && message.isStreaming && (
             <div className="flex items-center gap-2 text-sm opacity-70">
               <LoadingAnimation className="mx-0 my-0" />
-              <span>Creating research plan...</span>
+              <span>
+                {isSwedish ? "Skapar plan..." : "Creating research plan..."}
+              </span>
             </div>
           )}
           {!hasContent && !message.isStreaming && (
             <div className="text-sm opacity-50">
-              No plan content available
+              {isSwedish
+                ? "Ingen planinformation tillgänglig"
+                : "No plan content available"}
             </div>
           )}
           {hasContent && plan.thought && (
@@ -205,7 +308,7 @@ PlanCard.displayName = "PlanCard";
 const ActivityListItem = React.memo(({ messageId }: { messageId: string }) => {
   const message = useMessage(messageId);
   if (message) {
-    if (!message.isStreaming && message.toolCalls?.length) {
+    if (message.toolCalls?.length) {
       const toolCallComponents = message.toolCalls
         .filter(toolCall => !(typeof toolCall.result === "string" && toolCall.result?.startsWith("Error")))
         .map(toolCall => {
@@ -572,6 +675,75 @@ function PythonToolCallResult({ result }: { result: string }) {
 function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
   const tool = useMemo(() => findMCPTool(toolCall.name), [toolCall.name]);
   const { resolvedTheme } = useTheme();
+  const locale = useLocale();
+  const isSwedish = locale.startsWith("sv");
+  const modelIconKey = useMemo(() => {
+    if (toolCall.name === "query_model_in_round") {
+      const args = toolCall.args as { model_key?: string };
+      return args.model_key;
+    }
+    if (toolCall.args && typeof toolCall.args === "object") {
+      const args = toolCall.args as { model_key?: string };
+      if (args.model_key) return args.model_key;
+    }
+    if (toolCall.name === "query_gpt35") return "gpt-3.5-turbo";
+    if (toolCall.name === "query_gemini_flash") return "gemini-2.5-flash";
+    if (toolCall.name === "query_deepseek") return "deepseek-chat";
+    if (toolCall.name === "query_grok4") return "grok-4-fast-reasoning";
+    return undefined;
+  }, [toolCall.args, toolCall.name]);
+  const aiComparePayload = useMemo(() => {
+    if (!toolCall.result) return null;
+    const name = toolCall.name ?? "";
+    if (
+      [
+        "query_gpt35",
+        "query_gemini_flash",
+        "query_deepseek",
+        "query_grok4",
+        "fact_check_responses",
+        "run_meta_analysis",
+        "synthesize_optimal_answer",
+      ].includes(name)
+    ) {
+      return parseJSON<unknown>(toolCall.result, null) as
+        | Record<string, unknown>
+        | string
+        | null;
+    }
+    return null;
+  }, [toolCall.name, toolCall.result]);
+  const modelLabelFromKey = useMemo(() => {
+    const key =
+      (aiComparePayload &&
+      typeof aiComparePayload === "object" &&
+      "model" in aiComparePayload
+        ? String((aiComparePayload as Record<string, unknown>).model)
+        : modelIconKey) ?? "";
+    if (key === "gpt-3.5-turbo") return "GPT-3.5";
+    if (key === "gemini-2.5-flash") return "Gemini 2.5 Flash";
+    if (key === "deepseek-chat") return "DeepSeek";
+    if (key === "grok-4-fast-reasoning") return "Grok-4";
+    return "";
+  }, [aiComparePayload, modelIconKey]);
+  const modelDisplayName = useMemo(() => {
+    if (aiComparePayload && typeof aiComparePayload === "object" && "display_name" in aiComparePayload) {
+      const name = (aiComparePayload as Record<string, unknown>).display_name;
+      if (typeof name === "string" && name.trim()) return name;
+    }
+    if (toolCall.args && typeof toolCall.args === "object") {
+      const args = toolCall.args as { display_name?: string };
+      if (args.display_name) return args.display_name;
+    }
+    return modelLabelFromKey || undefined;
+  }, [aiComparePayload, modelLabelFromKey]);
+  const resolvedModelKey = useMemo(() => {
+    if (aiComparePayload && typeof aiComparePayload === "object" && "model" in aiComparePayload) {
+      const key = String((aiComparePayload as Record<string, unknown>).model);
+      if (key) return key;
+    }
+    return modelIconKey;
+  }, [aiComparePayload, modelIconKey]);
   
   // Custom display name for debate tools
   const displayName = useMemo(() => {
@@ -586,17 +758,37 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
       if (model.includes("(ID:")) {
         model = model.split("(ID:")[0]?.trim() || model;
       }
-      return `Waiting for ${model}...`;
+      return isSwedish ? `Väntar på ${model}...` : `Waiting for ${model}...`;
+    } else if (toolCall.name === "query_gpt35") {
+      const label = modelDisplayName ?? "GPT-3.5";
+      return isSwedish ? `Väntar på ${label}...` : `Waiting for ${label}...`;
+    } else if (toolCall.name === "query_gemini_flash") {
+      const label = modelDisplayName ?? "Gemini 2.5 Flash";
+      return isSwedish ? `Väntar på ${label}...` : `Waiting for ${label}...`;
+    } else if (toolCall.name === "query_deepseek") {
+      const label = modelDisplayName ?? "DeepSeek";
+      return isSwedish ? `Väntar på ${label}...` : `Waiting for ${label}...`;
+    } else if (toolCall.name === "query_grok4") {
+      const label = modelDisplayName ?? "Grok-4";
+      return isSwedish ? `Väntar på ${label}...` : `Waiting for ${label}...`;
+    } else if (toolCall.name === "fact_check_responses") {
+      return isSwedish ? "Väntar på faktakoll..." : "Waiting for fact check...";
+    } else if (toolCall.name === "run_meta_analysis") {
+      return isSwedish ? "Väntar på meta‑analys..." : "Waiting for meta analysis...";
+    } else if (toolCall.name === "synthesize_optimal_answer") {
+      return isSwedish ? "Väntar på syntes..." : "Waiting for synthesis...";
     } else if (toolCall.name === "start_debate_round") {
         const args = toolCall.args as { round_number?: number };
-        return `Starting Round ${args.round_number ?? ""}...`;
+        return isSwedish
+          ? `Startar runda ${args.round_number ?? ""}...`
+          : `Starting Round ${args.round_number ?? ""}...`;
     } else if (toolCall.name === "collect_debate_votes") {
-        return "Collecting votes from all models...";
+        return isSwedish ? "Samlar röster från alla modeller..." : "Collecting votes from all models...";
     }
     
     // Default: just function name
     return `${toolCall.name}()`;
-  }, [toolCall.name, toolCall.args]);
+  }, [toolCall.name, toolCall.args, isSwedish, modelDisplayName]);
 
   // Is this a debate tool that has finished running?
   // If so, we might want to change the text from "Waiting..." to "Responded"
@@ -608,14 +800,88 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
            if (model.includes("(ID:")) {
              model = model.split("(ID:")[0]?.trim() || model;
            }
-           return `${model} responded`;
+           return isSwedish ? `${model} svarade` : `${model} responded`;
        }
-       if (toolCall.name === "start_debate_round") return "Round started";
-       if (toolCall.name === "collect_debate_votes") return "Votes collected";
-       return `Executed ${toolCall.name}()`;
+       if (toolCall.name === "query_gpt35") {
+         const label = modelDisplayName ?? "GPT-3.5";
+         return isSwedish ? `${label} svarade` : `${label} responded`;
+       }
+       if (toolCall.name === "query_gemini_flash") {
+         const label = modelDisplayName ?? "Gemini 2.5 Flash";
+         return isSwedish ? `${label} svarade` : `${label} responded`;
+       }
+       if (toolCall.name === "query_deepseek") {
+         const label = modelDisplayName ?? "DeepSeek";
+         return isSwedish ? `${label} svarade` : `${label} responded`;
+       }
+       if (toolCall.name === "query_grok4") {
+         const label = modelDisplayName ?? "Grok-4";
+         return isSwedish ? `${label} svarade` : `${label} responded`;
+       }
+      if (toolCall.name === "fact_check_responses") {
+        return isSwedish ? "Faktakoll klart" : "Fact check completed";
+      }
+      if (toolCall.name === "run_meta_analysis") {
+        return isSwedish ? "Meta‑analys klar" : "Meta analysis completed";
+      }
+      if (toolCall.name === "synthesize_optimal_answer") {
+        return isSwedish ? "Syntes klar" : "Synthesis completed";
+      }
+       if (toolCall.name === "start_debate_round") return isSwedish ? "Runda startad" : "Round started";
+       if (toolCall.name === "collect_debate_votes") return isSwedish ? "Röster insamlade" : "Votes collected";
+       return isSwedish ? `Körde ${toolCall.name}()` : `Executed ${toolCall.name}()`;
     }
-    return `Running ${displayName}`;
-  }, [displayName, toolCall.name, toolCall.result, toolCall.args]);
+    return isSwedish ? `Kör ${displayName}` : `Running ${displayName}`;
+  }, [displayName, toolCall.name, toolCall.result, toolCall.args, isSwedish, modelDisplayName]);
+
+  const displayResult = useMemo(() => {
+    if (!toolCall.result) return "";
+    if (aiComparePayload) {
+      if (typeof aiComparePayload === "string") {
+        return aiComparePayload;
+      }
+      if (Array.isArray(aiComparePayload)) {
+        return JSON.stringify(aiComparePayload, null, 2);
+      }
+      if (typeof aiComparePayload === "object") {
+        const payload = aiComparePayload as Record<string, unknown>;
+        if (typeof payload.response === "string") {
+          return payload.response;
+        }
+        if (typeof payload.error === "string") {
+          return payload.error;
+        }
+        if (payload.synthesis) {
+          if (typeof payload.synthesis === "string") {
+            return payload.synthesis;
+          }
+          return JSON.stringify(payload.synthesis, null, 2);
+        }
+        return JSON.stringify(payload, null, 2);
+      }
+    }
+    return toolCall.result;
+  }, [aiComparePayload, toolCall.result]);
+
+  const metrics = useMemo(() => {
+    if (!toolCall.result) return null;
+    const match = /METRICS:\s*(.+)$/m.exec(toolCall.result);
+    if (!match) return null;
+    const parts = match[1].split(" ").filter(Boolean);
+    const entries: Record<string, string> = {};
+    for (const part of parts) {
+      const [key, value] = part.split("=");
+      if (key && value) entries[key] = value;
+    }
+    return entries;
+  }, [toolCall.result]);
+  const isAiCompareTool = useMemo(() => {
+    if (toolCall.name !== "query_model_in_round") return false;
+    if (!toolCall.args || typeof toolCall.args !== "object") return false;
+    const args = toolCall.args as { user_query?: string; round_number?: number };
+    return Boolean(args.user_query) && !args.round_number;
+  }, [toolCall.args, toolCall.name]);
+  const isRunning = toolCall.result === undefined;
 
   return (
     <section className="mt-4 pl-4">
@@ -624,11 +890,20 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
           <AccordionItem value="item-1">
             <AccordionTrigger>
               <Tooltip title={tool?.description}>
-                <div className="flex items-center font-medium italic">
-                  <PencilRuler size={16} className={"mr-2"} />
+                <div className="flex items-center gap-2 font-medium italic">
+                  {toolCall.name === "query_model_in_round" && resolvedModelKey ? (
+                    <DebateModelIcon modelKey={resolvedModelKey} />
+                  ) : (
+                    <PencilRuler size={16} />
+                  )}
+                  {isRunning ? (
+                    <Loader2 size={14} className="animate-spin text-muted-foreground" />
+                  ) : (
+                    <CheckCircle2 size={14} className="text-emerald-500" />
+                  )}
                   <RainbowText
                     className="pr-0.5 text-base font-medium italic"
-                    animated={toolCall.result === undefined}
+                    animated={isRunning}
                   >
                     {statusText}
                   </RainbowText>
@@ -645,19 +920,48 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
                       {JSON.stringify(toolCall.args, null, 2)}
                     </pre>
                   </div>
-                  
-                  <SyntaxHighlighter
-                    language="markdown" // Changed to markdown for better reading of text responses
-                    style={resolvedTheme === "dark" ? dark : docco}
-                    wrapLongLines={true}
-                    customStyle={{
-                      background: "transparent",
-                      border: "none",
-                      boxShadow: "none",
-                    }}
-                  >
-                    {toolCall.result.trim()}
-                  </SyntaxHighlighter>
+                  {!isAiCompareTool && (
+                    <>
+                      <SyntaxHighlighter
+                        language="markdown" // Changed to markdown for better reading of text responses
+                        style={resolvedTheme === "dark" ? dark : docco}
+                        wrapLongLines={true}
+                        customStyle={{
+                          background: "transparent",
+                          border: "none",
+                          boxShadow: "none",
+                        }}
+                      >
+                        {displayResult.trim()}
+                      </SyntaxHighlighter>
+                      {metrics && (
+                        <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                          {metrics.latency_ms && (
+                            <span className="rounded-full border border-border/60 px-2 py-0.5">
+                              {metrics.latency_ms} ms
+                            </span>
+                          )}
+                          {metrics.tokens_in && (
+                            <span className="rounded-full border border-border/60 px-2 py-0.5">
+                              in {metrics.tokens_in}
+                            </span>
+                          )}
+                          {metrics.tokens_out && (
+                            <span className="rounded-full border border-border/60 px-2 py-0.5">
+                              out {metrics.tokens_out}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {isAiCompareTool && (
+                    <div className="text-xs text-muted-foreground px-2 pb-2">
+                      {isSwedish
+                        ? "Modellsvar visas nedan."
+                        : "Model response is shown below."}
+                    </div>
+                  )}
                 </div>
               )}
             </AccordionContent>

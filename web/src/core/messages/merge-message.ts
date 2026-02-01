@@ -99,12 +99,17 @@ function mergeToolCallMessage(
   event: ToolCallsEvent | ToolCallChunksEvent,
 ) {
   if (event.type === "tool_calls" && event.data.tool_calls[0]?.name) {
-    message.toolCalls = event.data.tool_calls.map((raw) => ({
-      id: raw.id,
-      name: raw.name,
-      args: raw.args,
-      result: undefined,
-    }));
+    const existingToolCalls = message.toolCalls ?? [];
+    message.toolCalls = event.data.tool_calls.map((raw) => {
+      const existing = existingToolCalls.find((toolCall) => toolCall.id === raw.id);
+      return {
+        id: raw.id,
+        name: raw.name,
+        args: raw.args,
+        result: existing?.result,
+        argsChunks: existing?.argsChunks,
+      };
+    });
   }
 
   message.toolCalls ??= [];

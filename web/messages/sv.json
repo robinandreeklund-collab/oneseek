@@ -135,6 +135,11 @@
         "title": "Fler-ronders debatt: {status}",
         "description": "När aktiverat deltar alla AI-modeller (inklusive OneSeek) i en 3-ronders debatt med slumpad ordning, sekventiella svar och demokratisk omröstning. OneSeek ger syntes i runda 3."
       },
+      "coderMode": "Coder‑läge",
+      "coderModeTooltip": {
+        "title": "Coder‑läge: {status}",
+        "description": "När aktiverat routas alla uppgifter via code‑kedjan (planner → coder → tester) med kod‑fokuserad output."
+      },
       "enhancePrompt": "Förbättra prompt med AI",
       "modes": "Lägen",
       "trendingQuestions": "Trendande frågor",
