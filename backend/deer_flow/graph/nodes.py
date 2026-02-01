@@ -3098,10 +3098,6 @@ async def ai_compare_query_node(
                 tool_call_id=tool_call_id,
                 name="query_model_in_round",
             ),
-            AIMessage(
-                content=response_text or "",
-                name="ai_compare_query",
-            ),
         ]
         return Command(
             update={
@@ -3126,6 +3122,28 @@ async def ai_compare_query_node(
                 break
     if not selected_tool:
         return Command(update=preserve_state_meta_fields(state), goto="ai_compare_team")
+
+    existing = state.get("ai_compare_responses", [])
+    already_completed = False
+    for resp in existing:
+        if (
+            isinstance(resp, dict)
+            and resp.get("model") == selected_model
+            and (resp.get("response") or resp.get("error"))
+        ):
+            already_completed = True
+            break
+    if already_completed:
+        if current_step and not current_step.execution_res:
+            display = selected_model or current_step.title
+            current_step.execution_res = f"Completed: {display}"
+        return Command(
+            update={
+                **preserve_state_meta_fields(state),
+                "current_plan": current_plan,
+            },
+            goto="ai_compare_team",
+        )
 
     query = state.get("research_topic", "")
     tool_call_id = uuid4().hex

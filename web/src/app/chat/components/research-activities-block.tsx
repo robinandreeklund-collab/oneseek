@@ -59,16 +59,20 @@ export function ResearchActivitiesBlock({
         return true;
       }
       if (message.agent === "ai_compare_query") {
-        const contentKey = (message.content ?? "")
-          .replace(/\s+/g, " ")
-          .trim();
-        if (!contentKey) {
+        const toolCall = message.toolCalls?.find(
+          (call) => call.name === "query_model_in_round",
+        );
+        const args = (toolCall?.args ?? {}) as { model_key?: string; display_name?: string };
+        const modelKey = args.model_key || args.display_name;
+        if (!modelKey) {
           return Boolean(message.toolCalls?.length);
         }
-        if (seen.has(contentKey)) {
+        const dedupeKey = `model:${modelKey}`;
+        if (seen.has(dedupeKey)) {
           return false;
         }
-        seen.add(contentKey);
+        seen.add(dedupeKey);
+        return true;
       }
       return true;
     });
@@ -149,11 +153,7 @@ const ActivityMessage = React.memo(({ messageId }: { messageId: string }) => {
       ai_compare_synth: isSwedish ? "Syntes" : "Synthesis",
     };
     if (message.agent === "ai_compare_query") {
-      const content = message.content?.trim() ?? "";
-      // Only render if the content includes a model header to avoid duplicates.
-      if (!/^###\s+/m.test(content)) {
-        return null;
-      }
+      return null;
     }
     if (message.content && message.agent && agentLabelMap[message.agent]) {
       const label = agentLabelMap[message.agent];
@@ -847,12 +847,6 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
     }
     return entries;
   }, [toolCall.result]);
-  const isAiCompareTool = useMemo(() => {
-    if (toolCall.name !== "query_model_in_round") return false;
-    if (!toolCall.args || typeof toolCall.args !== "object") return false;
-    const args = toolCall.args as { user_query?: string; round_number?: number };
-    return Boolean(args.user_query) && !args.round_number;
-  }, [toolCall.args, toolCall.name]);
   const isRunning = toolCall.result === undefined;
 
   return (
@@ -892,48 +886,39 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
                       {JSON.stringify(toolCall.args, null, 2)}
                     </pre>
                   </div>
-                  {!isAiCompareTool && (
-                    <>
-                      <SyntaxHighlighter
-                        language="markdown" // Changed to markdown for better reading of text responses
-                        style={resolvedTheme === "dark" ? dark : docco}
-                        wrapLongLines={true}
-                        customStyle={{
-                          background: "transparent",
-                          border: "none",
-                          boxShadow: "none",
-                        }}
-                      >
-                        {displayResult.trim()}
-                      </SyntaxHighlighter>
-                      {metrics && (
-                        <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-                          {metrics.latency_ms && (
-                            <span className="rounded-full border border-border/60 px-2 py-0.5">
-                              {metrics.latency_ms} ms
-                            </span>
-                          )}
-                          {metrics.tokens_in && (
-                            <span className="rounded-full border border-border/60 px-2 py-0.5">
-                              in {metrics.tokens_in}
-                            </span>
-                          )}
-                          {metrics.tokens_out && (
-                            <span className="rounded-full border border-border/60 px-2 py-0.5">
-                              out {metrics.tokens_out}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </>
-                  )}
-                  {isAiCompareTool && (
-                    <div className="text-xs text-muted-foreground px-2 pb-2">
-                      {isSwedish
-                        ? "Modellsvar visas ovan i listan."
-                        : "Model response is shown above."}
-                    </div>
-                  )}
+                  <>
+                    <SyntaxHighlighter
+                      language="markdown" // Changed to markdown for better reading of text responses
+                      style={resolvedTheme === "dark" ? dark : docco}
+                      wrapLongLines={true}
+                      customStyle={{
+                        background: "transparent",
+                        border: "none",
+                        boxShadow: "none",
+                      }}
+                    >
+                      {displayResult.trim()}
+                    </SyntaxHighlighter>
+                    {metrics && (
+                      <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                        {metrics.latency_ms && (
+                          <span className="rounded-full border border-border/60 px-2 py-0.5">
+                            {metrics.latency_ms} ms
+                          </span>
+                        )}
+                        {metrics.tokens_in && (
+                          <span className="rounded-full border border-border/60 px-2 py-0.5">
+                            in {metrics.tokens_in}
+                          </span>
+                        )}
+                        {metrics.tokens_out && (
+                          <span className="rounded-full border border-border/60 px-2 py-0.5">
+                            out {metrics.tokens_out}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </>
                 </div>
               )}
             </AccordionContent>
