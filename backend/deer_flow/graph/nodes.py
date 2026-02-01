@@ -39,6 +39,7 @@ from backend.deer_flow.tools.ai_comparison_tools import (
     query_gemini_flash,
     query_gpt35,
     query_grok4,
+    query_oneseek_local,
     run_meta_analysis,
     set_ai_comparison_context,
     synthesize_optimal_answer,
@@ -2742,6 +2743,13 @@ async def ai_comparison_node(
             ),
             Step(
                 need_search=False,
+                step_type=StepType.AI_QUERY,
+                title="OneSeek Local",
+                description="Model: oneseek-local",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
                 step_type=StepType.AI_FACT_CHECK,
                 title="Faktakoll",
                 description="Verifiera centrala påståenden med externa källor.",
@@ -2798,6 +2806,13 @@ async def ai_comparison_node(
                 step_type=StepType.AI_QUERY,
                 title="Grok-4 Fast Reasoning",
                 description="Model: grok-4-fast-reasoning",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_QUERY,
+                title="OneSeek Local",
+                description="Model: oneseek-local",
                 execution_res=None,
             ),
             Step(
@@ -3170,6 +3185,7 @@ async def ai_compare_query_node(
         "gemini-2.5-flash": query_gemini_flash,
         "deepseek-chat": query_deepseek,
         "grok-4-fast-reasoning": query_grok4,
+        "oneseek-local": query_oneseek_local,
     }
     if pending_tool.get("step") == "ai_compare_query":
         selected_model = pending_tool.get("model_key")

@@ -227,6 +227,52 @@ async def query_grok4(query: str) -> str:
 
 
 @tool
+async def query_oneseek_local(query: str) -> str:
+    """
+    Query OneSeek Local model.
+    
+    Args:
+        query: The question or prompt to send to OneSeek Local
+        
+    Returns:
+        The response from OneSeek Local
+    """
+    try:
+        comparison_flow = _get_flow()
+        response = await comparison_flow.query_single_model("oneseek-local", query)
+        
+        if response["success"]:
+            content = response["response"]
+            payload = {
+                "model": "oneseek-local",
+                "display_name": "OneSeek Local",
+                "response": content,
+                "success": True,
+            }
+            return _safe_json_dump(payload)
+        else:
+            return _safe_json_dump(
+                {
+                    "model": "oneseek-local",
+                    "display_name": "OneSeek Local",
+                    "error": response.get("error"),
+                    "success": False,
+                }
+            )
+        
+    except Exception as e:
+        logger.error(f"Error querying OneSeek Local: {e}", exc_info=True)
+        return _safe_json_dump(
+            {
+                "model": "oneseek-local",
+                "display_name": "OneSeek Local",
+                "error": str(e),
+                "success": False,
+            }
+        )
+
+
+@tool
 async def query_all_models(query: str) -> str:
     """
     Query all available AI models in parallel and return their responses.
@@ -373,10 +419,6 @@ async def synthesize_optimal_answer(
 def get_ai_comparison_tools():
     """Get all AI comparison tools for the agent.
     
-    NOTE: OneSeek Local is NOT included as a tool because it serves as the 
-    synthesizing agent that analyzes responses from other models, rather than
-    being queried as one of the models to compare.
-    
     The web_search tool is included directly so the frontend can display
     search results with the same rich UI as deep research mode.
     """
@@ -392,6 +434,7 @@ def get_ai_comparison_tools():
         query_gemini_flash,
         query_deepseek,
         query_grok4,
+        query_oneseek_local,
         fact_check_responses,
         web_search,  # Direct web search for fact-checking (optional)
         run_meta_analysis,

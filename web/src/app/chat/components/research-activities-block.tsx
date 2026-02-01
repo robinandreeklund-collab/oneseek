@@ -333,6 +333,7 @@ const ActivityListItem = React.memo(({ messageId }: { messageId: string }) => {
     "query_gemini_flash",
     "query_deepseek",
     "query_grok4",
+    "query_oneseek_local",
   ]);
   if (
     message?.agent === "ai_compare_query" ||
@@ -349,6 +350,7 @@ const ActivityListItem = React.memo(({ messageId }: { messageId: string }) => {
         "query_gemini_flash",
         "query_deepseek",
         "query_grok4",
+        "query_oneseek_local",
       ]);
       const toolCallComponents = message.toolCalls
         .filter(toolCall => !aiCompareToolNames.has(toolCall.name))
@@ -926,6 +928,7 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
       "query_gemini_flash",
       "query_deepseek",
       "query_grok4",
+      "query_oneseek_local",
     ]);
     if (!aiCompareToolNames.has(toolCall.name)) return false;
     if (toolCall.name !== "query_model_in_round") return true;

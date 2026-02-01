@@ -197,7 +197,8 @@ export const useStore = create<{
           toolName === "query_gpt35" ||
           toolName === "query_gemini_flash" ||
           toolName === "query_deepseek" ||
-          toolName === "query_grok4"
+          toolName === "query_grok4" ||
+          toolName === "query_oneseek_local"
             ? "ai_compare_query"
             : toolName === "fact_check_responses"
               ? "ai_compare_fact_check"
@@ -462,7 +463,8 @@ export async function sendMessage(
             toolName === "query_gpt35" ||
             toolName === "query_gemini_flash" ||
             toolName === "query_deepseek" ||
-            toolName === "query_grok4"
+            toolName === "query_grok4" ||
+            toolName === "query_oneseek_local"
               ? "ai_compare_query"
               : toolName === "fact_check_responses"
                 ? "ai_compare_fact_check"

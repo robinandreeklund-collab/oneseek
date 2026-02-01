@@ -18,7 +18,7 @@ import random
 import time
 from typing import Any, Dict, List, Optional
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_deepseek import ChatDeepSeek
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
@@ -275,6 +275,62 @@ class AIComparisonFlow:
         
         return models
 
+    def _format_search_results(self, results: Any, max_items: int = 3) -> str:
+        if not results:
+            return ""
+        if isinstance(results, dict):
+            results = [results]
+        if not isinstance(results, list):
+            return str(results)
+        lines: list[str] = []
+        for idx, item in enumerate(results[:max_items]):
+            if not isinstance(item, dict):
+                lines.append(f"- {str(item)[:200]}")
+                continue
+            title = item.get("title") or item.get("source") or f"Source {idx + 1}"
+            url = item.get("url") or item.get("link") or ""
+            snippet = item.get("content") or item.get("description") or ""
+            snippet = snippet[:240].strip()
+            if url:
+                lines.append(f"- {title} ({url}): {snippet}")
+            else:
+                lines.append(f"- {title}: {snippet}")
+        return "\n".join(lines)
+
+    def _build_oneseek_system_prompt(self, query: str, search_summary: str) -> str:
+        return f"""You are OneSeek Local. Answer the user question with maximum quality.
+
+Goal: maximize scores on the 16 meta‑analysis dimensions:
+1) Meta‑reflection level
+2) Reasoning depth
+3) Synthesis capacity
+4) Bias detection
+5) Objectivity degree
+6) Integrity index
+7) Transparency degree
+8) Epistemic humility
+9) Emotional distance
+10) Conflict neutrality
+11) Stability coefficient
+12) Cognitive redundancy (avoid over‑complexity)
+13) Context elasticity
+14) System loyalty
+15) Adaptive precision
+16) Structural clarity
+
+Mandatory behaviors:
+- Be explicit about uncertainties and competing interpretations.
+- Show clear reasoning steps and balanced trade‑offs.
+- Provide a concise, structured answer with headings.
+- Include a short "Sources" section if any web search data is available.
+
+Web search findings (use these, do not invent sources):
+{search_summary or "- (No web search results available)"}
+
+User question:
+{query}
+"""
+
     async def query_model(
         self, model_key: str, model: Any, query: str
     ) -> Dict[str, Any]:
@@ -302,6 +358,35 @@ class AIComparisonFlow:
             try:
                 logger.info(f"Querying {model_key} (attempt {attempt + 1})...")
                 messages = [HumanMessage(content=query)]
+                if model_key == "oneseek-local":
+                    search_summary = ""
+                    if self.search_tool:
+                        search_cache_key = _build_cache_key(
+                            "search",
+                            query,
+                            self.max_search_results,
+                            SELECTED_SEARCH_ENGINE,
+                        )
+                        cached_search = _SEARCH_CACHE.get(search_cache_key)
+                if cached_search is not None:
+                    logger.info("Using cached web search results for OneSeek")
+                    search_summary = self._format_search_results(cached_search)
+                        else:
+                            try:
+                                logger.info("OneSeek performing web search before answering")
+                                search_results = await asyncio.wait_for(
+                                    self.search_tool.ainvoke(query),
+                                    timeout=_REQUEST_TIMEOUT_S if _REQUEST_TIMEOUT_S > 0 else None,
+                                )
+                                _SEARCH_CACHE.set(search_cache_key, search_results)
+                                search_summary = self._format_search_results(search_results)
+                            except Exception as search_exc:
+                                logger.warning(f"OneSeek web search failed: {search_exc}")
+                    system_prompt = self._build_oneseek_system_prompt(query, search_summary)
+                    messages = [
+                        SystemMessage(content=system_prompt),
+                        HumanMessage(content=query),
+                    ]
                 response = await asyncio.wait_for(
                     model.ainvoke(messages),
                     timeout=_REQUEST_TIMEOUT_S if _REQUEST_TIMEOUT_S > 0 else None,
@@ -561,7 +646,7 @@ Svar från modellerna:
 
 Betygsätt varje modell på dessa 4 dimensioner (1-10).
 
-**VIKTIGT:** Använd de exakta modellnamnen som visas ovan (t.ex. "GPT-3.5 (OpenAI)", "Gemini 2.5 Flash (Google)", "DeepSeek Chat", "Grok-4 Fast Reasoning (xAI)") i din analys. Säg INTE "Modell A", "Modell B", etc.
+**VIKTIGT:** Använd de exakta modellnamnen som visas ovan (t.ex. "GPT-3.5 (OpenAI)", "Gemini 2.5 Flash (Google)", "DeepSeek Chat", "Grok-4 Fast Reasoning (xAI)", "OneSeek Local") i din analys. Säg INTE "Modell A", "Modell B", etc.
 
 Dimensioner:
 1. **Meta-reflektionsnivå** - Förmåga att analysera hur resonemang uppstår
@@ -587,7 +672,7 @@ Svar från modellerna:
 
 Betygsätt varje modell på dessa 4 dimensioner (1-10).
 
-**VIKTIGT:** Använd de exakta modellnamnen som visas ovan (t.ex. "GPT-3.5 (OpenAI)", "Gemini 2.5 Flash (Google)", "DeepSeek Chat", "Grok-4 Fast Reasoning (xAI)") i din analys. Säg INTE "Modell A", "Modell B", etc.
+**VIKTIGT:** Använd de exakta modellnamnen som visas ovan (t.ex. "GPT-3.5 (OpenAI)", "Gemini 2.5 Flash (Google)", "DeepSeek Chat", "Grok-4 Fast Reasoning (xAI)", "OneSeek Local") i din analys. Säg INTE "Modell A", "Modell B", etc.
 
 Dimensioner:
 1. **Objektivitetsgrad** - Grad av neutralitet och frånvaro av partiskhet
@@ -613,7 +698,7 @@ Svar från modellerna:
 
 Betygsätt varje modell på dessa 4 dimensioner (1-10).
 
-**VIKTIGT:** Använd de exakta modellnamnen som visas ovan (t.ex. "GPT-3.5 (OpenAI)", "Gemini 2.5 Flash (Google)", "DeepSeek Chat", "Grok-4 Fast Reasoning (xAI)") i din analys. Säg INTE "Modell A", "Modell B", etc.
+**VIKTIGT:** Använd de exakta modellnamnen som visas ovan (t.ex. "GPT-3.5 (OpenAI)", "Gemini 2.5 Flash (Google)", "DeepSeek Chat", "Grok-4 Fast Reasoning (xAI)", "OneSeek Local") i din analys. Säg INTE "Modell A", "Modell B", etc.
 
 Dimensioner:
 1. **Emotionell distans** - Förmåga att förstå känslor utan att påverkas
@@ -639,7 +724,7 @@ Svar från modellerna:
 
 Betygsätt varje modell på dessa 4 dimensioner (1-10).
 
-**VIKTIGT:** Använd de exakta modellnamnen som visas ovan (t.ex. "GPT-3.5 (OpenAI)", "Gemini 2.5 Flash (Google)", "DeepSeek Chat", "Grok-4 Fast Reasoning (xAI)") i din analys. Säg INTE "Modell A", "Modell B", etc.
+**VIKTIGT:** Använd de exakta modellnamnen som visas ovan (t.ex. "GPT-3.5 (OpenAI)", "Gemini 2.5 Flash (Google)", "DeepSeek Chat", "Grok-4 Fast Reasoning (xAI)", "OneSeek Local") i din analys. Säg INTE "Modell A", "Modell B", etc.
 
 Dimensioner:
 1. **Kontextelasticitet** - Förmåga att anpassa sig till olika format och situationer
