@@ -878,6 +878,7 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
   const isAiCompareTool = useMemo(() => {
     if (!toolCall.name) return false;
     const aiCompareToolNames = new Set([
+      "query_all_models",
       "query_model_in_round",
       "query_gpt35",
       "query_gemini_flash",

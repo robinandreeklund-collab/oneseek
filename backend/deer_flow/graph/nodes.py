@@ -21,6 +21,7 @@ from langgraph.types import Command, interrupt
 from backend.deer_flow.agents import create_agent
 from backend.deer_flow.citations import extract_citations_from_messages, merge_citations
 from backend.deer_flow.config.agents import AGENT_LLM_MAP
+from backend.deer_flow.config.loader import get_bool_env
 from backend.deer_flow.config.configuration import Configuration
 from backend.deer_flow.llms.llm import get_llm_by_type, get_llm_token_limit_by_type, configure_llm_with_thinking
 from backend.deer_flow.prompts.planner_model import Plan
@@ -33,6 +34,7 @@ from backend.deer_flow.tools import (
 )
 from backend.deer_flow.tools.ai_comparison_tools import (
     fact_check_responses,
+    query_all_models,
     query_deepseek,
     query_gemini_flash,
     query_gpt35,
@@ -3014,7 +3016,7 @@ Provide a comprehensive debate report with all rounds, voting results, and concl
 async def ai_compare_query_node(
     state: State, config: RunnableConfig
 ) -> Command[Literal["ai_compare_team"]]:
-    """Query AI models sequentially and store responses."""
+    """Query AI models and store responses."""
     configurable = Configuration.from_runnable_config(config)
     from backend.deer_flow.prompts.planner_model import Plan, StepType
     set_ai_comparison_context(
@@ -3029,13 +3031,134 @@ async def ai_compare_query_node(
                 current_step = step
                 break
 
+    parallel_enabled = get_bool_env("AI_COMPARE_PARALLEL_QUERY", True)
+    pending_tool = state.get("ai_compare_pending_tool") or {}
+    if parallel_enabled:
+        if pending_tool.get("step") == "ai_compare_query_all":
+            tool_call_id = pending_tool.get("tool_call_id") or uuid4().hex
+            tool_args = pending_tool.get("tool_args") or {}
+            try:
+                tool_output = await query_all_models.ainvoke(tool_args)
+            except Exception as exc:
+                tool_output = json.dumps(
+                    {
+                        "error": str(exc),
+                        "success": False,
+                    },
+                    ensure_ascii=False,
+                )
+            payload = _parse_json_content(str(tool_output))
+            responses = []
+            if isinstance(payload, list):
+                responses = [resp for resp in payload if isinstance(resp, dict)]
+            elif isinstance(payload, dict) and payload.get("responses"):
+                responses = [
+                    resp
+                    for resp in payload.get("responses", [])
+                    if isinstance(resp, dict)
+                ]
+            existing = state.get("ai_compare_responses", [])
+            merged = {
+                resp.get("model"): resp for resp in existing if isinstance(resp, dict)
+            }
+            for resp in responses:
+                if isinstance(resp, dict):
+                    merged[resp.get("model")] = resp
+            merged_responses = [resp for resp in merged.values() if resp]
+            responses_json = json.dumps(merged_responses, ensure_ascii=False)
+            if isinstance(current_plan, Plan):
+                for step in current_plan.steps:
+                    if not step.execution_res and step.step_type == StepType.AI_QUERY:
+                        step.execution_res = f"Completed: {step.title}"
+
+            response_sections = []
+            for resp in merged_responses:
+                name = resp.get("display_name") or resp.get("model") or "Model"
+                cached_flag = resp.get("cached")
+                if cached_flag:
+                    name = f"{name} (cached)"
+                response = resp.get("response")
+                error = resp.get("error")
+                if response:
+                    response_sections.append(f"### {name}\n\n{response}")
+                elif error:
+                    response_sections.append(f"### {name}\n\nError: {error}")
+                else:
+                    response_sections.append(f"### {name}\n\n(No response)")
+            response_text = "\n\n".join(response_sections).strip()
+            messages = [
+                ToolMessage(
+                    content=response_text or str(tool_output),
+                    tool_call_id=tool_call_id,
+                    name="query_all_models",
+                ),
+                AIMessage(
+                    content=response_text or "",
+                    name="ai_compare_query",
+                ),
+            ]
+            return Command(
+                update={
+                    **preserve_state_meta_fields(state),
+                    "ai_compare_pending_tool": None,
+                    "ai_compare_responses": merged_responses,
+                    "ai_compare_responses_json": responses_json,
+                    "messages": messages,
+                    "current_plan": current_plan,
+                },
+                goto="ai_compare_team",
+            )
+
+        existing = state.get("ai_compare_responses", [])
+        if existing:
+            if isinstance(current_plan, Plan):
+                for step in current_plan.steps:
+                    if not step.execution_res and step.step_type == StepType.AI_QUERY:
+                        step.execution_res = f"Completed: {step.title}"
+            return Command(
+                update={
+                    **preserve_state_meta_fields(state),
+                    "current_plan": current_plan,
+                },
+                goto="ai_compare_team",
+            )
+
+        query = state.get("research_topic", "")
+        tool_call_id = uuid4().hex
+        tool_args = {"query": query}
+        messages = [
+            AIMessage(
+                content="",
+                name="ai_compare_query",
+                tool_calls=[
+                    {
+                        "id": tool_call_id,
+                        "name": "query_all_models",
+                        "args": tool_args,
+                    }
+                ],
+            ),
+        ]
+        return Command(
+            update={
+                **preserve_state_meta_fields(state),
+                "ai_compare_pending_tool": {
+                    "step": "ai_compare_query_all",
+                    "tool_call_id": tool_call_id,
+                    "tool_args": tool_args,
+                },
+                "messages": messages,
+                "current_plan": current_plan,
+            },
+            goto="ai_compare_team",
+        )
+
     model_tool_map = {
         "gpt-3.5-turbo": query_gpt35,
         "gemini-2.5-flash": query_gemini_flash,
         "deepseek-chat": query_deepseek,
         "grok-4-fast-reasoning": query_grok4,
     }
-    pending_tool = state.get("ai_compare_pending_tool") or {}
     if pending_tool.get("step") == "ai_compare_query":
         selected_model = pending_tool.get("model_key")
         tool_args = pending_tool.get("tool_args") or {}

@@ -193,6 +193,7 @@ export const useStore = create<{
         const toolName = action.tool_name ?? "unknown";
         const fallbackAgent =
           toolName === "query_model_in_round" ||
+          toolName === "query_all_models" ||
           toolName === "query_gpt35" ||
           toolName === "query_gemini_flash" ||
           toolName === "query_deepseek" ||
@@ -457,6 +458,7 @@ export async function sendMessage(
           const toolName = (data.tool_name as string | undefined) ?? "unknown";
           const fallbackAgent =
             toolName === "query_model_in_round" ||
+            toolName === "query_all_models" ||
             toolName === "query_gpt35" ||
             toolName === "query_gemini_flash" ||
             toolName === "query_deepseek" ||

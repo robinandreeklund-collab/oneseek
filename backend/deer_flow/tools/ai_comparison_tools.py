@@ -227,6 +227,31 @@ async def query_grok4(query: str) -> str:
 
 
 @tool
+async def query_all_models(query: str) -> str:
+    """
+    Query all available AI models in parallel and return their responses.
+    
+    Args:
+        query: The question or prompt to send to all models
+        
+    Returns:
+        JSON list of model responses
+    """
+    try:
+        comparison_flow = _get_flow()
+        responses = await comparison_flow.parallel_query_all_models(query)
+        return _safe_json_dump(responses)
+    except Exception as e:
+        logger.error(f"Error querying all models: {e}", exc_info=True)
+        return _safe_json_dump(
+            {
+                "error": str(e),
+                "success": False,
+            }
+        )
+
+
+@tool
 async def fact_check_responses(query: str, model_responses_json: str) -> str:
     """
     Perform fact-checking on AI model responses using web search and RAG tools.
@@ -362,6 +387,7 @@ def get_ai_comparison_tools():
     web_search = get_web_search_tool(max_search_results=3)
     
     return [
+        query_all_models,
         query_gpt35,
         query_gemini_flash,
         query_deepseek,

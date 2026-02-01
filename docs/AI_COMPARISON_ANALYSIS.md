@@ -148,6 +148,21 @@ Fix implemented (see commit)
   tool_call_result body and shows a short note instead.
 - This prevents the same model response from rendering twice.
 
+Implemented optimizations (this branch)
+--------------------------------------
+- Parallel model queries via query_all_models (AI_COMPARE_PARALLEL_QUERY=true).
+- Parallel web_search + RAG fetch in fact-checking.
+- TTL caches for:
+  - Model responses (AI_COMPARE_MODEL_CACHE_TTL_S)
+  - Web search results (AI_COMPARE_SEARCH_CACHE_TTL_S)
+  - RAG results (AI_COMPARE_RAG_CACHE_TTL_S)
+  - Meta analysis (AI_COMPARE_META_CACHE_TTL_S)
+  - Synthesis (AI_COMPARE_SYNTH_CACHE_TTL_S)
+- Retry + timeout with exponential backoff for model calls:
+  - AI_COMPARE_REQUEST_TIMEOUT_S
+  - AI_COMPARE_MAX_RETRIES
+  - AI_COMPARE_BACKOFF_BASE_S
+
 Concrete UX + code improvements (next steps)
 --------------------------------------------
 1) Parallelize model queries:
