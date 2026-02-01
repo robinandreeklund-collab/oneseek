@@ -1432,33 +1432,96 @@
               <div class="progress">
                 <div class="progress-bar"></div>
               </div>
-              <div class="plan-step">
-                Steg 1: Identifiera källor, konkurrenter och trender.
+              <div class="flow-card">
+                <div class="flow-step">
+                  <strong>1. Coordinator → Planner</strong>
+                  <span class="status-badge done">Plan skapad</span>
+                </div>
+                <div class="flow-step">
+                  <strong>2. Background investigation</strong>
+                  <span class="status-badge done">Web search klar</span>
+                </div>
+                <div class="flow-step">
+                  <strong>3. Human feedback</strong>
+                  <span class="status-badge done">Plan godkänd</span>
+                </div>
+                <div class="flow-step">
+                  <strong>4. Research team (loop)</strong>
+                  <span class="status-badge running">Steg 2 av 4</span>
+                </div>
+                <div class="flow-step">
+                  <strong>5. Reporter</strong>
+                  <span class="status-badge waiting">Väntar</span>
+                </div>
               </div>
-              <div class="plan-step">
-                Steg 2: Sammanfatta fynd och skapa jämförande tabell.
-              </div>
-              <div class="plan-step">
-                Steg 3: Leverera rapport med exportformat.
+              <div class="step-list">
+                <div class="step-item">
+                  <div class="step-info">
+                    <div class="step-title">Steg 1 · Research</div>
+                    <div class="step-desc">
+                      Samla källor via web_search + crawl.
+                    </div>
+                  </div>
+                  <span class="status-badge done">Klar</span>
+                </div>
+                <div class="step-item">
+                  <div class="step-info">
+                    <div class="step-title">Steg 2 · Analysis</div>
+                    <div class="step-desc">
+                      Tolka trender, risker och sammanfatta fynd.
+                    </div>
+                  </div>
+                  <span class="status-badge running">Pågår</span>
+                </div>
+                <div class="step-item">
+                  <div class="step-info">
+                    <div class="step-title">Steg 3 · Processing</div>
+                    <div class="step-desc">
+                      Bearbeta data och skapa tabeller (coder).
+                    </div>
+                  </div>
+                  <span class="status-badge waiting">Väntar</span>
+                </div>
+                <div class="step-item">
+                  <div class="step-info">
+                    <div class="step-title">Steg 4 · Testing</div>
+                    <div class="step-desc">
+                      Validera beräkningar och kontrollera resultat.
+                    </div>
+                  </div>
+                  <span class="status-badge waiting">Väntar</span>
+                </div>
               </div>
             </div>
             <div class="tool-card running">
               <div class="tool-meta">
-                <strong>web_search</strong>
-                <span class="status-badge running">
-                  <span class="live-dot"></span>Kör
-                </span>
+                <strong>Aktivt steg: ANALYS (analyst)</strong>
+                <span class="status-badge running">Pågår</span>
               </div>
-              <div>Sökfråga: "marknadstrender 2025 SaaS"</div>
-              <div class="tool-output">Hittar 8 källor...</div>
+              <div class="tool-output streaming">
+                Analyserar trender, risker och sammanfattar insikter...
+              </div>
             </div>
             <div class="tool-card done">
               <div class="tool-meta">
-                <strong>browse_page</strong>
+                <strong>web_search</strong>
                 <span class="status-badge done">Klar</span>
               </div>
-              <div>URL: reports.example.com/market-2025</div>
-              <div class="tool-output">Sammanfattar 4 sidor innehåll.</div>
+              <div class="tool-output">8 källor hittade (3 validerade).</div>
+            </div>
+            <div class="tool-card done">
+              <div class="tool-meta">
+                <strong>crawl_tool</strong>
+                <span class="status-badge done">Klar</span>
+              </div>
+              <div class="tool-output">3 sidor crawlade och sammanfattade.</div>
+            </div>
+            <div class="tool-card done">
+              <div class="tool-meta">
+                <strong>retriever_tool (RAG)</strong>
+                <span class="status-badge done">Klar</span>
+              </div>
+              <div class="tool-output">2 interna dokument matchade.</div>
             </div>
             <div class="tool-card shimmer running">
               <div class="tool-meta">
@@ -1469,34 +1532,20 @@
                 Skriver avsnitt: "Tillväxt, risker och affärsmodell"
               </div>
             </div>
-            <div class="timeline">
-              <div class="timeline-item">
-                <div class="timeline-dot running"></div>
-                <div>
-                  <div class="timeline-title">Insamling av källor</div>
-                  3 källor klara, 2 källor pågår
-                </div>
+            <div class="flow-card">
+              <div class="flow-step">
+                <strong>Källor (live)</strong>
+                <span class="status-badge running">3/8</span>
               </div>
-              <div class="timeline-item">
-                <div class="timeline-dot"></div>
-                <div>
-                  <div class="timeline-title">Analys av trender</div>
-                  Bearbetar prissättning och kundbeteende
-                </div>
-              </div>
-              <div class="timeline-item">
-                <div class="timeline-dot"></div>
-                <div>
-                  <div class="timeline-title">Rapport & export</div>
-                  PDF/HTML/Word genereras när analysen är klar
-                </div>
-              </div>
+              <div class="response-body">1. McKinsey AI Report 2025</div>
+              <div class="response-body">2. Gartner Market Trends Q4</div>
+              <div class="response-body">3. OECD AI Adoption</div>
             </div>
             <div class="loader">
               <span></span>
               <span></span>
               <span></span>
-              Forskar och sammanställer rapport...
+              Research team kör steg 2 av 4...
             </div>
           </div>
           <div class="input-card compact">
@@ -1890,43 +1939,96 @@
               <div class="progress-bar"></div>
             </div>
             <div class="panel-highlight">
-              Status: Samlar källor och skriver rapport
+              Status: Steg 2 (Analysis) pågår
             </div>
           </div>
           <div class="panel-card">
-            <h4>Aktiva verktyg</h4>
-            <div class="tool-card running">
+            <h4>Plan & routing</h4>
+            <div class="flow-card">
+              <div class="flow-step">
+                <strong>Coordinator → Planner</strong>
+                <span class="status-badge done">Klar</span>
+              </div>
+              <div class="flow-step">
+                <strong>Background investigation</strong>
+                <span class="status-badge done">Klar</span>
+              </div>
+              <div class="flow-step">
+                <strong>Human feedback</strong>
+                <span class="status-badge done">Godkänd</span>
+              </div>
+              <div class="flow-step">
+                <strong>Research team (loop)</strong>
+                <span class="status-badge running">Steg 2/4</span>
+              </div>
+              <div class="flow-step">
+                <strong>Reporter</strong>
+                <span class="status-badge waiting">Väntar</span>
+              </div>
+            </div>
+          </div>
+          <div class="panel-card">
+            <h4>Plansteg (status)</h4>
+            <div class="step-list">
+              <div class="step-item">
+                <div class="step-info">
+                  <div class="step-title">1. Research</div>
+                  <div class="step-desc">web_search + crawl + RAG</div>
+                </div>
+                <span class="status-badge done">Klar</span>
+              </div>
+              <div class="step-item">
+                <div class="step-info">
+                  <div class="step-title">2. Analysis</div>
+                  <div class="step-desc">Tolkning och syntes</div>
+                </div>
+                <span class="status-badge running">Pågår</span>
+              </div>
+              <div class="step-item">
+                <div class="step-info">
+                  <div class="step-title">3. Processing</div>
+                  <div class="step-desc">Tabeller + bearbetning</div>
+                </div>
+                <span class="status-badge waiting">Väntar</span>
+              </div>
+              <div class="step-item">
+                <div class="step-info">
+                  <div class="step-title">4. Testing</div>
+                  <div class="step-desc">Validera resultat</div>
+                </div>
+                <span class="status-badge waiting">Väntar</span>
+              </div>
+            </div>
+          </div>
+          <div class="panel-card">
+            <h4>Tool-loggar (live)</h4>
+            <div class="tool-card done">
               <div class="tool-meta">
                 <strong>web_search</strong>
-                <span class="status-badge running">Kör</span>
+                <span class="status-badge done">Klar</span>
               </div>
-              <div class="tool-output">Källor: 3/8 klara</div>
+              <div class="tool-output">8 källor hittade</div>
             </div>
             <div class="tool-card done">
               <div class="tool-meta">
-                <strong>browse_page</strong>
+                <strong>crawl_tool</strong>
                 <span class="status-badge done">Klar</span>
               </div>
-              <div class="tool-output">Sammanfattar 4 sidor</div>
+              <div class="tool-output">3 sidor bearbetade</div>
             </div>
-          </div>
-          <div class="panel-card">
-            <h4>Aktiviteter (live)</h4>
-            <div class="timeline">
-              <div class="timeline-item">
-                <div class="timeline-dot running"></div>
-                <div>
-                  <div class="timeline-title">Insamling av källor</div>
-                  Nya källor valideras just nu
-                </div>
+            <div class="tool-card done">
+              <div class="tool-meta">
+                <strong>retriever_tool (RAG)</strong>
+                <span class="status-badge done">Klar</span>
               </div>
-              <div class="timeline-item">
-                <div class="timeline-dot"></div>
-                <div>
-                  <div class="timeline-title">Analys</div>
-                  Tolkar kostnad, latens, kvalitet
-                </div>
+              <div class="tool-output">2 interna dokument</div>
+            </div>
+            <div class="tool-card running">
+              <div class="tool-meta">
+                <strong>analyst</strong>
+                <span class="status-badge running">Pågår</span>
               </div>
+              <div class="tool-output streaming">Skapar trendanalys...</div>
             </div>
           </div>
           <div class="panel-card shimmer">
@@ -1941,6 +2043,14 @@
               <span>Ladda ner PDF</span>
               <span>Ladda ner HTML</span>
             </div>
+          </div>
+          <div class="panel-card">
+            <h4>Källor (live)</h4>
+            <ul>
+              <li>McKinsey AI Report 2025</li>
+              <li>Gartner Market Trends Q4</li>
+              <li>OECD AI Adoption</li>
+            </ul>
           </div>
           <div class="panel-card">
             <h4>Filer</h4>
