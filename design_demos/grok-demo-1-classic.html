@@ -345,6 +345,175 @@
         background: #8a8a8a;
       }
 
+      .demo-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
+
+      .demo-btn {
+        border: 1px solid #262626;
+        background: #0f0f0f;
+        color: #cfcfcf;
+        padding: 6px 12px;
+        border-radius: 999px;
+        font-size: 12px;
+        transition: border 0.2s ease, background 0.2s ease, color 0.2s ease;
+        box-shadow: var(--glow);
+      }
+
+      .demo-btn.active {
+        background: #151515;
+        border-color: #2f2f2f;
+        color: #f1f1f1;
+      }
+
+      .prompt-chips {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 8px 0 14px;
+      }
+
+      .prompt-chip {
+        border: 1px solid #262626;
+        background: #0f0f0f;
+        color: #d4d4d4;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+      }
+
+      .mode-panel {
+        display: none;
+      }
+
+      body[data-mode="general"] .mode-panel[data-mode="general"],
+      body[data-mode="research"] .mode-panel[data-mode="research"],
+      body[data-mode="debate"] .mode-panel[data-mode="debate"],
+      body[data-mode="compare"] .mode-panel[data-mode="compare"] {
+        display: block;
+      }
+
+      .flow-card {
+        border: 1px solid #242424;
+        background: #0f0f0f;
+        border-radius: 14px;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        box-shadow: var(--glow);
+        margin-top: 10px;
+      }
+
+      .flow-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 12px;
+        color: #cfcfcf;
+      }
+
+      .flow-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-weight: 500;
+      }
+
+      .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 8px;
+        border-radius: 999px;
+        border: 1px solid #2a2a2a;
+        background: #121212;
+        font-size: 11px;
+        color: #cfcfcf;
+      }
+
+      .status-badge::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #8a8a8a;
+      }
+
+      .status-badge.running::before {
+        background: #37d399;
+      }
+
+      .status-badge.done::before {
+        background: #9ca3af;
+      }
+
+      .status-badge.waiting::before {
+        background: #636363;
+      }
+
+      .mini-card {
+        border: 1px solid #242424;
+        background: #0f0f0f;
+        border-radius: 14px;
+        padding: 12px;
+        margin-top: 10px;
+        color: #cfcfcf;
+        box-shadow: var(--glow);
+      }
+
+      .mini-title {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #9e9e9e;
+        margin-bottom: 8px;
+      }
+
+      .mini-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 13px;
+        color: #d4d4d4;
+      }
+
+      .model-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .model-chip {
+        border: 1px solid #262626;
+        background: #121212;
+        color: #d4d4d4;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+      }
+
+      .progress {
+        height: 4px;
+        background: #1b1b1b;
+        border-radius: 999px;
+        overflow: hidden;
+        margin-top: 8px;
+      }
+
+      .progress span {
+        display: block;
+        height: 100%;
+        width: var(--progress, 50%);
+        background: linear-gradient(90deg, #6b6b6b, #d4d4d4);
+      }
+
       .meta-actions {
         display: inline-flex;
         align-items: center;
@@ -537,6 +706,46 @@
         display: flex;
       }
 
+      .panel-card {
+        border: 1px solid #1f1f1f;
+        background: #0f0f0f;
+        border-radius: 12px;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        color: #d4d4d4;
+      }
+
+      .panel-title {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #9a9a9a;
+      }
+
+      .panel-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 12px;
+      }
+
+      .panel-node {
+        font-family: "SFMono-Regular", "Menlo", monospace;
+        font-size: 11px;
+        color: #bdbdbd;
+      }
+
+      .panel-chip {
+        border: 1px solid #262626;
+        background: #121212;
+        color: #d4d4d4;
+        padding: 3px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+      }
+
       .sidebar-item {
         display: flex;
         align-items: center;
@@ -557,8 +766,8 @@
 
     </style>
   </head>
-  <body data-view="landing">
-    <!-- Byt data-view till "chat" eller "sidebar" för andra vyer -->
+  <body data-view="chat" data-mode="general">
+    <!-- Byt data-view till "landing"/"chat"/"sidebar" och data-mode för demo -->
     <div class="app">
       <aside class="rail">
         <div class="rail-logo">
@@ -757,82 +966,101 @@
 
           <section class="view view-chat">
           <div class="chat-area">
-            <div class="message-row">
-              <div class="assistant-text">Hej! 😄 Vad lägger du på idag?</div>
-              <div class="meta-row">
-                <div class="meta-actions">
-                  <div class="meta-btn" aria-hidden="true">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                      <path d="M4 12a8 8 0 1 0 4-7" stroke="currentColor" stroke-width="2" />
-                      <path d="M4 5v5h5" stroke="currentColor" stroke-width="2" />
-                    </svg>
-                  </div>
-                  <div class="meta-btn" aria-hidden="true">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                      <path d="M5 9h4l5-4v14l-5-4H5z" stroke="currentColor" stroke-width="2" />
-                    </svg>
-                  </div>
-                  <div class="meta-btn" aria-hidden="true">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                      <rect x="7" y="7" width="10" height="10" stroke="currentColor" stroke-width="2" />
-                      <rect x="4" y="4" width="10" height="10" stroke="currentColor" stroke-width="2" />
-                    </svg>
-                  </div>
-                  <div class="meta-btn" aria-hidden="true">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                      <path d="M4 12h16" stroke="currentColor" stroke-width="2" />
-                      <path d="M12 4v16" stroke="currentColor" stroke-width="2" />
-                    </svg>
-                  </div>
-                </div>
-                <span>733ms · Snabb</span>
-              </div>
-              <div class="tool-actions">
-                <span>Verktyg</span>
-                <div class="tool-pill">
-                  <span class="tool-dot"></span> web_search · kör
-                </div>
-                <div class="tool-pill">
-                  <span class="tool-dot"></span> retriever · klar
-                </div>
-                <div class="tool-pill">
-                  <span class="tool-dot waiting"></span> synth · väntar
-                </div>
-              </div>
-              <div class="suggestion">
-                <span>↳</span> Berätta om svenska traditioner
-              </div>
+            <div class="demo-row">
+              <button class="demo-btn active" data-demo="general">Standard</button>
+              <button class="demo-btn" data-demo="research">Djupforskning</button>
+              <button class="demo-btn" data-demo="debate">Debatt</button>
+              <button class="demo-btn" data-demo="compare">AI-jämförelse</button>
             </div>
 
-            <div class="bubble-user">hej</div>
-
-            <div class="assistant-block">
-              <p>
-                Javisst! Här kommer några små exempel direkt i chatten – olika
-                svårighetsgrader så du kan välja vad som känns kul just nu 😄
-              </p>
-              <h3>1. Super enkel – klassisk “Hej världen” med lite twist</h3>
-              <div class="code-card">
-                <div class="code-header">
-                  <span>Python</span>
-                  <div class="code-actions">
-                    <span>▶</span>
-                    <span>Kopiera</span>
+            <div class="mode-panel" data-mode="general">
+              <div class="message-row">
+                <div class="assistant-text">Hej! 😄 Vad lägger du på idag?</div>
+                <div class="meta-row">
+                  <div class="meta-actions">
+                    <div class="meta-btn" aria-hidden="true">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                        <path d="M4 12a8 8 0 1 0 4-7" stroke="currentColor" stroke-width="2" />
+                        <path d="M4 5v5h5" stroke="currentColor" stroke-width="2" />
+                      </svg>
+                    </div>
+                    <div class="meta-btn" aria-hidden="true">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                        <path d="M5 9h4l5-4v14l-5-4H5z" stroke="currentColor" stroke-width="2" />
+                      </svg>
+                    </div>
+                    <div class="meta-btn" aria-hidden="true">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                        <rect x="7" y="7" width="10" height="10" stroke="currentColor" stroke-width="2" />
+                        <rect x="4" y="4" width="10" height="10" stroke="currentColor" stroke-width="2" />
+                      </svg>
+                    </div>
+                    <div class="meta-btn" aria-hidden="true">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                        <path d="M4 12h16" stroke="currentColor" stroke-width="2" />
+                        <path d="M12 4v16" stroke="currentColor" stroke-width="2" />
+                      </svg>
+                    </div>
                   </div>
+                  <span>733ms · Snabb</span>
                 </div>
-                <pre>namn = input("Vad heter du? ")
-print(f"Hej {namn}! Hoppas du har en grym dag ☀️")</pre>
+                <div class="suggestion">
+                  <span>↳</span> Berätta om svenska traditioner
+                </div>
+                <div class="prompt-chips">
+                  <button
+                    class="prompt-chip"
+                    data-demo="research"
+                    data-demo-text="Gör en marknadsanalys för nordiska AI-bolag 2025 med källor."
+                  >
+                    Starta djupforskning
+                  </button>
+                  <button
+                    class="prompt-chip"
+                    data-demo="debate"
+                    data-demo-text="Starta en debatt mellan Grok, Gemini, GPT och DeepSeek om bästa supportmodell."
+                  >
+                    Starta debatt
+                  </button>
+                  <button
+                    class="prompt-chip"
+                    data-demo="compare"
+                    data-demo-text="Jämför Grok, Gemini och DeepSeek för kundsupport."
+                  >
+                    Starta AI-jämförelse
+                  </button>
+                </div>
               </div>
-              <h3>2. Gissningslek (1–100)</h3>
-              <div class="code-card">
-                <div class="code-header">
-                  <span>Python</span>
-                  <div class="code-actions">
-                    <span>▶</span>
-                    <span>Kopiera</span>
+
+              <div class="bubble-user" data-user-text="general">hej</div>
+
+              <div class="assistant-block">
+                <p>
+                  Javisst! Här kommer några små exempel direkt i chatten – olika
+                  svårighetsgrader så du kan välja vad som känns kul just nu 😄
+                </p>
+                <h3>1. Super enkel – klassisk “Hej världen” med lite twist</h3>
+                <div class="code-card">
+                  <div class="code-header">
+                    <span>Python</span>
+                    <div class="code-actions">
+                      <span>▶</span>
+                      <span>Kopiera</span>
+                    </div>
                   </div>
+                  <pre>namn = input("Vad heter du? ")
+print(f"Hej {namn}! Hoppas du har en grym dag ☀️")</pre>
                 </div>
-                <pre>import random
+                <h3>2. Gissningslek (1–100)</h3>
+                <div class="code-card">
+                  <div class="code-header">
+                    <span>Python</span>
+                    <div class="code-actions">
+                      <span>▶</span>
+                      <span>Kopiera</span>
+                    </div>
+                  </div>
+                  <pre>import random
 
 hemligt = random.randint(1, 100)
 gissningar = 0
@@ -847,6 +1075,254 @@ while True:
         print("För lågt!")
     else:
         print("För högt!")</pre>
+                </div>
+              </div>
+            </div>
+
+            <div class="mode-panel" data-mode="research">
+              <div class="prompt-chips">
+                <button
+                  class="prompt-chip"
+                  data-demo="research"
+                  data-demo-text="Gör en marknadsanalys för nordiska AI-bolag 2025 med källor."
+                >
+                  Marknadsanalys 2025
+                </button>
+                <button
+                  class="prompt-chip"
+                  data-demo="research"
+                  data-demo-text="Kartlägg regulatoriska risker för AI i EU med källor."
+                >
+                  Regulatoriska risker
+                </button>
+                <button
+                  class="prompt-chip"
+                  data-demo="research"
+                  data-demo-text="Sammanfatta kundsupport-trender och ge en rekommendation."
+                >
+                  Supporttrender
+                </button>
+              </div>
+              <div class="bubble-user" data-user-text="research">
+                Gör en marknadsanalys för nordiska AI-bolag 2025 med källor.
+              </div>
+              <div class="assistant-block">
+                <p>
+                  Startar djupforskning enligt LangGraph: coordinator → background_investigator →
+                  planner → human_feedback → research_team (researcher/analyst/coder/tester) →
+                  reporter.
+                </p>
+                <div class="flow-card">
+                  <div class="flow-row">
+                    <span class="flow-label">coordinator</span>
+                    <span class="status-badge done">Klar</span>
+                  </div>
+                  <div class="flow-row">
+                    <span class="flow-label">background_investigator</span>
+                    <span class="status-badge done">Klar</span>
+                  </div>
+                  <div class="flow-row">
+                    <span class="flow-label">planner</span>
+                    <span class="status-badge done">Klar</span>
+                  </div>
+                  <div class="flow-row">
+                    <span class="flow-label">human_feedback</span>
+                    <span class="status-badge done">Godkänd</span>
+                  </div>
+                  <div class="flow-row">
+                    <span class="flow-label">research_team</span>
+                    <span class="status-badge running">Steg 2/4</span>
+                  </div>
+                  <div class="flow-row">
+                    <span class="flow-label">reporter</span>
+                    <span class="status-badge waiting">Väntar</span>
+                  </div>
+                </div>
+                <div class="mini-card">
+                  <div class="mini-title">Research team (loop)</div>
+                  <ul class="mini-list">
+                    <li>researcher · klar</li>
+                    <li>analyst · kör</li>
+                    <li>coder · väntar</li>
+                    <li>tester · väntar</li>
+                  </ul>
+                  <div class="progress"><span style="--progress: 52%"></span></div>
+                </div>
+                <div class="mini-card">
+                  <div class="mini-title">Källor (3/8)</div>
+                  <ul class="mini-list">
+                    <li>McKinsey State of AI 2025</li>
+                    <li>Gartner Q4 Trend Report</li>
+                    <li>OECD AI Adoption Index</li>
+                  </ul>
+                </div>
+                <div class="tool-actions">
+                  <span>Tool actions</span>
+                  <div class="tool-pill">
+                    <span class="tool-dot"></span> web_search · kör
+                  </div>
+                  <div class="tool-pill">
+                    <span class="tool-dot"></span> crawl_tool · kör
+                  </div>
+                  <div class="tool-pill">
+                    <span class="tool-dot"></span> retriever_tool · klar
+                  </div>
+                  <div class="tool-pill">
+                    <span class="tool-dot waiting"></span> reporter · väntar
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="mode-panel" data-mode="debate">
+              <div class="prompt-chips">
+                <button
+                  class="prompt-chip"
+                  data-demo="debate"
+                  data-demo-text="Starta en debatt mellan Grok, Gemini, GPT och DeepSeek om bästa supportmodell."
+                >
+                  Bästa supportmodell
+                </button>
+                <button
+                  class="prompt-chip"
+                  data-demo="debate"
+                  data-demo-text="Debattera vilka modeller som ger bäst fakta-precision i support."
+                >
+                  Faktuellt bäst
+                </button>
+              </div>
+              <div class="bubble-user" data-user-text="debate">
+                Starta en debatt mellan Grok, Gemini, GPT och DeepSeek om bästa supportmodell.
+              </div>
+              <div class="assistant-block">
+                <p>
+                  Debatt pågår. LangGraph: debate_planner → human_feedback →
+                  debate_orchestrator → external_ai_caller → fact_checker → synthesizer →
+                  moderator (loop).
+                </p>
+                <div class="flow-card">
+                  <div class="flow-row">
+                    <span class="flow-label">debate_planner</span>
+                    <span class="status-badge done">Klar</span>
+                  </div>
+                  <div class="flow-row">
+                    <span class="flow-label">human_feedback</span>
+                    <span class="status-badge done">Godkänd</span>
+                  </div>
+                  <div class="flow-row">
+                    <span class="flow-label">debate_orchestrator</span>
+                    <span class="status-badge running">Runda 2/3</span>
+                  </div>
+                  <div class="flow-row">
+                    <span class="flow-label">external_ai_caller</span>
+                    <span class="status-badge running">2/4 svar</span>
+                  </div>
+                  <div class="flow-row">
+                    <span class="flow-label">fact_checker</span>
+                    <span class="status-badge waiting">Väntar</span>
+                  </div>
+                  <div class="flow-row">
+                    <span class="flow-label">synthesizer</span>
+                    <span class="status-badge waiting">Köad</span>
+                  </div>
+                  <div class="flow-row">
+                    <span class="flow-label">moderator</span>
+                    <span class="status-badge waiting">Väntar</span>
+                  </div>
+                </div>
+                <div class="mini-card">
+                  <div class="mini-title">Deltagare</div>
+                  <div class="model-row">
+                    <span class="model-chip">Grok-4 · klar</span>
+                    <span class="model-chip">Gemini · skriver</span>
+                    <span class="model-chip">GPT-3.5 · väntar</span>
+                    <span class="model-chip">DeepSeek · väntar</span>
+                  </div>
+                  <div class="progress"><span style="--progress: 64%"></span></div>
+                </div>
+                <div class="tool-actions">
+                  <span>Tool actions</span>
+                  <div class="tool-pill">
+                    <span class="tool-dot"></span> external_ai_caller · kör
+                  </div>
+                  <div class="tool-pill">
+                    <span class="tool-dot waiting"></span> fact_checker · väntar
+                  </div>
+                  <div class="tool-pill">
+                    <span class="tool-dot waiting"></span> moderator · väntar
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="mode-panel" data-mode="compare">
+              <div class="prompt-chips">
+                <button
+                  class="prompt-chip"
+                  data-demo="compare"
+                  data-demo-text="Jämför Grok, Gemini och DeepSeek för kundsupport."
+                >
+                  Kundsupport
+                </button>
+                <button
+                  class="prompt-chip"
+                  data-demo="compare"
+                  data-demo-text="Jämför modellerna för dokument-analys och faktakoll."
+                >
+                  Dokument & fakta
+                </button>
+              </div>
+              <div class="bubble-user" data-user-text="compare">
+                Jämför Grok, Gemini och DeepSeek för kundsupport.
+              </div>
+              <div class="assistant-block">
+                <p>
+                  AI-jämförelse enligt LangGraph: ai_comparison → ai_compare_team →
+                  ai_compare_query → ai_compare_fact_check → ai_compare_meta →
+                  ai_compare_synth → ai_compare_reporter.
+                </p>
+                <div class="flow-card">
+                  <div class="flow-row">
+                    <span class="flow-label">ai_compare_query</span>
+                    <span class="status-badge running">3/4 svar</span>
+                  </div>
+                  <div class="flow-row">
+                    <span class="flow-label">ai_compare_fact_check</span>
+                    <span class="status-badge waiting">Väntar</span>
+                  </div>
+                  <div class="flow-row">
+                    <span class="flow-label">ai_compare_meta</span>
+                    <span class="status-badge waiting">Köad</span>
+                  </div>
+                  <div class="flow-row">
+                    <span class="flow-label">ai_compare_synth</span>
+                    <span class="status-badge waiting">Väntar</span>
+                  </div>
+                  <div class="flow-row">
+                    <span class="flow-label">ai_compare_reporter</span>
+                    <span class="status-badge waiting">Väntar</span>
+                  </div>
+                </div>
+                <div class="mini-card">
+                  <div class="mini-title">Modellsvar (kort)</div>
+                  <ul class="mini-list">
+                    <li>Grok-4: snabb struktur, låg latens</li>
+                    <li>Gemini: multimodala flöden</li>
+                    <li>DeepSeek: stabil QA, bra kostnad</li>
+                  </ul>
+                </div>
+                <div class="tool-actions">
+                  <span>Tool actions</span>
+                  <div class="tool-pill">
+                    <span class="tool-dot"></span> ai_compare_query · kör
+                  </div>
+                  <div class="tool-pill">
+                    <span class="tool-dot waiting"></span> ai_compare_fact_check · väntar
+                  </div>
+                  <div class="tool-pill">
+                    <span class="tool-dot waiting"></span> ai_compare_synth · väntar
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -901,51 +1377,151 @@ while True:
           </button>
         </div>
         <div class="sidebar-panel active" data-panel="research">
-          <div class="sidebar-item">
-            <span>🧠</span> Planering · kör
+          <div class="panel-card">
+            <div class="panel-title">Kedja (LangGraph)</div>
+            <div class="panel-row">
+              <span class="panel-node">coordinator</span>
+              <span class="status-badge done">Klar</span>
+            </div>
+            <div class="panel-row">
+              <span class="panel-node">background_investigator</span>
+              <span class="status-badge done">Klar</span>
+            </div>
+            <div class="panel-row">
+              <span class="panel-node">planner</span>
+              <span class="status-badge done">Klar</span>
+            </div>
+            <div class="panel-row">
+              <span class="panel-node">human_feedback</span>
+              <span class="status-badge done">Godkänd</span>
+            </div>
+            <div class="panel-row">
+              <span class="panel-node">research_team</span>
+              <span class="status-badge running">Steg 2/4</span>
+            </div>
+            <div class="panel-row">
+              <span class="panel-node">reporter</span>
+              <span class="status-badge waiting">Väntar</span>
+            </div>
           </div>
-          <div class="sidebar-item">
-            <span>🌐</span> web_search · kör
+          <div class="panel-card">
+            <div class="panel-title">Research team</div>
+            <div class="panel-row">
+              <span class="panel-node">researcher</span>
+              <span class="status-badge done">Klar</span>
+            </div>
+            <div class="panel-row">
+              <span class="panel-node">analyst</span>
+              <span class="status-badge running">Pågår</span>
+            </div>
+            <div class="panel-row">
+              <span class="panel-node">coder</span>
+              <span class="status-badge waiting">Väntar</span>
+            </div>
+            <div class="panel-row">
+              <span class="panel-node">tester</span>
+              <span class="status-badge waiting">Väntar</span>
+            </div>
           </div>
-          <div class="sidebar-item">
-            <span>📚</span> retriever · klar
-          </div>
-          <div class="sidebar-item">
-            <span>🧾</span> rapport · väntar
+          <div class="panel-card">
+            <div class="panel-title">Källor</div>
+            <div class="model-row">
+              <span class="panel-chip">McKinsey 2025</span>
+              <span class="panel-chip">Gartner Q4</span>
+              <span class="panel-chip">OECD Index</span>
+            </div>
           </div>
         </div>
         <div class="sidebar-panel" data-panel="debate">
-          <div class="sidebar-item">
-            <span>⚡</span> start_debate_round · klar
+          <div class="panel-card">
+            <div class="panel-title">Runda 2 av 3</div>
+            <div class="progress"><span style="--progress: 64%"></span></div>
+            <div class="model-row">
+              <span class="panel-chip">Grok-4 · klar</span>
+              <span class="panel-chip">Gemini · skriver</span>
+              <span class="panel-chip">GPT-3.5 · väntar</span>
+              <span class="panel-chip">DeepSeek · väntar</span>
+            </div>
           </div>
-          <div class="sidebar-item">
-            <span>💬</span> query_model_in_round · kör
-          </div>
-          <div class="sidebar-item">
-            <span>🧪</span> fact_checker · väntar
-          </div>
-          <div class="sidebar-item">
-            <span>🧩</span> synthesizer · väntar
+          <div class="panel-card">
+            <div class="panel-title">Kedja (LangGraph)</div>
+            <div class="panel-row">
+              <span class="panel-node">debate_planner</span>
+              <span class="status-badge done">Klar</span>
+            </div>
+            <div class="panel-row">
+              <span class="panel-node">human_feedback</span>
+              <span class="status-badge done">Godkänd</span>
+            </div>
+            <div class="panel-row">
+              <span class="panel-node">debate_orchestrator</span>
+              <span class="status-badge running">Aktiv</span>
+            </div>
+            <div class="panel-row">
+              <span class="panel-node">external_ai_caller</span>
+              <span class="status-badge running">Kör</span>
+            </div>
+            <div class="panel-row">
+              <span class="panel-node">fact_checker</span>
+              <span class="status-badge waiting">Väntar</span>
+            </div>
+            <div class="panel-row">
+              <span class="panel-node">synthesizer</span>
+              <span class="status-badge waiting">Köad</span>
+            </div>
+            <div class="panel-row">
+              <span class="panel-node">moderator</span>
+              <span class="status-badge waiting">Väntar</span>
+            </div>
           </div>
         </div>
         <div class="sidebar-panel" data-panel="compare">
-          <div class="sidebar-item">
-            <span>🚀</span> query_models · kör
+          <div class="panel-card">
+            <div class="panel-title">Kedja (LangGraph)</div>
+            <div class="panel-row">
+              <span class="panel-node">ai_comparison</span>
+              <span class="status-badge done">Klar</span>
+            </div>
+            <div class="panel-row">
+              <span class="panel-node">ai_compare_team</span>
+              <span class="status-badge running">Aktiv</span>
+            </div>
+            <div class="panel-row">
+              <span class="panel-node">ai_compare_query</span>
+              <span class="status-badge running">3/4</span>
+            </div>
+            <div class="panel-row">
+              <span class="panel-node">ai_compare_fact_check</span>
+              <span class="status-badge waiting">Väntar</span>
+            </div>
+            <div class="panel-row">
+              <span class="panel-node">ai_compare_meta</span>
+              <span class="status-badge waiting">Köad</span>
+            </div>
+            <div class="panel-row">
+              <span class="panel-node">ai_compare_synth</span>
+              <span class="status-badge waiting">Väntar</span>
+            </div>
+            <div class="panel-row">
+              <span class="panel-node">ai_compare_reporter</span>
+              <span class="status-badge waiting">Väntar</span>
+            </div>
           </div>
-          <div class="sidebar-item">
-            <span>✅</span> fact_check · väntar
-          </div>
-          <div class="sidebar-item">
-            <span>🧠</span> meta_analysis · väntar
-          </div>
-          <div class="sidebar-item">
-            <span>✨</span> synthesis · väntar
+          <div class="panel-card">
+            <div class="panel-title">Modeller</div>
+            <div class="model-row">
+              <span class="panel-chip">Grok-4 · klar</span>
+              <span class="panel-chip">Gemini · klar</span>
+              <span class="panel-chip">DeepSeek · klar</span>
+              <span class="panel-chip">GPT-3.5 · skriver</span>
+            </div>
           </div>
         </div>
       </aside>
     </div>
     <script>
       (() => {
+        const body = document.body;
         const resizer = document.querySelector("[data-resizer]");
         if (resizer) {
           const minWidth = 260;
@@ -982,21 +1558,68 @@ while True:
           window.addEventListener("mouseup", stopDrag);
         }
 
-        const tabs = document.querySelectorAll("[data-panel-target]");
-        const panels = document.querySelectorAll("[data-panel]");
+        const tabs = Array.from(document.querySelectorAll("[data-panel-target]"));
+        const panels = Array.from(document.querySelectorAll("[data-panel]"));
+        const demoButtons = Array.from(document.querySelectorAll(".demo-btn"));
+        const promptChips = Array.from(document.querySelectorAll(".prompt-chip"));
+        const panelTargets = new Set(panels.map((panel) => panel.dataset.panel));
+
+        const syncPanels = (mode) => {
+          if (!panelTargets.has(mode)) return;
+          tabs.forEach((tab) =>
+            tab.classList.toggle("active", tab.dataset.panelTarget === mode)
+          );
+          panels.forEach((panel) =>
+            panel.classList.toggle("active", panel.dataset.panel === mode)
+          );
+        };
+
+        const syncDemoButtons = (mode) => {
+          demoButtons.forEach((btn) =>
+            btn.classList.toggle("active", btn.dataset.demo === mode)
+          );
+        };
+
+        const setMode = (mode, openSidebar) => {
+          if (!mode) return;
+          body.dataset.mode = mode;
+          if (mode === "general") {
+            body.dataset.view = "chat";
+          } else if (openSidebar) {
+            body.dataset.view = "sidebar";
+          }
+          syncPanels(mode);
+          syncDemoButtons(mode);
+        };
+
         tabs.forEach((tab) => {
           tab.addEventListener("click", () => {
-            const target = tab.getAttribute("data-panel-target");
-            tabs.forEach((btn) => btn.classList.remove("active"));
-            tab.classList.add("active");
-            panels.forEach((panel) => {
-              panel.classList.toggle(
-                "active",
-                panel.getAttribute("data-panel") === target
-              );
-            });
+            setMode(tab.dataset.panelTarget, true);
           });
         });
+
+        demoButtons.forEach((btn) => {
+          btn.addEventListener("click", () => {
+            setMode(btn.dataset.demo, btn.dataset.demo !== "general");
+          });
+        });
+
+        promptChips.forEach((chip) => {
+          chip.addEventListener("click", () => {
+            const mode = chip.dataset.demo;
+            const text = chip.dataset.demoText;
+            setMode(mode, true);
+            if (text && mode) {
+              const target = document.querySelector(`[data-user-text="${mode}"]`);
+              if (target) {
+                target.textContent = text;
+              }
+            }
+          });
+        });
+
+        syncPanels(body.dataset.mode);
+        syncDemoButtons(body.dataset.mode);
       })();
     </script>
   </body>
