@@ -427,11 +427,46 @@ export async function sendMessage(
           // Use the found message's ID, not data.id
           messageId = message.id;
         } else {
-          // Shouldn't happen, but handle gracefully
-          if (process.env.NODE_ENV === "development") {
-            console.warn(`Tool call result without matching message: ${data.tool_call_id}`);
+          const toolName = (data.tool_name as string | undefined) ?? "unknown";
+          const fallbackAgent =
+            toolName === "query_model_in_round" ||
+            toolName === "query_gpt35" ||
+            toolName === "query_gemini_flash" ||
+            toolName === "query_deepseek" ||
+            toolName === "query_grok4"
+              ? "ai_compare_query"
+              : toolName === "fact_check_responses"
+                ? "ai_compare_fact_check"
+                : toolName === "run_meta_analysis"
+                  ? "ai_compare_meta"
+                  : toolName === "synthesize_optimal_answer"
+                    ? "ai_compare_synth"
+                    : "researcher";
+          const toolCallMessageId = `tool-${data.tool_call_id}`;
+          if (!existsMessage(toolCallMessageId)) {
+            const message: Message = {
+              id: toolCallMessageId,
+              threadId: data.thread_id,
+              agent: fallbackAgent,
+              role: "assistant",
+              content: "",
+              contentChunks: [],
+              reasoningContent: "",
+              reasoningContentChunks: [],
+              isStreaming: true,
+              toolCalls: [
+                {
+                  id: data.tool_call_id,
+                  name: toolName,
+                  args: {},
+                  result: data.content,
+                },
+              ],
+            };
+            appendMessage(message);
           }
-          continue; // Skip this event
+          message = getMessage(toolCallMessageId);
+          messageId = toolCallMessageId;
         }
       } else {
         // For other event types, use data.id
