@@ -21,6 +21,22 @@
         --warning: #facc15;
       }
 
+      [data-theme="light"] {
+        color-scheme: light;
+        --bg: #f6f7fb;
+        --panel: #ffffff;
+        --panel-2: #f0f2f7;
+        --panel-3: #e9ecf4;
+        --border: #d6d9e5;
+        --text: #111827;
+        --muted: #6b7280;
+        --accent: #2563eb;
+        --accent-2: #7c3aed;
+        --brand: #2563eb;
+        --success: #16a34a;
+        --warning: #d97706;
+      }
+
       * {
         box-sizing: border-box;
         margin: 0;
@@ -39,6 +55,15 @@
         min-height: 100vh;
       }
 
+      body[data-theme="light"] {
+        background: radial-gradient(
+            circle at top,
+            rgba(37, 99, 235, 0.12),
+            transparent 52%
+          ),
+          var(--bg);
+      }
+
       .layout {
         display: grid;
         grid-template-columns: 64px 1fr 360px;
@@ -46,7 +71,7 @@
       }
 
       .rail {
-        background: #0a0a0c;
+        background: var(--panel-3);
         border-right: 1px solid var(--border);
         display: flex;
         flex-direction: column;
@@ -92,7 +117,7 @@
         width: 38px;
         height: 38px;
         border-radius: 50%;
-        background: #24262c;
+        background: var(--panel-3);
         border: 1px solid var(--border);
       }
 
@@ -129,7 +154,7 @@
         border: 1px solid var(--border);
         border-radius: 999px;
         padding: 4px 10px;
-        background: #0f1013;
+        background: var(--panel-3);
         font-size: 11px;
         color: var(--muted);
       }
@@ -144,7 +169,7 @@
         height: 32px;
         border-radius: 10px;
         border: 1px solid var(--border);
-        background: #101114;
+        background: var(--panel-3);
         display: grid;
         place-items: center;
       }
@@ -168,7 +193,7 @@
         border-radius: 999px;
         padding: 6px 12px;
         font-size: 12px;
-        background: #0f1013;
+        background: var(--panel-3);
         color: var(--muted);
         cursor: pointer;
       }
@@ -311,7 +336,7 @@
         position: absolute;
         top: 10px;
         left: 16px;
-        background: #0f1013;
+        background: var(--panel-3);
         border: 1px solid rgba(96, 165, 250, 0.4);
         color: var(--accent);
         padding: 4px 10px;
@@ -355,11 +380,17 @@
 
       .ghost-btn {
         border: 1px solid var(--border);
-        background: #0f1013;
+        background: var(--panel-3);
         color: var(--muted);
         padding: 8px 12px;
         border-radius: 12px;
         font-size: 12px;
+      }
+
+      .theme-toggle {
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 11px;
       }
 
       .round-btn {
@@ -383,7 +414,7 @@
 
       .tool-btn {
         border: 1px solid var(--border);
-        background: #101114;
+        background: var(--panel-3);
         color: var(--muted);
         padding: 6px 12px;
         border-radius: 12px;
@@ -403,7 +434,7 @@
       }
 
       .hero-pill {
-        background: #141519;
+        background: var(--panel-2);
         border: 1px solid var(--border);
         padding: 6px 12px;
         border-radius: 999px;
@@ -420,7 +451,7 @@
       }
 
       .feature-card {
-        background: #111215;
+        background: var(--panel-2);
         border: 1px solid var(--border);
         border-radius: 16px;
         padding: 12px;
@@ -441,7 +472,7 @@
 
       .feature-card button {
         border: 1px solid var(--border);
-        background: #0f1013;
+        background: var(--panel-3);
         color: var(--text);
         border-radius: 999px;
         padding: 6px 10px;
@@ -481,7 +512,7 @@
       .plan-card {
         border: 1px solid var(--border);
         border-radius: 16px;
-        background: #101114;
+        background: var(--panel-2);
         padding: 14px;
         display: flex;
         flex-direction: column;
@@ -510,7 +541,7 @@
       .step-item {
         border: 1px solid var(--border);
         border-radius: 12px;
-        background: #0f1013;
+        background: var(--panel-3);
         padding: 8px 10px;
         display: flex;
         align-items: center;
@@ -568,7 +599,7 @@
       .compare-card {
         border: 1px solid var(--border);
         border-radius: 16px;
-        background: #101114;
+        background: var(--panel-2);
         padding: 14px;
         display: flex;
         flex-direction: column;
@@ -585,7 +616,7 @@
         border: 1px solid var(--border);
         border-radius: 12px;
         padding: 10px;
-        background: #0f1013;
+        background: var(--panel-3);
         font-size: 12px;
         color: var(--muted);
       }
@@ -599,7 +630,7 @@
       .flow-card {
         border: 1px solid var(--border);
         border-radius: 12px;
-        background: #0f1013;
+        background: var(--panel-3);
         padding: 12px;
         display: flex;
         flex-direction: column;
@@ -629,7 +660,7 @@
       .response-card {
         border: 1px solid var(--border);
         border-radius: 14px;
-        background: #101114;
+        background: var(--panel-2);
         padding: 12px;
         display: flex;
         flex-direction: column;
@@ -663,7 +694,7 @@
       .analysis-card {
         border: 1px solid var(--border);
         border-radius: 14px;
-        background: #0f1013;
+        background: var(--panel-3);
         padding: 12px;
         display: flex;
         flex-direction: column;
@@ -689,7 +720,7 @@
         flex: 1;
         height: 6px;
         border-radius: 999px;
-        background: #1b1c21;
+        background: var(--border);
         overflow: hidden;
       }
 
@@ -717,7 +748,7 @@
         border: 1px solid var(--border);
         border-radius: 10px;
         padding: 6px 8px;
-        background: #0f1013;
+        background: var(--panel-3);
       }
 
       .debate-grid {
@@ -730,7 +761,7 @@
         border: 1px solid var(--border);
         border-radius: 14px;
         padding: 10px;
-        background: #101114;
+        background: var(--panel-2);
         font-size: 12px;
         color: var(--muted);
       }
@@ -744,7 +775,7 @@
       .vote-bar {
         height: 6px;
         border-radius: 999px;
-        background: #1b1c21;
+        background: var(--border);
         overflow: hidden;
       }
 
@@ -766,7 +797,7 @@
       .logo-card {
         border: 1px solid var(--border);
         border-radius: 16px;
-        background: #101114;
+        background: var(--panel-2);
         padding: 14px;
         display: flex;
         flex-direction: column;
@@ -781,7 +812,7 @@
         width: 48px;
         height: 48px;
         border-radius: 14px;
-        background: #0f1013;
+        background: var(--panel-3);
         border: 1px solid var(--border);
         display: grid;
         place-items: center;
@@ -826,7 +857,7 @@
         padding: 6px 12px;
         font-size: 11px;
         color: var(--muted);
-        background: #0f1013;
+        background: var(--panel-3);
       }
 
       .panel-tab.active {
@@ -845,7 +876,7 @@
         font-size: 11px;
         color: var(--muted);
         border: 1px solid var(--border);
-        background: #0f1013;
+        background: var(--panel-3);
       }
 
       .panel-subtab.active {
@@ -854,7 +885,7 @@
       }
 
       .panel-card {
-        background: #111215;
+        background: var(--panel-2);
         border: 1px solid var(--border);
         border-radius: 14px;
         padding: 14px;
@@ -889,14 +920,14 @@
         border-radius: 10px;
         padding: 6px 8px;
         font-size: 10px;
-        background: #0f1013;
+        background: var(--panel-3);
         color: var(--muted);
       }
 
       .podcast-card {
         border: 1px solid var(--border);
         border-radius: 16px;
-        background: #101114;
+        background: var(--panel-2);
         padding: 12px;
         display: flex;
         flex-direction: column;
@@ -961,7 +992,7 @@
       .text-block {
         border: 1px solid var(--border);
         border-radius: 16px;
-        background: #0f1013;
+        background: var(--panel-3);
         padding: 12px;
         display: flex;
         flex-direction: column;
@@ -987,10 +1018,10 @@
       }
 
       .result-item {
-        border: 1px solid #1b1c21;
+        border: 1px solid var(--border);
         border-radius: 12px;
         padding: 8px 10px;
-        background: #0b0c10;
+        background: var(--panel-3);
       }
 
       .result-title {
@@ -1015,7 +1046,7 @@
         border: 1px solid var(--border);
         border-radius: 12px;
         padding: 10px;
-        background: #0f1013;
+        background: var(--panel-3);
         font-size: 12px;
         color: var(--muted);
       }
@@ -1071,7 +1102,7 @@
 
       .link-btn.secondary {
         border-color: var(--border);
-        background: #0f1013;
+        background: var(--panel-3);
         color: var(--muted);
       }
 
@@ -1092,7 +1123,7 @@
       .landing-feature {
         border: 1px solid var(--border);
         border-radius: 16px;
-        background: #101114;
+        background: var(--panel-2);
         padding: 14px;
         display: flex;
         flex-direction: column;
@@ -1145,7 +1176,7 @@
         width: 100%;
         height: 8px;
         border-radius: 999px;
-        background: #1b1c21;
+        background: var(--border);
         overflow: hidden;
       }
 
@@ -1176,7 +1207,7 @@
         height: 10px;
         margin-top: 3px;
         border-radius: 50%;
-        background: #1b1c21;
+        background: var(--panel-3);
         border: 2px solid rgba(96, 165, 250, 0.6);
         position: relative;
       }
@@ -1205,7 +1236,7 @@
         font-size: 10px;
         border: 1px solid var(--border);
         color: var(--muted);
-        background: #0f1013;
+        background: var(--panel-3);
       }
 
       .status-badge.running {
@@ -1226,7 +1257,7 @@
       .tool-card {
         border: 1px solid var(--border);
         border-radius: 12px;
-        background: #0f1013;
+        background: var(--panel-3);
         padding: 10px;
         display: flex;
         flex-direction: column;
@@ -1256,12 +1287,12 @@
       }
 
       .tool-output {
-        background: #0b0c0f;
+        background: var(--panel-3);
         border-radius: 8px;
         padding: 8px;
         font-size: 11px;
         color: var(--muted);
-        border: 1px solid #1b1c21;
+        border: 1px solid var(--border);
       }
 
       .shimmer {
@@ -1309,7 +1340,7 @@
         border: 1px solid var(--border);
         border-radius: 12px;
         padding: 8px;
-        background: #0f1013;
+        background: var(--panel-3);
         font-size: 11px;
         color: var(--muted);
       }
@@ -1481,7 +1512,7 @@
       }
     </style>
   </head>
-  <body data-state="home">
+  <body data-state="home" data-theme="dark">
     <div class="layout">
       <aside class="rail">
         <div class="rail-top">
@@ -1503,6 +1534,9 @@
             <div class="status-chip">Privat</div>
           </div>
           <div class="topbar-actions">
+            <button class="ghost-btn theme-toggle" data-theme-toggle>
+              Ljust läge
+            </button>
             <div class="icon-btn" aria-hidden="true">
               <svg viewBox="0 0 24 24">
                 <circle cx="12" cy="12" r="5"></circle>
@@ -2823,6 +2857,25 @@
           btn.classList.toggle("active", btn.dataset.stateTarget === state),
         );
       };
+
+      const themeToggle = document.querySelector("[data-theme-toggle]");
+      const applyTheme = (theme) => {
+        document.body.setAttribute("data-theme", theme);
+        localStorage.setItem("demo-theme", theme);
+        if (themeToggle) {
+          themeToggle.textContent = theme === "light" ? "Mörkt läge" : "Ljust läge";
+        }
+      };
+
+      const storedTheme = localStorage.getItem("demo-theme");
+      applyTheme(storedTheme || "dark");
+
+      if (themeToggle) {
+        themeToggle.addEventListener("click", () => {
+          const current = document.body.getAttribute("data-theme") || "dark";
+          applyTheme(current === "light" ? "dark" : "light");
+        });
+      }
 
       const setBadge = (el, status, label) => {
         if (!el) return;
