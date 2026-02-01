@@ -307,12 +307,32 @@ PlanCard.displayName = "PlanCard";
 
 const ActivityListItem = React.memo(({ messageId }: { messageId: string }) => {
   const message = useMessage(messageId);
-  if (message?.agent === "ai_compare_query") {
+  const aiCompareToolNames = new Set([
+    "query_all_models",
+    "query_model_in_round",
+    "query_gpt35",
+    "query_gemini_flash",
+    "query_deepseek",
+    "query_grok4",
+  ]);
+  if (
+    message?.agent === "ai_compare_query" ||
+    message?.toolCalls?.some((toolCall) => aiCompareToolNames.has(toolCall.name))
+  ) {
     return null;
   }
   if (message) {
     if (message.toolCalls?.length) {
+      const aiCompareToolNames = new Set([
+        "query_all_models",
+        "query_model_in_round",
+        "query_gpt35",
+        "query_gemini_flash",
+        "query_deepseek",
+        "query_grok4",
+      ]);
       const toolCallComponents = message.toolCalls
+        .filter(toolCall => !aiCompareToolNames.has(toolCall.name))
         .filter(toolCall => !(typeof toolCall.result === "string" && toolCall.result?.startsWith("Error")))
         .map(toolCall => {
           if (toolCall.name === "web_search") {
