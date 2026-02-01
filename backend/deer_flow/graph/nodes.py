@@ -3200,6 +3200,41 @@ async def ai_compare_query_node(
             )
 
         payload = _parse_json_content(str(tool_output))
+        def _build_meta_summary(meta_data: dict[str, Any], locale_value: str) -> str:
+            if not isinstance(meta_data, dict):
+                return ""
+            labels_en = {
+                "cognitive_properties": "Cognitive properties",
+                "integrity_objectivity": "Integrity & objectivity",
+                "stability_emotional": "Stability & emotional profile",
+                "adaptivity_system": "Adaptivity & system role",
+            }
+            labels_sv = {
+                "cognitive_properties": "Kognitiva egenskaper",
+                "integrity_objectivity": "Integritet & objektivitet",
+                "stability_emotional": "Stabilitet & emotionell profil",
+                "adaptivity_system": "Adaptivitet & systemroll",
+            }
+            label_map = labels_sv if locale_value.startswith("sv") else labels_en
+            sections = []
+            for key in [
+                "cognitive_properties",
+                "integrity_objectivity",
+                "stability_emotional",
+                "adaptivity_system",
+            ]:
+                item = meta_data.get(key)
+                if not item:
+                    continue
+                if isinstance(item, dict):
+                    text = item.get("analysis") or item.get("error")
+                    if not text:
+                        text = json.dumps(item, ensure_ascii=False)
+                else:
+                    text = str(item)
+                label = label_map.get(key, key.replace("_", " ").title())
+                sections.append(f"### {label}\n\n{text}")
+            return "\n\n".join(sections).strip()
         responses = []
         if isinstance(payload, dict) and payload:
             responses = [payload]
@@ -3446,6 +3481,9 @@ async def ai_compare_meta_node(
         except Exception as exc:
             tool_output = json.dumps({"error": str(exc)}, ensure_ascii=False)
         payload = _parse_json_content(str(tool_output))
+        meta_results = payload.get("meta_results") if payload else None
+        meta_payload = meta_results or payload
+        meta_summary = _build_meta_summary(meta_payload or {}, state.get("locale", "en-US"))
         messages = [
             ToolMessage(
                 content=str(tool_output),
@@ -3453,7 +3491,7 @@ async def ai_compare_meta_node(
                 name="run_meta_analysis",
             ),
             AIMessage(
-                content=(json.dumps(payload, ensure_ascii=False) if payload else ""),
+                content=meta_summary or "",
                 name="ai_compare_meta",
             ),
         ]

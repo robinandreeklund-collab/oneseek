@@ -790,6 +790,17 @@ function appendResearch(researchId: string) {
 function appendResearchActivity(message: Message) {
   const researchId = getOngoingResearchId();
   if (researchId) {
+    if (
+      message.toolCalls?.length
+      && [
+        "ai_compare_query",
+        "ai_compare_fact_check",
+        "ai_compare_meta",
+        "ai_compare_synth",
+      ].includes(message.agent ?? "")
+    ) {
+      return;
+    }
     const researchActivityIds = useStore.getState().researchActivityIds;
     const current = researchActivityIds.get(researchId)!;
     if (!current.includes(message.id)) {
