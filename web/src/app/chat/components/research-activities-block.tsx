@@ -63,7 +63,7 @@ export function ResearchActivitiesBlock({
           .replace(/\s+/g, " ")
           .trim();
         if (!contentKey) {
-          return false;
+          return Boolean(message.toolCalls?.length);
         }
         if (seen.has(contentKey)) {
           return false;

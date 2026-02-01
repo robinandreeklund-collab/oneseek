@@ -301,6 +301,7 @@ def preserve_state_meta_fields(state: State) -> dict:
         "ai_compare_synthesis": state.get("ai_compare_synthesis"),
         "ai_compare_synthesis_json": state.get("ai_compare_synthesis_json"),
         "ai_compare_report_complete": state.get("ai_compare_report_complete", False),
+        "ai_compare_pending_tool": state.get("ai_compare_pending_tool"),
         "clarification_history": state.get("clarification_history", []),
         "enable_clarification": state.get("enable_clarification", False),
         "max_clarification_rounds": state.get("max_clarification_rounds", 3),
@@ -2855,6 +2856,7 @@ async def ai_comparison_node(
             "ai_compare_synthesis": None,
             "ai_compare_synthesis_json": None,
             "ai_compare_report_complete": False,
+            "ai_compare_pending_tool": None,
         },
         goto="human_feedback",
     )
@@ -3033,6 +3035,86 @@ async def ai_compare_query_node(
         "deepseek-chat": query_deepseek,
         "grok-4-fast-reasoning": query_grok4,
     }
+    pending_tool = state.get("ai_compare_pending_tool") or {}
+    if pending_tool.get("step") == "ai_compare_query":
+        selected_model = pending_tool.get("model_key")
+        tool_args = pending_tool.get("tool_args") or {}
+        tool_call_id = pending_tool.get("tool_call_id") or uuid4().hex
+        selected_tool = model_tool_map.get(selected_model)
+        if not selected_tool:
+            return Command(
+                update={
+                    **preserve_state_meta_fields(state),
+                    "ai_compare_pending_tool": None,
+                },
+                goto="ai_compare_team",
+            )
+
+        try:
+            tool_output = await selected_tool.ainvoke(tool_args)
+        except Exception as exc:
+            tool_output = json.dumps(
+                {
+                    "model": selected_model or "unknown",
+                    "display_name": selected_model or "Unknown",
+                    "response": None,
+                    "success": False,
+                    "error": str(exc),
+                },
+                ensure_ascii=False,
+            )
+
+        payload = _parse_json_content(str(tool_output))
+        responses = []
+        if isinstance(payload, dict) and payload:
+            responses = [payload]
+        existing = state.get("ai_compare_responses", [])
+        merged = {resp.get("model"): resp for resp in existing if isinstance(resp, dict)}
+        for resp in responses:
+            if isinstance(resp, dict):
+                merged[resp.get("model")] = resp
+        merged_responses = [resp for resp in merged.values() if resp]
+        responses_json = json.dumps(merged_responses, ensure_ascii=False)
+        if current_step:
+            display = selected_model or current_step.title
+            current_step.execution_res = f"Completed: {display}"
+        display_name = None
+        if responses and isinstance(responses[0], dict):
+            display_name = responses[0].get("display_name")
+        name = display_name or tool_args.get("display_name") or selected_model or "Model"
+        response_text = ""
+        if responses and isinstance(responses[0], dict):
+            response = responses[0].get("response")
+            error = responses[0].get("error")
+            if response:
+                response_text = f"### {name}\n\n{response}"
+            elif error:
+                response_text = f"### {name}\n\nError: {error}"
+            else:
+                response_text = f"### {name}\n\n(No response)"
+        messages = [
+            ToolMessage(
+                content=response_text or str(tool_output),
+                tool_call_id=tool_call_id,
+                name="query_model_in_round",
+            ),
+            AIMessage(
+                content=response_text or "",
+                name="ai_compare_query",
+            ),
+        ]
+        return Command(
+            update={
+                **preserve_state_meta_fields(state),
+                "ai_compare_pending_tool": None,
+                "ai_compare_responses": merged_responses,
+                "ai_compare_responses_json": responses_json,
+                "messages": messages,
+                "current_plan": current_plan,
+            },
+            goto="ai_compare_team",
+        )
+
     selected_tool = None
     selected_model = None
     if current_step:
@@ -3052,51 +3134,8 @@ async def ai_compare_query_node(
         "model_key": selected_model,
         "user_query": query,
         "locale": state.get("locale", "en-US"),
+        "display_name": current_step.title if current_step else selected_model,
     }
-    try:
-        tool_output = await selected_tool.ainvoke(tool_args)
-    except Exception as exc:
-        tool_output = json.dumps(
-            {
-                "model": selected_model or "unknown",
-                "display_name": selected_model or "Unknown",
-                "response": None,
-                "success": False,
-                "error": str(exc),
-            },
-            ensure_ascii=False,
-        )
-
-    payload = _parse_json_content(str(tool_output))
-    responses = []
-    if isinstance(payload, dict) and payload:
-        responses = [payload]
-    existing = state.get("ai_compare_responses", [])
-    merged = {resp.get("model"): resp for resp in existing if isinstance(resp, dict)}
-    for resp in responses:
-        if isinstance(resp, dict):
-            merged[resp.get("model")] = resp
-    merged_responses = [resp for resp in merged.values() if resp]
-    responses_json = json.dumps(merged_responses, ensure_ascii=False)
-    if current_step:
-        display = selected_model or current_step.title
-        current_step.execution_res = f"Completed: {display}"
-    display_name = None
-    if responses and isinstance(responses[0], dict):
-        display_name = responses[0].get("display_name")
-        if display_name:
-            tool_args["display_name"] = display_name
-    ui_text = ""
-    if responses and isinstance(responses[0], dict):
-        response = responses[0].get("response")
-        error = responses[0].get("error")
-        name = display_name or selected_model or "Model"
-        if response:
-            ui_text = f"### {name}\n\n{response}"
-        elif error:
-            ui_text = f"### {name}\n\nError: {error}"
-        else:
-            ui_text = f"### {name}\n\n(No response)"
     messages = [
         AIMessage(
             content="",
@@ -3109,21 +3148,16 @@ async def ai_compare_query_node(
                 }
             ],
         ),
-        ToolMessage(
-            content=ui_text or str(tool_output),
-            tool_call_id=tool_call_id,
-            name="query_model_in_round",
-        ),
-        AIMessage(
-            content=ui_text or "",
-            name="ai_compare_query",
-        ),
     ]
     return Command(
         update={
             **preserve_state_meta_fields(state),
-            "ai_compare_responses": merged_responses,
-            "ai_compare_responses_json": responses_json,
+            "ai_compare_pending_tool": {
+                "step": "ai_compare_query",
+                "tool_call_id": tool_call_id,
+                "tool_args": tool_args,
+                "model_key": selected_model,
+            },
             "messages": messages,
             "current_plan": current_plan,
         },
@@ -3140,22 +3174,63 @@ async def ai_compare_fact_check_node(
         max_search_results=configurable.max_search_results,
         resources=state.get("resources", []),
     )
+    current_plan = state.get("current_plan")
+    from backend.deer_flow.prompts.planner_model import Plan, StepType
+    pending_tool = state.get("ai_compare_pending_tool") or {}
+    if pending_tool.get("step") == "ai_compare_fact_check":
+        tool_call_id = pending_tool.get("tool_call_id") or uuid4().hex
+        tool_args = pending_tool.get("tool_args") or {}
+        if not tool_args:
+            query = state.get("research_topic", "")
+            model_responses_json = state.get("ai_compare_responses_json") or json.dumps(
+                state.get("ai_compare_responses", []), ensure_ascii=False
+            )
+            tool_args = {"query": query, "model_responses_json": model_responses_json}
+        try:
+            tool_output = await fact_check_responses.ainvoke(tool_args)
+        except Exception as exc:
+            tool_output = json.dumps({"error": str(exc)}, ensure_ascii=False)
+        payload = _parse_json_content(str(tool_output))
+        ui_text = ""
+        if isinstance(payload, dict) and payload:
+            summary = payload.get("fact_check_summary") or payload.get("summary")
+            if summary:
+                ui_text = f"### Faktakoll\n\n{summary}"
+        messages = [
+            ToolMessage(
+                content=ui_text or str(tool_output),
+                tool_call_id=tool_call_id,
+                name="fact_check_responses",
+            ),
+            AIMessage(
+                content=ui_text or "",
+                name="ai_compare_fact_check",
+            ),
+        ]
+        if isinstance(current_plan, Plan):
+            for step in current_plan.steps:
+                if not step.execution_res and step.step_type == StepType.AI_FACT_CHECK:
+                    step.execution_res = "Fact check completed"
+                    break
+        fact_check_json = json.dumps(payload, ensure_ascii=False) if payload else None
+        return Command(
+            update={
+                **preserve_state_meta_fields(state),
+                "ai_compare_pending_tool": None,
+                "ai_compare_fact_check": payload or None,
+                "ai_compare_fact_check_json": fact_check_json,
+                "messages": messages,
+                "current_plan": current_plan,
+            },
+            goto="ai_compare_team",
+        )
+
     query = state.get("research_topic", "")
     model_responses_json = state.get("ai_compare_responses_json") or json.dumps(
         state.get("ai_compare_responses", []), ensure_ascii=False
     )
     tool_call_id = uuid4().hex
     tool_args = {"query": query, "model_responses_json": model_responses_json}
-    try:
-        tool_output = await fact_check_responses.ainvoke(tool_args)
-    except Exception as exc:
-        tool_output = json.dumps({"error": str(exc)}, ensure_ascii=False)
-    payload = _parse_json_content(str(tool_output))
-    ui_text = ""
-    if isinstance(payload, dict) and payload:
-        summary = payload.get("fact_check_summary") or payload.get("summary")
-        if summary:
-            ui_text = f"### Faktakoll\n\n{summary}"
     messages = [
         AIMessage(
             content="",
@@ -3164,29 +3239,15 @@ async def ai_compare_fact_check_node(
                 {"id": tool_call_id, "name": "fact_check_responses", "args": tool_args}
             ],
         ),
-        ToolMessage(
-            content=ui_text or str(tool_output),
-            tool_call_id=tool_call_id,
-            name="fact_check_responses",
-        ),
-        AIMessage(
-            content=ui_text or "",
-            name="ai_compare_fact_check",
-        ),
     ]
-    current_plan = state.get("current_plan")
-    from backend.deer_flow.prompts.planner_model import Plan, StepType
-    if isinstance(current_plan, Plan):
-        for step in current_plan.steps:
-            if not step.execution_res and step.step_type == StepType.AI_FACT_CHECK:
-                step.execution_res = "Fact check completed"
-                break
-    fact_check_json = json.dumps(payload, ensure_ascii=False) if payload else None
     return Command(
         update={
             **preserve_state_meta_fields(state),
-            "ai_compare_fact_check": payload or None,
-            "ai_compare_fact_check_json": fact_check_json,
+            "ai_compare_pending_tool": {
+                "step": "ai_compare_fact_check",
+                "tool_call_id": tool_call_id,
+                "tool_args": tool_args,
+            },
             "messages": messages,
             "current_plan": current_plan,
         },
@@ -3203,6 +3264,61 @@ async def ai_compare_meta_node(
         max_search_results=configurable.max_search_results,
         resources=state.get("resources", []),
     )
+    current_plan = state.get("current_plan")
+    from backend.deer_flow.prompts.planner_model import Plan, StepType
+    pending_tool = state.get("ai_compare_pending_tool") or {}
+    if pending_tool.get("step") == "ai_compare_meta":
+        tool_call_id = pending_tool.get("tool_call_id") or uuid4().hex
+        tool_args = pending_tool.get("tool_args") or {}
+        if not tool_args:
+            query = state.get("research_topic", "")
+            model_responses_json = state.get("ai_compare_responses_json") or json.dumps(
+                state.get("ai_compare_responses", []), ensure_ascii=False
+            )
+            analysis_json = state.get("ai_compare_fact_check_json") or json.dumps(
+                state.get("ai_compare_fact_check") or {}, ensure_ascii=False
+            )
+            tool_args = {
+                "query": query,
+                "model_responses_json": model_responses_json,
+                "analysis_json": analysis_json,
+            }
+        try:
+            tool_output = await run_meta_analysis.ainvoke(tool_args)
+        except Exception as exc:
+            tool_output = json.dumps({"error": str(exc)}, ensure_ascii=False)
+        payload = _parse_json_content(str(tool_output))
+        messages = [
+            ToolMessage(
+                content=str(tool_output),
+                tool_call_id=tool_call_id,
+                name="run_meta_analysis",
+            ),
+            AIMessage(
+                content=(json.dumps(payload, ensure_ascii=False) if payload else ""),
+                name="ai_compare_meta",
+            ),
+        ]
+        if isinstance(current_plan, Plan):
+            for step in current_plan.steps:
+                if not step.execution_res and step.step_type == StepType.AI_META:
+                    step.execution_res = "Meta analysis completed"
+                    break
+        meta_results = payload.get("meta_results") if payload else None
+        meta_payload = meta_results or payload
+        meta_json = json.dumps(meta_payload, ensure_ascii=False) if meta_payload else None
+        return Command(
+            update={
+                **preserve_state_meta_fields(state),
+                "ai_compare_pending_tool": None,
+                "ai_compare_meta": meta_payload,
+                "ai_compare_meta_json": meta_json,
+                "messages": messages,
+                "current_plan": current_plan,
+            },
+            goto="ai_compare_team",
+        )
+
     query = state.get("research_topic", "")
     model_responses_json = state.get("ai_compare_responses_json") or json.dumps(
         state.get("ai_compare_responses", []), ensure_ascii=False
@@ -3216,11 +3332,6 @@ async def ai_compare_meta_node(
         "model_responses_json": model_responses_json,
         "analysis_json": analysis_json,
     }
-    try:
-        tool_output = await run_meta_analysis.ainvoke(tool_args)
-    except Exception as exc:
-        tool_output = json.dumps({"error": str(exc)}, ensure_ascii=False)
-    payload = _parse_json_content(str(tool_output))
     messages = [
         AIMessage(
             content="",
@@ -3229,35 +3340,15 @@ async def ai_compare_meta_node(
                 {"id": tool_call_id, "name": "run_meta_analysis", "args": tool_args}
             ],
         ),
-        ToolMessage(
-            content=str(tool_output),
-            tool_call_id=tool_call_id,
-            name="run_meta_analysis",
-        ),
-        AIMessage(
-            content=(
-                json.dumps(payload, ensure_ascii=False)
-                if payload
-                else ""
-            ),
-            name="ai_compare_meta",
-        ),
     ]
-    current_plan = state.get("current_plan")
-    from backend.deer_flow.prompts.planner_model import Plan, StepType
-    if isinstance(current_plan, Plan):
-        for step in current_plan.steps:
-            if not step.execution_res and step.step_type == StepType.AI_META:
-                step.execution_res = "Meta analysis completed"
-                break
-    meta_results = payload.get("meta_results") if payload else None
-    meta_payload = meta_results or payload
-    meta_json = json.dumps(meta_payload, ensure_ascii=False) if meta_payload else None
     return Command(
         update={
             **preserve_state_meta_fields(state),
-            "ai_compare_meta": meta_payload,
-            "ai_compare_meta_json": meta_json,
+            "ai_compare_pending_tool": {
+                "step": "ai_compare_meta",
+                "tool_call_id": tool_call_id,
+                "tool_args": tool_args,
+            },
             "messages": messages,
             "current_plan": current_plan,
         },
@@ -3274,6 +3365,84 @@ async def ai_compare_synth_node(
         max_search_results=configurable.max_search_results,
         resources=state.get("resources", []),
     )
+    current_plan = state.get("current_plan")
+    from backend.deer_flow.prompts.planner_model import Plan, StepType
+    pending_tool = state.get("ai_compare_pending_tool") or {}
+    if pending_tool.get("step") == "ai_compare_synth":
+        tool_call_id = pending_tool.get("tool_call_id") or uuid4().hex
+        tool_args = pending_tool.get("tool_args") or {}
+        if not tool_args:
+            query = state.get("research_topic", "")
+            model_responses_json = state.get("ai_compare_responses_json") or json.dumps(
+                state.get("ai_compare_responses", []), ensure_ascii=False
+            )
+            analysis_json = state.get("ai_compare_fact_check_json") or json.dumps(
+                state.get("ai_compare_fact_check") or {}, ensure_ascii=False
+            )
+            meta_json = state.get("ai_compare_meta_json") or json.dumps(
+                state.get("ai_compare_meta") or {}, ensure_ascii=False
+            )
+            tool_args = {
+                "query": query,
+                "model_responses_json": model_responses_json,
+                "analysis_json": analysis_json,
+                "meta_json": meta_json,
+                "locale": state.get("locale", "en-US"),
+            }
+        try:
+            tool_result = await synthesize_optimal_answer.ainvoke(tool_args)
+        except Exception as exc:
+            tool_result = json.dumps({"error": str(exc)}, ensure_ascii=False)
+        payload = _parse_json_content(str(tool_result))
+        synthesis_payload = None
+        if isinstance(payload, dict):
+            synthesis_payload = payload.get("synthesis") or payload
+        elif payload:
+            synthesis_payload = payload
+        synthesis_json = (
+            json.dumps(synthesis_payload, ensure_ascii=False) if synthesis_payload else None
+        )
+        if isinstance(current_plan, Plan):
+            for step in current_plan.steps:
+                if not step.execution_res and step.step_type == StepType.AI_SYNTH:
+                    step.execution_res = "AI comparison synthesis completed"
+                    break
+        messages = [
+            ToolMessage(
+                content=(
+                    json.dumps(synthesis_payload, ensure_ascii=False)
+                    if synthesis_payload
+                    else str(tool_result)
+                ),
+                tool_call_id=tool_call_id,
+                name="synthesize_optimal_answer",
+            ),
+            AIMessage(
+                content=(
+                    synthesis_payload.get("synthesized_answer")
+                    if isinstance(synthesis_payload, dict)
+                    and synthesis_payload.get("synthesized_answer")
+                    else (
+                        synthesis_payload.get("synthesis")
+                        if isinstance(synthesis_payload, dict)
+                        else ""
+                    )
+                ),
+                name="ai_compare_synth",
+            ),
+        ]
+        return Command(
+            update={
+                **preserve_state_meta_fields(state),
+                "ai_compare_pending_tool": None,
+                "ai_compare_synthesis": synthesis_payload,
+                "ai_compare_synthesis_json": synthesis_json,
+                "messages": messages,
+                "current_plan": current_plan,
+            },
+            goto="ai_compare_team",
+        )
+
     query = state.get("research_topic", "")
     model_responses_json = state.get("ai_compare_responses_json") or json.dumps(
         state.get("ai_compare_responses", []), ensure_ascii=False
@@ -3284,7 +3453,6 @@ async def ai_compare_synth_node(
     meta_json = state.get("ai_compare_meta_json") or json.dumps(
         state.get("ai_compare_meta") or {}, ensure_ascii=False
     )
-
     tool_call_id = uuid4().hex
     tool_args = {
         "query": query,
@@ -3293,29 +3461,14 @@ async def ai_compare_synth_node(
         "meta_json": meta_json,
         "locale": state.get("locale", "en-US"),
     }
-    tool_result = await synthesize_optimal_answer.ainvoke(tool_args)
-    payload = _parse_json_content(str(tool_result))
-    synthesis_payload = None
-    if isinstance(payload, dict):
-        synthesis_payload = payload.get("synthesis") or payload
-    elif payload:
-        synthesis_payload = payload
-    synthesis_json = (
-        json.dumps(synthesis_payload, ensure_ascii=False) if synthesis_payload else None
-    )
-
-    current_plan = state.get("current_plan")
-    from backend.deer_flow.prompts.planner_model import Plan, StepType
-    if isinstance(current_plan, Plan):
-        for step in current_plan.steps:
-            if not step.execution_res and step.step_type == StepType.AI_SYNTH:
-                step.execution_res = "AI comparison synthesis completed"
-                break
     return Command(
         update={
             **preserve_state_meta_fields(state),
-            "ai_compare_synthesis": synthesis_payload,
-            "ai_compare_synthesis_json": synthesis_json,
+            "ai_compare_pending_tool": {
+                "step": "ai_compare_synth",
+                "tool_call_id": tool_call_id,
+                "tool_args": tool_args,
+            },
             "messages": [
                 AIMessage(
                     content="",
@@ -3327,29 +3480,7 @@ async def ai_compare_synth_node(
                             "args": tool_args,
                         }
                     ],
-                ),
-                ToolMessage(
-                    content=(
-                        json.dumps(synthesis_payload, ensure_ascii=False)
-                        if synthesis_payload
-                        else ""
-                    ),
-                    tool_call_id=tool_call_id,
-                    name="synthesize_optimal_answer",
-                ),
-                AIMessage(
-                    content=(
-                        synthesis_payload.get("synthesized_answer")
-                        if isinstance(synthesis_payload, dict)
-                        and synthesis_payload.get("synthesized_answer")
-                        else (
-                            synthesis_payload.get("synthesis")
-                            if isinstance(synthesis_payload, dict)
-                            else ""
-                        )
-                    ),
-                    name="ai_compare_synth",
-                ),
+                )
             ],
             "current_plan": current_plan,
         },

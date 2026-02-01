@@ -63,6 +63,7 @@ class State(MessagesState):
     ai_compare_synthesis: dict[str, Any] | None = None
     ai_compare_synthesis_json: str | None = None
     ai_compare_report_complete: bool = False
+    ai_compare_pending_tool: dict[str, Any] | None = None
     
     # Multi-Round Debate Engine mode
     enable_debate_mode: bool = False  # Enable multi-round debate mode
