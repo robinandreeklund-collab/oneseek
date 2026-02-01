@@ -3453,6 +3453,41 @@ async def ai_compare_meta_node(
 ) -> Command[Literal["ai_compare_team"]]:
     """Run meta-analysis on AI model responses."""
     configurable = Configuration.from_runnable_config(config)
+    def _build_meta_summary(meta_data: dict[str, Any], locale_value: str) -> str:
+        if not isinstance(meta_data, dict):
+            return ""
+        labels_en = {
+            "cognitive_properties": "Cognitive properties",
+            "integrity_objectivity": "Integrity & objectivity",
+            "stability_emotional": "Stability & emotional profile",
+            "adaptivity_system": "Adaptivity & system role",
+        }
+        labels_sv = {
+            "cognitive_properties": "Kognitiva egenskaper",
+            "integrity_objectivity": "Integritet & objektivitet",
+            "stability_emotional": "Stabilitet & emotionell profil",
+            "adaptivity_system": "Adaptivitet & systemroll",
+        }
+        label_map = labels_sv if locale_value.startswith("sv") else labels_en
+        sections = []
+        for key in [
+            "cognitive_properties",
+            "integrity_objectivity",
+            "stability_emotional",
+            "adaptivity_system",
+        ]:
+            item = meta_data.get(key)
+            if not item:
+                continue
+            if isinstance(item, dict):
+                text = item.get("analysis") or item.get("error")
+                if not text:
+                    text = json.dumps(item, ensure_ascii=False)
+            else:
+                text = str(item)
+            label = label_map.get(key, key.replace("_", " ").title())
+            sections.append(f"### {label}\n\n{text}")
+        return "\n\n".join(sections).strip()
     set_ai_comparison_context(
         max_search_results=configurable.max_search_results,
         resources=state.get("resources", []),
