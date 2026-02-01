@@ -312,6 +312,7 @@ class AIComparisonFlow:
         search_summary: str,
         draft: str = "",
         self_meta: str = "",
+        peer_responses: str = "",
         locale: str = "en-US",
     ) -> str:
         try:
@@ -321,6 +322,7 @@ class AIComparisonFlow:
                 "oneseek_search_summary": search_summary,
                 "oneseek_draft": draft,
                 "oneseek_self_meta": self_meta,
+                "oneseek_peer_responses": peer_responses,
             }
             messages = apply_prompt_template(prompt_name, state, None, locale)
             if messages and isinstance(messages[0], dict):
@@ -328,6 +330,27 @@ class AIComparisonFlow:
         except Exception as exc:
             logger.warning(f"Failed to render {prompt_name} prompt: {exc}")
         return ""
+
+    def _format_peer_responses(
+        self,
+        responses: List[Dict[str, Any]],
+        max_chars: int = 700,
+    ) -> str:
+        if not responses:
+            return ""
+        lines: list[str] = []
+        for resp in responses:
+            if not isinstance(resp, dict):
+                continue
+            name = resp.get("display_name") or resp.get("model") or "Model"
+            text = resp.get("response") or resp.get("error") or ""
+            text = str(text).strip()
+            if not text:
+                continue
+            if len(text) > max_chars:
+                text = text[:max_chars] + "..."
+            lines.append(f"### {name}\n{text}")
+        return "\n\n".join(lines).strip()
 
     def _build_oneseek_system_prompt(self, query: str, search_summary: str) -> str:
         return f"""You are OneSeek Local. Answer the user question with maximum quality.
@@ -364,7 +387,11 @@ User question:
 """
 
     async def query_model(
-        self, model_key: str, model: Any, query: str
+        self,
+        model_key: str,
+        model: Any,
+        query: str,
+        peer_responses_summary: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Query a single AI model and return its response.
@@ -378,12 +405,13 @@ User question:
             Dictionary with model response and metadata
         """
         display_name = AI_MODELS.get(model_key, {}).get("display_name", model_key)
-        cache_key = _build_cache_key("model", model_key, query)
-        cached = _MODEL_CACHE.get(cache_key)
-        if isinstance(cached, dict):
-            cached_payload = dict(cached)
-            cached_payload["cached"] = True
-            return cached_payload
+        if model_key != "oneseek-local":
+            cache_key = _build_cache_key("model", model_key, query)
+            cached = _MODEL_CACHE.get(cache_key)
+            if isinstance(cached, dict):
+                cached_payload = dict(cached)
+                cached_payload["cached"] = True
+                return cached_payload
 
         attempt = 0
         while True:
@@ -415,10 +443,23 @@ User question:
                                 search_summary = self._format_search_results(search_results)
                             except Exception as search_exc:
                                 logger.warning(f"OneSeek web search failed: {search_exc}")
+                    cache_key = _build_cache_key(
+                        "model",
+                        model_key,
+                        query,
+                        search_summary,
+                        peer_responses_summary or "",
+                    )
+                    cached = _MODEL_CACHE.get(cache_key)
+                    if isinstance(cached, dict):
+                        cached_payload = dict(cached)
+                        cached_payload["cached"] = True
+                        return cached_payload
                     system_prompt = self._render_oneseek_prompt(
                         "ai_compare_oneseek_system",
                         query,
                         search_summary,
+                        peer_responses=peer_responses_summary or "",
                         locale=locale,
                     )
                     if not system_prompt:
@@ -435,6 +476,7 @@ User question:
                         query,
                         search_summary,
                         draft=response_text,
+                        peer_responses=peer_responses_summary or "",
                         locale=locale,
                     )
                     self_meta_text = ""
@@ -462,6 +504,7 @@ User question:
                         search_summary,
                         draft=response_text,
                         self_meta=self_meta_text,
+                        peer_responses=peer_responses_summary or "",
                         locale=locale,
                     )
                     if revision_prompt:
@@ -508,7 +551,12 @@ User question:
                 await asyncio.sleep(backoff)
                 attempt += 1
 
-    async def query_single_model(self, model_key: str, query: str) -> Dict[str, Any]:
+    async def query_single_model(
+        self,
+        model_key: str,
+        query: str,
+        peer_responses: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
         """
         Query a single AI model by its key (for individual tool calls).
         
@@ -528,7 +576,13 @@ User question:
                 "error": f"Model {model_key} not available (check API key)",
             }
         
-        return await self.query_model(model_key, self.models[model_key], query)
+        peer_summary = self._format_peer_responses(peer_responses or [])
+        return await self.query_model(
+            model_key,
+            self.models[model_key],
+            query,
+            peer_responses_summary=peer_summary,
+        )
 
     async def parallel_query_all_models(self, query: str) -> List[Dict[str, Any]]:
         """
@@ -546,30 +600,56 @@ User question:
         
         logger.info(f"Starting parallel queries to {len(self.models)} models")
         
-        # Create tasks for all models
+        oneseek_model = self.models.get("oneseek-local")
+        other_models = {
+            key: model
+            for key, model in self.models.items()
+            if key != "oneseek-local"
+        }
+
         tasks = [
             self.query_model(model_key, model, query)
-            for model_key, model in self.models.items()
+            for model_key, model in other_models.items()
         ]
-        
-        # Execute all queries in parallel with asyncio.gather
+
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        # Process results and handle any exceptions
-        processed_results = []
+
+        processed_results: list[dict[str, Any]] = []
+        other_keys = list(other_models.keys())
         for i, result in enumerate(results):
+            model_key = other_keys[i]
             if isinstance(result, Exception):
-                model_key = list(self.models.keys())[i]
-                processed_results.append({
-                    "model": model_key,
-                    "display_name": AI_MODELS[model_key]["display_name"],
-                    "response": None,
-                    "success": False,
-                    "error": str(result),
-                })
+                processed_results.append(
+                    {
+                        "model": model_key,
+                        "display_name": AI_MODELS.get(model_key, {}).get("display_name", model_key),
+                        "response": None,
+                        "success": False,
+                        "error": str(result),
+                    }
+                )
             else:
                 processed_results.append(result)
-        
+
+        if oneseek_model:
+            peer_summary = self._format_peer_responses(processed_results)
+            try:
+                oneseek_result = await self.query_model(
+                    "oneseek-local",
+                    oneseek_model,
+                    query,
+                    peer_responses_summary=peer_summary,
+                )
+            except Exception as exc:
+                oneseek_result = {
+                    "model": "oneseek-local",
+                    "display_name": AI_MODELS.get("oneseek-local", {}).get("display_name", "OneSeek Local"),
+                    "response": None,
+                    "success": False,
+                    "error": str(exc),
+                }
+            processed_results.append(oneseek_result)
+
         logger.info(f"Completed parallel queries: {len(processed_results)} responses")
         return processed_results
 

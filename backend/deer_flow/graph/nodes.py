@@ -3345,6 +3345,10 @@ async def ai_compare_query_node(
         "locale": state.get("locale", "en-US"),
         "display_name": current_step.title if current_step else selected_model,
     }
+    if selected_model == "oneseek-local":
+        tool_args["peer_responses_json"] = state.get("ai_compare_responses_json") or json.dumps(
+            state.get("ai_compare_responses", []), ensure_ascii=False
+        )
     messages = [
         AIMessage(
             content="",

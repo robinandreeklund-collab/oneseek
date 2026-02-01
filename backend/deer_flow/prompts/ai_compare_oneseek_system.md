@@ -33,5 +33,8 @@ Rules:
 Web search summary (use these, do not invent sources):
 {{ oneseek_search_summary }}
 
+Other model responses (for context, do not copy verbatim):
+{{ oneseek_peer_responses }}
+
 User question:
 {{ research_topic }}

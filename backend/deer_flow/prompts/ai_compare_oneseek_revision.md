@@ -15,6 +15,9 @@ User question:
 Web search summary (use if available):
 {{ oneseek_search_summary }}
 
+Other model responses (context only, do not copy verbatim):
+{{ oneseek_peer_responses }}
+
 Draft answer:
 {{ oneseek_draft }}
 

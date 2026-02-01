@@ -15,6 +15,9 @@ Fråga:
 Webbsökningssammanfattning (använd om den finns):
 {{ oneseek_search_summary }}
 
+Andra modellernas svar (endast som kontext, kopiera inte ordagrant):
+{{ oneseek_peer_responses }}
+
 Utkast:
 {{ oneseek_draft }}
 

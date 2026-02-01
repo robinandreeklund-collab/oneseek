@@ -33,5 +33,8 @@ Regler:
 Webbsökningssammanfattning (använd dessa, hitta inte på källor):
 {{ oneseek_search_summary }}
 
+Andra modellernas svar (för kontext, kopiera inte ordagrant):
+{{ oneseek_peer_responses }}
+
 Fråga:
 {{ research_topic }}

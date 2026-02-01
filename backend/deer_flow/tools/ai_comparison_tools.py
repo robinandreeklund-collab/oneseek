@@ -227,7 +227,7 @@ async def query_grok4(query: str) -> str:
 
 
 @tool
-async def query_oneseek_local(query: str) -> str:
+async def query_oneseek_local(query: str, peer_responses_json: str | None = None) -> str:
     """
     Query OneSeek Local model.
     
@@ -239,7 +239,17 @@ async def query_oneseek_local(query: str) -> str:
     """
     try:
         comparison_flow = _get_flow()
-        response = await comparison_flow.query_single_model("oneseek-local", query)
+        peer_responses = []
+        if peer_responses_json:
+            try:
+                peer_responses = json.loads(peer_responses_json)
+            except json.JSONDecodeError:
+                peer_responses = []
+        response = await comparison_flow.query_single_model(
+            "oneseek-local",
+            query,
+            peer_responses=peer_responses,
+        )
         
         if response["success"]:
             content = response["response"]
