@@ -7,16 +7,20 @@
     <style>
       :root {
         color-scheme: dark;
-        --bg: #0b0b0b;
+        --bg: #0a0a0a;
         --panel: #111111;
         --panel-2: #151515;
         --panel-3: #1b1b1b;
         --border: #242424;
-        --border-2: #2f2f2f;
-        --text: #f2f2f2;
-        --muted: #b7b7b7;
-        --muted-2: #8c8c8c;
+        --border-2: #303030;
+        --text: #f3f3f3;
+        --muted: #b9b9b9;
+        --muted-2: #8e8e8e;
         --accent: #ffffff;
+        --shadow-soft: 0 20px 60px rgba(0, 0, 0, 0.45);
+        --shadow-tight: 0 10px 30px rgba(0, 0, 0, 0.35);
+        --glow: 0 0 0 1px rgba(255, 255, 255, 0.03);
+        --sidebar-width: 320px;
       }
 
       * {
@@ -26,7 +30,12 @@
       body {
         margin: 0;
         font-family: "Inter", "SF Pro Text", system-ui, -apple-system, sans-serif;
-        background: var(--bg);
+        background: radial-gradient(
+            1200px 600px at 50% -200px,
+            rgba(255, 255, 255, 0.05),
+            transparent 60%
+          ),
+          var(--bg);
         color: var(--text);
         height: 100vh;
         overflow: hidden;
@@ -38,14 +47,14 @@
       }
 
       .rail {
-        width: 64px;
+        width: 62px;
         background: #0a0a0a;
-        border-right: 1px solid var(--border);
+        border-right: 1px solid #1e1e1e;
         display: flex;
         flex-direction: column;
         align-items: center;
-        padding: 16px 0;
-        gap: 14px;
+        padding: 14px 0;
+        gap: 12px;
       }
 
       .rail-logo {
@@ -57,19 +66,26 @@
       }
 
       .rail-btn {
-        width: 36px;
-        height: 36px;
-        border-radius: 12px;
+        width: 34px;
+        height: 34px;
+        border-radius: 11px;
         border: 1px solid transparent;
         background: transparent;
-        color: var(--muted);
+        color: #9e9e9e;
         display: grid;
         place-items: center;
+        transition: border 0.2s ease, background 0.2s ease, color 0.2s ease;
       }
 
       .rail-btn.active {
-        background: var(--panel);
-        border-color: var(--border);
+        background: #121212;
+        border-color: #2a2a2a;
+        color: var(--text);
+        box-shadow: var(--glow);
+      }
+
+      .rail-btn:hover {
+        border-color: #2a2a2a;
         color: var(--text);
       }
 
@@ -102,26 +118,35 @@
       }
 
       .topbar .ghost {
-        border: 1px solid var(--border);
-        background: var(--panel);
+        border: 1px solid #2a2a2a;
+        background: #111111;
         color: var(--text);
-        padding: 8px 14px;
+        padding: 7px 14px;
         border-radius: 999px;
         font-size: 13px;
         display: inline-flex;
         align-items: center;
         gap: 8px;
+        box-shadow: var(--glow);
+      }
+
+      .topbar .ghost.share {
+        background: #f5f5f5;
+        color: #101010;
+        border-color: #f5f5f5;
+        font-weight: 500;
       }
 
       .icon-btn {
-        width: 32px;
-        height: 32px;
-        border-radius: 10px;
-        border: 1px solid var(--border);
-        background: var(--panel);
+        width: 30px;
+        height: 30px;
+        border-radius: 9px;
+        border: 1px solid #2a2a2a;
+        background: #111111;
         display: grid;
         place-items: center;
         color: var(--text);
+        box-shadow: var(--glow);
       }
 
       .topbar-landing,
@@ -166,33 +191,33 @@
         display: inline-flex;
         align-items: center;
         gap: 12px;
-        font-size: 34px;
+        font-size: 36px;
         font-weight: 600;
-        letter-spacing: 0.2px;
+        letter-spacing: 0.3px;
       }
 
       .brand-mark {
-        width: 38px;
-        height: 38px;
+        width: 40px;
+        height: 40px;
       }
 
       .prompt {
         width: min(640px, 78vw);
-        background: var(--panel);
-        border: 1px solid var(--border);
+        background: linear-gradient(180deg, #121212 0%, #0f0f0f 100%);
+        border: 1px solid #2a2a2a;
         border-radius: 999px;
         padding: 12px 14px 12px 16px;
         display: flex;
         align-items: center;
         gap: 12px;
         color: var(--muted);
-        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02);
+        box-shadow: var(--shadow-tight);
       }
 
       .prompt .placeholder {
         flex: 1;
-        color: var(--muted);
-        font-size: 14px;
+        color: #bdbdbd;
+        font-size: 14.5px;
         text-align: left;
       }
 
@@ -202,17 +227,34 @@
         gap: 6px;
         color: var(--text);
         font-size: 13px;
+        padding: 6px 8px;
+        border-radius: 999px;
+        background: #121212;
+        border: 1px solid #2a2a2a;
       }
 
       .prompt .mic {
-        width: 30px;
-        height: 30px;
+        width: 32px;
+        height: 32px;
         border-radius: 50%;
-        background: var(--accent);
+        background: #f5f5f5;
         color: #000;
-        display: grid;
-        place-items: center;
-        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+      }
+
+      .prompt .mic span {
+        width: 2px;
+        height: 10px;
+        border-radius: 2px;
+        background: #111111;
+        display: block;
+      }
+
+      .prompt .mic span:nth-child(2) {
+        height: 14px;
       }
 
       .pill-row {
@@ -223,8 +265,8 @@
       }
 
       .pill-btn {
-        border: 1px solid var(--border);
-        background: var(--panel);
+        border: 1px solid #2a2a2a;
+        background: #0f0f0f;
         color: var(--text);
         padding: 8px 14px;
         border-radius: 999px;
@@ -232,15 +274,16 @@
         display: inline-flex;
         align-items: center;
         gap: 8px;
+        box-shadow: var(--glow);
       }
 
       .chat-area {
-        width: min(760px, 82vw);
+        width: min(740px, 82vw);
         margin: 0 auto;
-        padding-top: 96px;
+        padding-top: 92px;
         display: flex;
         flex-direction: column;
-        gap: 18px;
+        gap: 16px;
         position: relative;
       }
 
@@ -252,7 +295,8 @@
 
       .assistant-text {
         font-size: 16px;
-        line-height: 1.55;
+        line-height: 1.6;
+        font-weight: 500;
       }
 
       .meta-row {
@@ -273,14 +317,15 @@
         width: 24px;
         height: 24px;
         border-radius: 8px;
-        border: 1px solid var(--border);
-        background: var(--panel);
+        border: 1px solid #2a2a2a;
+        background: #0f0f0f;
         display: grid;
         place-items: center;
+        color: #d4d4d4;
       }
 
       .suggestion {
-        color: var(--muted);
+        color: #c3c3c3;
         font-size: 14px;
         display: flex;
         align-items: center;
@@ -289,9 +334,9 @@
 
       .bubble-user {
         align-self: flex-end;
-        background: var(--panel-2);
-        border: 1px solid var(--border);
-        padding: 8px 14px;
+        background: #151515;
+        border: 1px solid #2a2a2a;
+        padding: 8px 16px;
         border-radius: 999px;
         font-size: 13px;
       }
@@ -306,20 +351,22 @@
       .assistant-block h3 {
         margin: 0 0 10px;
         font-size: 16px;
+        font-weight: 600;
       }
 
       .assistant-block p {
         margin: 0 0 10px;
-        color: var(--muted);
+        color: #c6c6c6;
         line-height: 1.5;
       }
 
       .code-card {
-        background: #0f0f0f;
-        border: 1px solid var(--border);
+        background: #0d0d0d;
+        border: 1px solid #232323;
         border-radius: 12px;
         padding: 12px;
         margin-top: 10px;
+        box-shadow: var(--glow);
       }
 
       .code-header {
@@ -327,7 +374,7 @@
         align-items: center;
         justify-content: space-between;
         font-size: 12px;
-        color: var(--muted);
+        color: #b5b5b5;
         margin-bottom: 8px;
       }
 
@@ -348,16 +395,17 @@
         display: inline-flex;
         align-items: center;
         gap: 8px;
-        background: var(--panel);
-        border: 1px solid var(--border);
+        background: #111111;
+        border: 1px solid #2a2a2a;
         padding: 6px 12px;
         border-radius: 999px;
-        color: var(--muted);
+        color: #bdbdbd;
         font-size: 12px;
         position: absolute;
         bottom: 92px;
         left: 50%;
         transform: translateX(-50%);
+        box-shadow: var(--glow);
       }
 
       .composer {
@@ -365,7 +413,7 @@
         bottom: 28px;
         left: 50%;
         transform: translateX(-50%);
-        width: min(760px, 82vw);
+        width: min(740px, 82vw);
       }
 
       .composer .prompt {
@@ -377,18 +425,39 @@
         right: 0;
         top: 0;
         height: 100%;
-        width: 320px;
-        background: #0d0d0d;
-        border-left: 1px solid var(--border);
+        width: var(--sidebar-width);
+        background: linear-gradient(180deg, #0c0c0c 0%, #0a0a0a 100%);
+        border-left: 1px solid #1f1f1f;
         padding: 18px 16px;
         transform: translateX(100%);
         transition: transform 0.3s ease;
         z-index: 3;
+        box-shadow: -10px 0 40px rgba(0, 0, 0, 0.5);
+      }
+
+      .sidebar-resizer {
+        position: absolute;
+        left: -6px;
+        top: 0;
+        width: 12px;
+        height: 100%;
+        cursor: col-resize;
+      }
+
+      .sidebar-resizer::before {
+        content: "";
+        position: absolute;
+        left: 6px;
+        top: 0;
+        width: 1px;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.04);
       }
 
       .sidebar h4 {
         margin: 0;
         font-size: 15px;
+        font-weight: 600;
       }
 
       .sidebar-head {
@@ -404,8 +473,8 @@
         gap: 10px;
         color: var(--text);
         font-size: 13px;
-        padding: 8px 6px;
-        border-bottom: 1px solid var(--border);
+        padding: 10px 6px;
+        border-bottom: 1px solid #1f1f1f;
       }
 
       body[data-view="sidebar"] .sidebar {
@@ -413,7 +482,7 @@
       }
 
       body[data-view="sidebar"] .main {
-        padding-right: 320px;
+        padding-right: var(--sidebar-width);
       }
 
     </style>
@@ -509,8 +578,8 @@
         </div>
 
         <div class="topbar topbar-chat">
-          <div class="icon-btn" aria-hidden="true">...</div>
-          <div class="ghost">
+          <div class="icon-btn" aria-hidden="true">···</div>
+          <div class="ghost share">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
               <path
                 d="M12 5v10m0 0l-4-4m4 4l4-4"
@@ -525,7 +594,11 @@
           </div>
           <div class="icon-btn" aria-hidden="true">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-              <path d="M5 12h14" stroke="currentColor" stroke-width="2" />
+              <path
+                d="M12 20l7-7-2-2-7 7-4 1 1-4 7-7 2 2"
+                stroke="currentColor"
+                stroke-width="2"
+              />
             </svg>
           </div>
         </div>
@@ -558,9 +631,10 @@
             <div class="prompt">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                 <path
-                  d="M9 12l6-6 3 3-6 6-4 1 1-4z"
+                  d="M7 13l7-7a3 3 0 0 1 4 4l-8 8a4 4 0 0 1-6-6l8-8"
                   stroke="currentColor"
                   stroke-width="2"
+                  stroke-linecap="round"
                 />
               </svg>
               <div class="placeholder">Hur kan jag hjälpa dig idag?</div>
@@ -573,7 +647,11 @@
                   <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="2" />
                 </svg>
               </div>
-              <div class="mic">|||</div>
+              <div class="mic">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
             </div>
             <div class="pill-row">
               <button class="pill-btn">
@@ -600,7 +678,7 @@
                   <path d="M9 9h6" stroke="currentColor" stroke-width="2" />
                   <path d="M9 15h6" stroke="currentColor" stroke-width="2" />
                 </svg>
-                Voice Chat
+                Röstchatt
               </button>
             </div>
           </div>
@@ -697,9 +775,10 @@ while True:
             <div class="prompt">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                 <path
-                  d="M9 12l6-6 3 3-6 6-4 1 1-4z"
+                  d="M7 13l7-7a3 3 0 0 1 4 4l-8 8a4 4 0 0 1-6-6l8-8"
                   stroke="currentColor"
                   stroke-width="2"
+                  stroke-linecap="round"
                 />
               </svg>
               <div class="placeholder">Hur kan OneSeek hjälpa?</div>
@@ -712,21 +791,64 @@ while True:
                   <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="2" />
                 </svg>
               </div>
-              <div class="mic">|||</div>
+              <div class="mic">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
             </div>
           </div>
         </section>
       </main>
 
       <aside class="sidebar">
+        <div class="sidebar-resizer" data-resizer></div>
         <div class="sidebar-head">
           <h4>Tankar</h4>
           <div class="icon-btn" aria-hidden="true">✕</div>
         </div>
         <div class="sidebar-item">
-          <span>⚡</span> Kör python-kod
+          <span>⚡</span> Körd python-kod
         </div>
       </aside>
     </div>
+    <script>
+      (() => {
+        const resizer = document.querySelector("[data-resizer]");
+        if (!resizer) return;
+        const minWidth = 260;
+        const maxWidth = 520;
+        let dragging = false;
+
+        const onMove = (event) => {
+          if (!dragging) return;
+          const nextWidth = Math.min(
+            maxWidth,
+            Math.max(minWidth, window.innerWidth - event.clientX)
+          );
+          document.documentElement.style.setProperty(
+            "--sidebar-width",
+            `${nextWidth}px`
+          );
+        };
+
+        const stopDrag = () => {
+          if (!dragging) return;
+          dragging = false;
+          document.body.style.cursor = "";
+          document.body.style.userSelect = "";
+        };
+
+        resizer.addEventListener("mousedown", (event) => {
+          dragging = true;
+          document.body.style.cursor = "col-resize";
+          document.body.style.userSelect = "none";
+          event.preventDefault();
+        });
+
+        window.addEventListener("mousemove", onMove);
+        window.addEventListener("mouseup", stopDrag);
+      })();
+    </script>
   </body>
 </html>
