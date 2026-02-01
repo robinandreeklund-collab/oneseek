@@ -3099,7 +3099,7 @@ async def ai_compare_query_node(
             ui_text = f"### {name}\n\n(No response)"
     messages = [
         AIMessage(
-            content="",
+            content=ui_text or "",
             name="ai_compare_query",
             tool_calls=[
                 {
@@ -3154,7 +3154,7 @@ async def ai_compare_fact_check_node(
             ui_text = f"### Faktakoll\n\n{summary}"
     messages = [
         AIMessage(
-            content="",
+            content=ui_text or "",
             name="ai_compare_fact_check",
             tool_calls=[
                 {"id": tool_call_id, "name": "fact_check_responses", "args": tool_args}
@@ -3215,7 +3215,11 @@ async def ai_compare_meta_node(
     payload = _parse_json_content(str(tool_output))
     messages = [
         AIMessage(
-            content="",
+            content=(
+                json.dumps(payload, ensure_ascii=False)
+                if payload
+                else ""
+            ),
             name="ai_compare_meta",
             tool_calls=[
                 {"id": tool_call_id, "name": "run_meta_analysis", "args": tool_args}
@@ -3302,7 +3306,16 @@ async def ai_compare_synth_node(
             "ai_compare_synthesis_json": synthesis_json,
             "messages": [
                 AIMessage(
-                    content="",
+                    content=(
+                        synthesis_payload.get("synthesized_answer")
+                        if isinstance(synthesis_payload, dict)
+                        and synthesis_payload.get("synthesized_answer")
+                        else (
+                            synthesis_payload.get("synthesis")
+                            if isinstance(synthesis_payload, dict)
+                            else ""
+                        )
+                    ),
                     name="ai_compare_synth",
                     tool_calls=[
                         {
