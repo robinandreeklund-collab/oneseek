@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Grok Chat Demo 2 - Split Panel</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0b0d;
+        --panel: #141416;
+        --panel-2: #17181b;
+        --border: #23242a;
+        --text: #e7e7ea;
+        --muted: #9ca3af;
+        --accent: #7dd3fc;
+        --accent-2: #a78bfa;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        font-family: "Inter", "SF Pro Text", system-ui, -apple-system, sans-serif;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 64px 1fr 360px;
+        min-height: 100vh;
+      }
+
+      .rail {
+        background: #0a0a0c;
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px 0;
+        gap: 18px;
+      }
+
+      .rail .icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+      }
+
+      .rail .icon.active {
+        border-color: rgba(125, 211, 252, 0.6);
+      }
+
+      .chat {
+        display: flex;
+        flex-direction: column;
+        padding: 28px 40px 110px;
+        gap: 22px;
+      }
+
+      .topbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .message {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .message.user {
+        align-items: flex-end;
+      }
+
+      .bubble {
+        max-width: 680px;
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 14px 16px;
+        line-height: 1.5;
+        font-size: 14px;
+      }
+
+      .bubble.user {
+        background: #111215;
+        border-color: rgba(125, 211, 252, 0.3);
+      }
+
+      .meta {
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      .composer {
+        position: fixed;
+        left: 64px;
+        right: 360px;
+        bottom: 24px;
+        display: flex;
+        justify-content: center;
+      }
+
+      .composer-inner {
+        width: min(840px, 100%);
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        display: flex;
+        align-items: center;
+        padding: 10px 14px;
+        gap: 10px;
+      }
+
+      .composer-inner input {
+        flex: 1;
+        background: transparent;
+        border: none;
+        color: var(--text);
+        font-size: 14px;
+        outline: none;
+      }
+
+      .composer-inner button {
+        background: linear-gradient(135deg, rgba(125, 211, 252, 0.2), rgba(167, 139, 250, 0.2));
+        border: 1px solid rgba(125, 211, 252, 0.4);
+        color: var(--text);
+        padding: 8px 14px;
+        border-radius: 999px;
+        font-size: 12px;
+      }
+
+      .panel {
+        background: var(--panel);
+        border-left: 1px solid var(--border);
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .panel-tabs {
+        display: flex;
+        gap: 8px;
+        font-size: 12px;
+      }
+
+      .panel-tabs span {
+        padding: 6px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: #0f1013;
+        color: var(--muted);
+      }
+
+      .panel-tabs .active {
+        color: var(--text);
+        border-color: rgba(125, 211, 252, 0.6);
+      }
+
+      .panel-card {
+        background: #111215;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .panel-card h4 {
+        font-size: 13px;
+      }
+
+      .panel-card p {
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.4;
+      }
+
+      .thumb-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+      }
+
+      .thumb {
+        background: #1a1b20;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding-top: 70%;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="layout">
+      <aside class="rail">
+        <div class="icon active"></div>
+        <div class="icon"></div>
+        <div class="icon"></div>
+        <div class="icon"></div>
+        <div class="icon"></div>
+      </aside>
+      <main class="chat">
+        <div class="topbar">
+          <span>Session: Market research</span>
+          <span>Model: Automatic</span>
+        </div>
+        <div class="message user">
+          <div class="bubble user">
+            Give me a quick comparison of three AI chat tools and their strengths.
+          </div>
+          <div class="meta">User</div>
+        </div>
+        <div class="message">
+          <div class="bubble">
+            Here is a fast comparison with a focus on positioning and product
+            experience:
+            <ul>
+              <li>Tool A: polished search plus citations.</li>
+              <li>Tool B: strong coding and execution flow.</li>
+              <li>Tool C: lightweight chat with rich context panels.</li>
+            </ul>
+          </div>
+          <div class="meta">Assistant - 2 sources</div>
+        </div>
+        <div class="message">
+          <div class="bubble">
+            Want a deeper breakdown, price grid, or a product narrative?
+          </div>
+          <div class="meta">Assistant</div>
+        </div>
+      </main>
+      <aside class="panel">
+        <div class="panel-tabs">
+          <span class="active">Research</span>
+          <span>Artifacts</span>
+          <span>History</span>
+        </div>
+        <div class="panel-card">
+          <h4>Summary</h4>
+          <p>
+            Auto-curated notes, sources, and side outputs live here while you
+            chat.
+          </p>
+        </div>
+        <div class="panel-card">
+          <h4>Sources</h4>
+          <p>2 links attached from the last answer.</p>
+        </div>
+        <div class="panel-card">
+          <h4>Generated assets</h4>
+          <div class="thumb-grid">
+            <div class="thumb"></div>
+            <div class="thumb"></div>
+            <div class="thumb"></div>
+            <div class="thumb"></div>
+            <div class="thumb"></div>
+            <div class="thumb"></div>
+          </div>
+        </div>
+      </aside>
+    </div>
+    <div class="composer">
+      <div class="composer-inner">
+        <input type="text" placeholder="Ask a follow up..." />
+        <button>Send</button>
+      </div>
+    </div>
+  </body>
+</html>

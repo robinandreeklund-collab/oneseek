@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Grok Chat Demo 3 - Threaded Workspace</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0b0d;
+        --panel: #141416;
+        --panel-2: #17181b;
+        --border: #23242a;
+        --text: #e7e7ea;
+        --muted: #9ca3af;
+        --accent: #7dd3fc;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        font-family: "Inter", "SF Pro Text", system-ui, -apple-system, sans-serif;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 64px 280px 1fr 320px;
+        min-height: 100vh;
+      }
+
+      .rail {
+        background: #0a0a0c;
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px 0;
+        gap: 16px;
+      }
+
+      .rail .icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+      }
+
+      .threads {
+        background: #101114;
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        padding: 24px 18px;
+      }
+
+      .threads h3 {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 1.2px;
+        color: var(--muted);
+      }
+
+      .thread-item {
+        padding: 12px;
+        border-radius: 12px;
+        border: 1px solid transparent;
+        background: #0f1013;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .thread-item.active {
+        border-color: rgba(125, 211, 252, 0.6);
+        background: #12141a;
+      }
+
+      .thread-item span {
+        font-size: 13px;
+      }
+
+      .thread-item small {
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      .chat {
+        padding: 28px 40px 110px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+
+      .message {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 14px 16px;
+        line-height: 1.5;
+        font-size: 14px;
+      }
+
+      .message.user {
+        background: #111215;
+        align-self: flex-end;
+        border-color: rgba(125, 211, 252, 0.3);
+      }
+
+      .message-meta {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 6px;
+      }
+
+      .composer {
+        position: fixed;
+        left: 64px;
+        right: 320px;
+        bottom: 24px;
+        display: flex;
+        justify-content: center;
+      }
+
+      .composer-inner {
+        width: min(820px, 100%);
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        display: flex;
+        align-items: center;
+        padding: 10px 14px;
+        gap: 10px;
+      }
+
+      .composer-inner input {
+        flex: 1;
+        background: transparent;
+        border: none;
+        color: var(--text);
+        font-size: 14px;
+        outline: none;
+      }
+
+      .composer-inner button {
+        background: rgba(125, 211, 252, 0.2);
+        border: 1px solid rgba(125, 211, 252, 0.4);
+        color: var(--text);
+        padding: 8px 14px;
+        border-radius: 999px;
+        font-size: 12px;
+      }
+
+      .panel {
+        background: var(--panel);
+        border-left: 1px solid var(--border);
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      .panel h4 {
+        font-size: 12px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 1.1px;
+      }
+
+      .panel-card {
+        background: #111215;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .panel-card span {
+        font-size: 13px;
+      }
+
+      .panel-card p {
+        font-size: 12px;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="layout">
+      <aside class="rail">
+        <div class="icon"></div>
+        <div class="icon"></div>
+        <div class="icon"></div>
+        <div class="icon"></div>
+        <div class="icon"></div>
+      </aside>
+      <aside class="threads">
+        <h3>Threads</h3>
+        <div class="thread-item active">
+          <span>Product rollout plan</span>
+          <small>2m ago</small>
+        </div>
+        <div class="thread-item">
+          <span>Marketing copy ideas</span>
+          <small>Yesterday</small>
+        </div>
+        <div class="thread-item">
+          <span>Legal summary</span>
+          <small>2 days ago</small>
+        </div>
+        <div class="thread-item">
+          <span>Support macros</span>
+          <small>Last week</small>
+        </div>
+      </aside>
+      <main class="chat">
+        <div class="message user">
+          Draft a rollout plan for the next quarter.
+          <div class="message-meta">User</div>
+        </div>
+        <div class="message">
+          Here is a three-phase rollout plan with milestones, owners, and risk
+          checks. We can expand each phase into tasks and timelines.
+          <div class="message-meta">Assistant</div>
+        </div>
+        <div class="message">
+          Phase 1: Internal enablement. Phase 2: Limited beta. Phase 3: Public
+          launch and growth.
+          <div class="message-meta">Assistant</div>
+        </div>
+      </main>
+      <aside class="panel">
+        <h4>Context</h4>
+        <div class="panel-card">
+          <span>Active tools</span>
+          <p>Planner, Timeline, Risk review</p>
+        </div>
+        <div class="panel-card">
+          <span>Notes</span>
+          <p>Stakeholders: Product, Support, Sales, Legal.</p>
+        </div>
+        <div class="panel-card">
+          <span>Files</span>
+          <p>rollout-brief.pdf, launch-checklist.docx</p>
+        </div>
+      </aside>
+    </div>
+    <div class="composer">
+      <div class="composer-inner">
+        <input type="text" placeholder="Continue the plan..." />
+        <button>Send</button>
+      </div>
+    </div>
+  </body>
+</html>

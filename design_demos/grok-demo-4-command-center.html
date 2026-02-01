@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Grok Chat Demo 4 - Command Center</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0b0d;
+        --panel: #141416;
+        --panel-2: #17181b;
+        --border: #23242a;
+        --text: #e7e7ea;
+        --muted: #9ca3af;
+        --accent: #7dd3fc;
+        --accent-2: #a78bfa;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        font-family: "Inter", "SF Pro Text", system-ui, -apple-system, sans-serif;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 64px 1fr 320px;
+        min-height: 100vh;
+      }
+
+      .rail {
+        background: #0a0a0c;
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px 0;
+        gap: 16px;
+      }
+
+      .rail .icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+      }
+
+      .content {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        padding: 24px 36px 120px;
+      }
+
+      .topbar {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 10px 14px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        justify-content: space-between;
+      }
+
+      .topbar .search {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .topbar .pill {
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 6px 12px;
+        font-size: 12px;
+        color: var(--muted);
+        background: #0f1013;
+      }
+
+      .message {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 14px 16px;
+        line-height: 1.5;
+        font-size: 14px;
+      }
+
+      .message.user {
+        align-self: flex-end;
+        background: #111215;
+        border-color: rgba(125, 211, 252, 0.3);
+      }
+
+      .message-meta {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 6px;
+      }
+
+      .action-chips {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .action-chips span {
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 6px 12px;
+        font-size: 12px;
+        color: var(--muted);
+        background: #0f1013;
+      }
+
+      .composer {
+        position: fixed;
+        left: 64px;
+        right: 320px;
+        bottom: 24px;
+        display: flex;
+        justify-content: center;
+      }
+
+      .composer-inner {
+        width: min(900px, 100%);
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 14px;
+      }
+
+      .composer-inner input {
+        flex: 1;
+        background: transparent;
+        border: none;
+        color: var(--text);
+        font-size: 14px;
+        outline: none;
+      }
+
+      .composer-inner button {
+        background: linear-gradient(135deg, rgba(125, 211, 252, 0.2), rgba(167, 139, 250, 0.2));
+        border: 1px solid rgba(125, 211, 252, 0.4);
+        color: var(--text);
+        padding: 8px 14px;
+        border-radius: 999px;
+        font-size: 12px;
+      }
+
+      .panel {
+        background: var(--panel);
+        border-left: 1px solid var(--border);
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      .panel h4 {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 1.1px;
+        color: var(--muted);
+      }
+
+      .panel-card {
+        background: #111215;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .panel-card span {
+        font-size: 13px;
+      }
+
+      .panel-card p {
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.4;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="layout">
+      <aside class="rail">
+        <div class="icon"></div>
+        <div class="icon"></div>
+        <div class="icon"></div>
+        <div class="icon"></div>
+        <div class="icon"></div>
+      </aside>
+      <main class="content">
+        <div class="topbar">
+          <div class="search">Command palette: ask, run, or search</div>
+          <div class="pill">Automatic</div>
+          <div class="pill">Public</div>
+        </div>
+        <div class="message user">
+          Build a two-week roadmap for the design refresh.
+          <div class="message-meta">User</div>
+        </div>
+        <div class="message">
+          Week 1 focuses on audit, references, and high-level UI primitives.
+          Week 2 moves into prototypes, review, and alignment.
+          <div class="message-meta">Assistant</div>
+        </div>
+        <div class="message">
+          I can produce a checklist, timeline, or a slide outline.
+          <div class="message-meta">Assistant</div>
+        </div>
+        <div class="action-chips">
+          <span>Generate checklist</span>
+          <span>Draft timeline</span>
+          <span>Request feedback</span>
+        </div>
+      </main>
+      <aside class="panel">
+        <h4>Actions</h4>
+        <div class="panel-card">
+          <span>Steps</span>
+          <p>3 tasks created in the backlog.</p>
+        </div>
+        <div class="panel-card">
+          <span>Files</span>
+          <p>design-brief.pdf, audit-notes.md</p>
+        </div>
+        <div class="panel-card">
+          <span>Reminders</span>
+          <p>Schedule review with product and design.</p>
+        </div>
+      </aside>
+    </div>
+    <div class="composer">
+      <div class="composer-inner">
+        <input type="text" placeholder="Continue the roadmap..." />
+        <button>Send</button>
+      </div>
+    </div>
+  </body>
+</html>
