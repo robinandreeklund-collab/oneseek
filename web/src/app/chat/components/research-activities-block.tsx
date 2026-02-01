@@ -48,10 +48,34 @@ export function ResearchActivitiesBlock({
   const activityIds = useStore((state) =>
     state.researchActivityIds.get(researchId),
   );
+  const messages = useStore((state) => state.messages);
   const ongoing = useStore((state) => state.ongoingResearchId === researchId);
+  const filteredActivityIds = useMemo(() => {
+    if (!activityIds) return [];
+    const seen = new Set<string>();
+    return activityIds.filter((activityId) => {
+      const message = messages.get(activityId);
+      if (!message) {
+        return true;
+      }
+      if (message.agent === "ai_compare_query") {
+        const contentKey = (message.content ?? "")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (!contentKey) {
+          return false;
+        }
+        if (seen.has(contentKey)) {
+          return false;
+        }
+        seen.add(contentKey);
+      }
+      return true;
+    });
+  }, [activityIds, messages]);
   
   // Guard against undefined activityIds
-  if (!activityIds || activityIds.length === 0) {
+  if (!activityIds || filteredActivityIds.length === 0) {
     return (
       <>
         {ongoing && <LoadingAnimation className="mx-4 my-12" />}
@@ -62,7 +86,7 @@ export function ResearchActivitiesBlock({
   return (
     <>
       <ul className={cn("flex flex-col py-4", className)}>
-        {activityIds.map(
+        {filteredActivityIds.map(
           (activityId, i) => {
             // Performance optimization: limit animations for large lists
             const shouldAnimate = i < MAX_ANIMATED_ITEMS;
