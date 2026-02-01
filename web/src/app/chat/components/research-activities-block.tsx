@@ -109,16 +109,11 @@ const ActivityMessage = React.memo(({ messageId }: { messageId: string }) => {
     const locale = useLocale();
     const isSwedish = locale.startsWith("sv");
     const agentLabelMap: Record<string, string> = {
-      ai_compare_query: isSwedish ? "Modellerna svarar" : "Model responses",
       ai_compare_fact_check: isSwedish ? "Faktakoll" : "Fact check",
       ai_compare_meta: isSwedish ? "Meta-analys" : "Meta analysis",
       ai_compare_synth: isSwedish ? "Syntes" : "Synthesis",
     };
-    if (
-      message.content &&
-      message.agent &&
-      agentLabelMap[message.agent]
-    ) {
+    if (message.content && message.agent && agentLabelMap[message.agent]) {
       const label = agentLabelMap[message.agent];
       return (
         <div className="px-4 py-2">
@@ -132,7 +127,12 @@ const ActivityMessage = React.memo(({ messageId }: { messageId: string }) => {
       );
     }
     // Skip reporter messages (they're shown in the Report tab)
-    if (message.agent !== "reporter" && message.agent !== "ai_compare_reporter" && message.content) {
+    if (
+      message.agent !== "reporter" &&
+      message.agent !== "ai_compare_reporter" &&
+      message.agent !== "ai_compare_query" &&
+      message.content
+    ) {
       return (
         <div className="px-4 py-2">
           <Markdown animated checkLinkCredibility>
