@@ -64,7 +64,7 @@ export function ResearchActivitiesBlock({
         continue;
       }
       if (message.agent === "ai_compare_query" && message.toolCalls?.length) {
-        let responseId: string | undefined;
+        const candidateIds: string[] = [];
         for (let j = i + 1; j < activityIds.length; j += 1) {
           const nextId = activityIds[j];
           if (consumed.has(nextId)) continue;
@@ -77,15 +77,34 @@ export function ResearchActivitiesBlock({
             nextMessage.agent === "ai_compare_query"
             && !nextMessage.toolCalls?.length
           ) {
-            const contentKey = (nextMessage.content ?? "")
-              .replace(/\s+/g, " ")
-              .trim();
-            if (contentKey && !seenContent.has(contentKey)) {
-              responseId = nextId;
-              seenContent.add(contentKey);
-            }
+            candidateIds.push(nextId);
             consumed.add(nextId);
-            break;
+          }
+        }
+
+        let responseId: string | undefined;
+        let bestScore = -1;
+        for (const candidateId of candidateIds) {
+          const candidate = messages.get(candidateId);
+          if (!candidate) continue;
+          const content = (candidate.content ?? "").trim();
+          const contentKey = content.replace(/\s+/g, " ").trim();
+          if (!contentKey || seenContent.has(contentKey)) {
+            continue;
+          }
+          const hasHeading = /^###\s+/m.test(content);
+          const score = (hasHeading ? 10000 : 0) + content.length;
+          if (score > bestScore) {
+            bestScore = score;
+            responseId = candidateId;
+          }
+        }
+        if (responseId) {
+          const contentKey = (messages.get(responseId)?.content ?? "")
+            .replace(/\s+/g, " ")
+            .trim();
+          if (contentKey) {
+            seenContent.add(contentKey);
           }
         }
         items.push({ id: activityId, responseId });
