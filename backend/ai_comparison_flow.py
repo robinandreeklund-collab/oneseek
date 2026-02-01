@@ -368,9 +368,9 @@ User question:
                             SELECTED_SEARCH_ENGINE,
                         )
                         cached_search = _SEARCH_CACHE.get(search_cache_key)
-                if cached_search is not None:
-                    logger.info("Using cached web search results for OneSeek")
-                    search_summary = self._format_search_results(cached_search)
+                        if cached_search is not None:
+                            logger.info("Using cached web search results for OneSeek")
+                            search_summary = self._format_search_results(cached_search)
                         else:
                             try:
                                 logger.info("OneSeek performing web search before answering")
