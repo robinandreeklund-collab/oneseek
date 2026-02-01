@@ -3,9 +3,16 @@
 
 import asyncio
 import base64
+import difflib
+import io
 import json
 import logging
 import os
+import subprocess
+import sys
+import time
+import zipfile
+from pathlib import Path
 from typing import Annotated, Any, List, Optional, cast
 from uuid import uuid4
 
@@ -66,7 +73,22 @@ from backend.deer_flow.server.rag_request import (
     RAGResourceRequest,
     RAGResourcesResponse,
 )
-from backend.deer_flow.tools import OpenAITTS
+from pydantic import BaseModel, Field
+
+from backend.deer_flow.tools import (
+    OpenAITTS,
+    clear_workspace_files,
+    get_latest_workspace_diff,
+    get_workspace_file_content,
+    get_workspace_files,
+    get_workspace_history_counts,
+    list_workspace_files,
+    redo_workspace_change,
+    set_current_run_id,
+    undo_workspace_change,
+)
+from backend.deer_flow.tools.code_tools import get_workspace_root
+from backend.deer_flow.tools.python_repl import python_repl_tool
 from backend.deer_flow.utils.json_utils import sanitize_args
 from backend.deer_flow.utils.log_sanitizer import (
     sanitize_agent_name,
@@ -313,8 +335,163 @@ async def chat_stream(request: ChatRequest):
             request.interrupt_before_tools,
             request.enable_ai_comparison,
             request.enable_debate_mode,
+            request.enable_code_mode,
         ),
         media_type="text/event-stream",
+    )
+
+
+class WorkspaceActionRequest(BaseModel):
+    thread_id: str = Field(..., min_length=1)
+
+
+class WorkspacePathRequest(WorkspaceActionRequest):
+    path: str = Field(..., min_length=1)
+
+
+@app.get("/api/workspace/history")
+async def workspace_history(thread_id: str = Query(..., min_length=1)):
+    set_current_run_id(thread_id)
+    return get_workspace_history_counts(thread_id)
+
+
+@app.get("/api/workspace/files")
+async def workspace_files(
+    thread_id: str = Query(..., min_length=1),
+    max_files: int = Query(1000, ge=1, le=5000),
+):
+    set_current_run_id(thread_id)
+    files = list_workspace_files(thread_id, max_files=max_files)
+    return {"files": files}
+
+
+@app.get("/api/workspace/file")
+async def workspace_file(
+    thread_id: str = Query(..., min_length=1),
+    path: str = Query(..., min_length=1),
+):
+    set_current_run_id(thread_id)
+    return get_workspace_file_content(path, run_id=thread_id)
+
+
+@app.get("/api/workspace/diff")
+async def workspace_diff(
+    thread_id: str = Query(..., min_length=1),
+    path: str = Query(..., min_length=1),
+):
+    set_current_run_id(thread_id)
+    diff_info = get_latest_workspace_diff(thread_id, path)
+    if diff_info.get("status") != "ok":
+        return diff_info
+
+    before = diff_info.get("before") or ""
+    after = diff_info.get("after") or ""
+    diff_lines = difflib.unified_diff(
+        before.splitlines(),
+        after.splitlines(),
+        fromfile="before",
+        tofile="after",
+        lineterm="",
+    )
+    diff_info["diff"] = "\n".join(diff_lines)
+    diff_info["truncated"] = bool(
+        diff_info.get("before_truncated") or diff_info.get("after_truncated")
+    )
+    return diff_info
+
+
+@app.post("/api/workspace/undo")
+async def workspace_undo(request: WorkspaceActionRequest):
+    set_current_run_id(request.thread_id)
+    result = undo_workspace_change(request.thread_id)
+    counts = get_workspace_history_counts(request.thread_id)
+    return {**result, **counts}
+
+
+@app.post("/api/workspace/redo")
+async def workspace_redo(request: WorkspaceActionRequest):
+    set_current_run_id(request.thread_id)
+    result = redo_workspace_change(request.thread_id)
+    counts = get_workspace_history_counts(request.thread_id)
+    return {**result, **counts}
+
+
+@app.post("/api/workspace/run")
+async def workspace_run(request: WorkspacePathRequest):
+    set_current_run_id(request.thread_id)
+    content_result = get_workspace_file_content(request.path, run_id=request.thread_id)
+    if content_result.get("status") != "ok":
+        raise HTTPException(status_code=404, detail="File not found")
+    if content_result.get("truncated"):
+        raise HTTPException(status_code=400, detail="File too large to run in REPL")
+
+    content = content_result.get("content", "")
+    output = python_repl_tool(content)
+    if isinstance(output, str) and output.startswith("Tool disabled"):
+        workspace_root = get_workspace_root()
+        target_path = (workspace_root / request.path).resolve()
+        if not str(target_path).startswith(str(workspace_root)):
+            raise HTTPException(status_code=400, detail="Path outside workspace")
+        if not target_path.exists():
+            raise HTTPException(status_code=404, detail="File not found")
+        python_override = (
+            os.getenv("WORKSPACE_VENV_PYTHON")
+            or os.getenv("CODE_WORKSPACE_PYTHON")
+        )
+        if not python_override:
+            venv_root = (
+                os.getenv("WORKSPACE_VENV_PATH")
+                or os.getenv("CODE_WORKSPACE_ROOT")
+            )
+            if venv_root:
+                venv_path = Path(venv_root) / "workspace_venv"
+                candidate = (
+                    venv_path / "Scripts" / "python.exe"
+                    if os.name == "nt"
+                    else venv_path / "bin" / "python"
+                )
+                if candidate.exists():
+                    python_override = str(candidate)
+        try:
+            result = subprocess.run(
+                [python_override or sys.executable, str(target_path)],
+                cwd=workspace_root,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except subprocess.TimeoutExpired as exc:
+            return {
+                "status": "error",
+                "mode": "subprocess",
+                "error": f"Timed out after {exc.timeout} seconds",
+            }
+        return {
+            "status": "success" if result.returncode == 0 else "error",
+            "mode": "subprocess",
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "return_code": result.returncode,
+        }
+
+    return {"status": "success", "mode": "repl", "output": output}
+
+
+@app.get("/api/workspace/export")
+async def workspace_export(thread_id: str = Query(..., min_length=1)):
+    set_current_run_id(thread_id)
+    workspace_root = get_workspace_root()
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
+        for path in workspace_root.rglob("*"):
+            if path.is_file():
+                zipf.write(path, arcname=path.relative_to(workspace_root))
+    zip_buffer.seek(0)
+    filename = f"workspace-{thread_id}.zip"
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
@@ -449,9 +626,11 @@ def _get_agent_name(agent, message_metadata):
     if "debate" in agent_name.lower():
         logger.info(f"🔍 DEBUG _get_agent_name: agent={agent}, agent_name={agent_name}")
     
-    # Keep debate planner output compatible with planner UI rendering.
+    # Keep planner outputs compatible with planner UI rendering.
     if agent_name == "debate_planner":
         return "planner"
+    if agent_name == "ai_comparison":
+        return "ai_comparison_planner"
     return agent_name
 
 
@@ -501,18 +680,35 @@ def _create_interrupt_event(thread_id, event_data):
     interrupt = event_data["__interrupt__"][0]
     # Use the 'id' attribute (LangGraph 1.0+) instead of deprecated 'ns[0]'
     interrupt_id = getattr(interrupt, "id", None) or thread_id
+    content = interrupt.value
+    options = [
+        {"text": "Edit plan", "value": "edit_plan"},
+        {"text": "Start research", "value": "accepted"},
+    ]
+    if isinstance(content, str) and content.startswith("[CODE_TEST_PROMPT|"):
+        closing = content.find("]")
+        if closing != -1:
+            locale = content[len("[CODE_TEST_PROMPT|"):closing]
+            content = content[closing + 1 :].lstrip()
+            if locale.startswith("sv"):
+                options = [
+                    {"text": "Kör tester", "value": "[TEST]"},
+                    {"text": "Hoppa över", "value": "[SKIP]"},
+                ]
+            else:
+                options = [
+                    {"text": "Run tests", "value": "[TEST]"},
+                    {"text": "Skip testing", "value": "[SKIP]"},
+                ]
     return _make_event(
         "interrupt",
         {
             "thread_id": thread_id,
             "id": interrupt_id,
             "role": "assistant",
-            "content": interrupt.value,
+            "content": content,
             "finish_reason": "interrupt",
-            "options": [
-                {"text": "Edit plan", "value": "edit_plan"},
-                {"text": "Start research", "value": "accepted"},
-            ],
+            "options": options,
         },
     )
 
@@ -553,6 +749,8 @@ async def _process_message_chunk(message_chunk, message_metadata, thread_id, age
         logger.debug(f"[{safe_thread_id}] Processing ToolMessage")
         tool_call_id = message_chunk.tool_call_id
         event_stream_message["tool_call_id"] = tool_call_id
+        if message_chunk.name:
+            event_stream_message["tool_name"] = message_chunk.name
         
         max_tool_chars = int(os.getenv("STREAM_TOOL_OUTPUT_MAX_CHARS", "6000"))
         content = event_stream_message.get("content", "")
@@ -584,18 +782,26 @@ async def _process_message_chunk(message_chunk, message_metadata, thread_id, age
             event_stream_message["tool_call_chunks"] = []
             
             # Track tool calls for sidebar
+            new_actions = []
             if tool_tracker:
                 for tc in message_chunk.tool_calls:
-                    tool_tracker.add_tool_call(
+                    action = tool_tracker.add_tool_call(
                         tc.get("id", ""),
                         tc.get("name", "unknown"),
                         tc.get("args", {})
                     )
+                    if action:
+                        new_actions.append(action)
             
             logger.debug(
                 f"[{safe_thread_id}] AIMessage has tool_calls, yielding tool_calls event"
             )
             yield _make_event("tool_calls", event_stream_message)
+            if new_actions:
+                yield _make_event("data", {
+                    "tool_actions": new_actions,
+                    "live_update": True
+                })
         else:
             yield _make_event("message_chunk", event_stream_message)
     elif isinstance(message_chunk, AIMessageChunk):
@@ -611,13 +817,16 @@ async def _process_message_chunk(message_chunk, message_metadata, thread_id, age
             event_stream_message["tool_calls"] = message_chunk.tool_calls
             
             # Track tool calls for sidebar
+            new_actions = []
             if tool_tracker:
                 for tc in message_chunk.tool_calls:
-                    tool_tracker.add_tool_call(
+                    action = tool_tracker.add_tool_call(
                         tc.get("id", ""),
                         tc.get("name", "unknown"),
                         tc.get("args", {})
                     )
+                    if action:
+                        new_actions.append(action)
             
             # Process tool_call_chunks with proper index-based grouping
             processed_chunks = _process_tool_call_chunks(
@@ -633,6 +842,11 @@ async def _process_message_chunk(message_chunk, message_metadata, thread_id, age
             
             logger.debug(f"[{safe_thread_id}] Yielding tool_calls event")
             yield _make_event("tool_calls", event_stream_message)
+            if new_actions:
+                yield _make_event("data", {
+                    "tool_actions": new_actions,
+                    "live_update": True
+                })
         elif message_chunk.tool_call_chunks:
             # AI Message - Tool Call Chunks (streaming)
             chunks_count = len(message_chunk.tool_call_chunks)
@@ -728,8 +942,9 @@ def extract_citations_from_event(event: Any, safe_thread_id: str = "unknown") ->
 class ToolActionTracker:
     """Tracks tool calls and results to emit tool_actions in frontend format."""
     
-    def __init__(self, thread_id: str):
+    def __init__(self, thread_id: str, run_id: Optional[str] = None):
         self.thread_id = thread_id
+        self.run_id = run_id or thread_id
         self.tool_calls = {}  # tool_call_id -> {tool_name, tool_input, timestamp}
         self.tool_actions = []  # List of completed tool actions
         self.pending_calls = set()  # Set of tool_call_ids waiting for results
@@ -742,39 +957,73 @@ class ToolActionTracker:
         if len(text) > max_chars:
             return text[:max_chars] + "... [truncated]"
         return text
+
+    def _is_error_output(self, tool_output: Any) -> bool:
+        if tool_output is None:
+            return False
+        output_text = str(tool_output).strip()
+        if not output_text:
+            return False
+        lowered = output_text.lower()
+        if output_text.startswith("✗"):
+            return True
+        error_markers = ("error", "exception", "traceback", "failed", "tool disabled")
+        return any(marker in lowered for marker in error_markers)
         
-    def add_tool_call(self, tool_call_id: str, tool_name: str, tool_input: Any):
-        """Record a new tool call."""
+    def add_tool_call(self, tool_call_id: str, tool_name: str, tool_input: Any) -> Optional[dict]:
+        """Record a new tool call and return its action payload if new."""
         if tool_call_id not in self.tool_calls:
             tool_input_text = json.dumps(tool_input) if isinstance(tool_input, dict) else str(tool_input)
             tool_input_text = self._truncate(tool_input_text, self.max_input_chars)
-            self.tool_calls[tool_call_id] = {
+            action = {
                 "tool_call_id": tool_call_id,
                 "tool_name": tool_name,
                 "tool_input": tool_input_text,
                 "tool_output": None,
-                "status": "running"
+                "status": "running",
+                "start_time": time.time(),
             }
+            self.tool_calls[tool_call_id] = action
             self.pending_calls.add(tool_call_id)
             logger.debug(f"[{self.thread_id}] ToolActionTracker: Added tool call {tool_call_id} ({tool_name})")
+            return action.copy()
+        return None
     
-    def add_tool_result(self, tool_call_id: str, tool_output: Any):
-        """Record the result for a tool call."""
+    def add_tool_result(self, tool_call_id: str, tool_output: Any) -> Optional[dict]:
+        """Record the result for a tool call and return updated action if found."""
         if tool_call_id in self.tool_calls:
             tool_output_text = str(tool_output) if tool_output else ""
             tool_output_text = self._truncate(tool_output_text, self.max_output_chars)
             self.tool_calls[tool_call_id]["tool_output"] = tool_output_text
-            self.tool_calls[tool_call_id]["status"] = "complete"
+            self.tool_calls[tool_call_id]["status"] = (
+                "error" if self._is_error_output(tool_output_text) else "success"
+            )
+            self.tool_calls[tool_call_id]["end_time"] = time.time()
+            self.tool_calls[tool_call_id]["duration"] = (
+                self.tool_calls[tool_call_id]["end_time"]
+                - self.tool_calls[tool_call_id]["start_time"]
+            )
             if tool_call_id in self.pending_calls:
                 self.pending_calls.remove(tool_call_id)
+            
+            try:
+                workspace_files = get_workspace_files(self.run_id)
+            except Exception as e:
+                logger.debug(
+                    f"[{self.thread_id}] Failed to fetch workspace files: {e}"
+                )
+                workspace_files = []
+            
+            if workspace_files:
+                self.tool_calls[tool_call_id]["workspace_files"] = workspace_files[-200:]
             
             # Add to completed actions
             self.tool_actions.append(self.tool_calls[tool_call_id])
             logger.debug(f"[{self.thread_id}] ToolActionTracker: Completed tool call {tool_call_id}")
-            return True
+            return self.tool_calls[tool_call_id].copy()
         else:
             logger.warning(f"[{self.thread_id}] ToolActionTracker: Received result for unknown tool_call_id: {tool_call_id}")
-            return False
+            return None
     
     def get_tool_actions(self) -> List[dict]:
         """Get all tool actions in frontend format."""
@@ -792,7 +1041,8 @@ async def _stream_graph_events(
     collected_citations = []
     
     # Track tool actions for real-time sidebar
-    tool_tracker = ToolActionTracker(safe_thread_id)
+    tool_tracker = ToolActionTracker(safe_thread_id, run_id=thread_id)
+    prev_action_count = 0
     
     try:
         event_count = 0
@@ -858,7 +1108,6 @@ async def _stream_graph_events(
                 f"step={safe_step}"
             )
 
-            prev_action_count = 0
             async for event in _process_message_chunk(
                 message_chunk, message_metadata, thread_id, agent, tool_tracker
             ):
@@ -956,6 +1205,7 @@ async def _astream_workflow_generator(
     interrupt_before_tools: Optional[List[str]] = None,
     enable_ai_comparison: bool = False,
     enable_debate_mode: bool = False,
+    enable_code_mode: bool = False,
 ):
     safe_thread_id = sanitize_thread_id(thread_id)
     safe_feedback = sanitize_log_input(interrupt_feedback) if interrupt_feedback else ""
@@ -966,6 +1216,11 @@ async def _astream_workflow_generator(
         f"interrupt_feedback={safe_feedback}, "
         f"interrupt_before_tools={interrupt_before_tools}"
     )
+    
+    # Initialize workspace tracking for this run
+    set_current_run_id(thread_id)
+    clear_workspace_files(thread_id)
+    logger.debug(f"[{safe_thread_id}] Initialized workspace tracking for run_id={safe_thread_id}")
     
     # Process initial messages
     logger.debug(f"[{safe_thread_id}] Processing {len(messages)} initial messages")
@@ -1000,6 +1255,11 @@ async def _astream_workflow_generator(
         logger.info(f"[{safe_thread_id}] Debate mode enabled, using DEBATE report style")
         report_style = ReportStyle.DEBATE
     
+    if enable_code_mode:
+        enable_ai_comparison = False
+        enable_debate_mode = False
+        logger.info(f"[{safe_thread_id}] Code mode enabled - forcing code chain")
+    
     workflow_input = {
         "messages": messages,
         "plan_iterations": 0,
@@ -1016,6 +1276,7 @@ async def _astream_workflow_generator(
         "locale": locale,
         "enable_ai_comparison": enable_ai_comparison,
         "enable_debate_mode": enable_debate_mode,
+        "enable_code_mode": enable_code_mode,
     }
 
     if not auto_accepted_plan and interrupt_feedback:

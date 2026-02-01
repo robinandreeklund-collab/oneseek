@@ -8,10 +8,26 @@ export type AgentName =
   | "coordinator"
   | "researcher"
   | "coder"
+  | "code_researcher"
+  | "code_architect"
+  | "code_reviewer"
+  | "code_refiner"
+  | "code_tester"
+  | "code_reporter"
+  | "ai_compare_query"
+  | "ai_compare_fact_check"
+  | "ai_compare_meta"
+  | "ai_compare_synth"
+  | "ai_compare_reporter"
   | "reporter"
   | "podcast"
   | "analyst"
   | "ai_comparison"
+  | "debate_orchestrator"
+  | "external_ai_caller"
+  | "fact_checker"
+  | "synthesizer"
+  | "moderator"
   | PlannerAgentName;
 
 export function isPlannerAgent(agent?: string): agent is PlannerAgentName {
@@ -47,6 +63,36 @@ export interface ToolCallRuntime {
   args: Record<string, unknown>;
   argsChunks?: string[];
   result?: string;
+  status?: string;
+}
+
+export interface ToolAction {
+  tool_call_id: string;
+  tool_name?: string;
+  display_name?: string;
+  icon?: string;
+  color?: string;
+  input?: unknown;
+  tool_input?: unknown;
+  output?: unknown;
+  tool_output?: unknown;
+  raw_request?: Record<string, unknown>;
+  raw_response?: Record<string, unknown>;
+  status?: string;
+  start_time?: number;
+  end_time?: number;
+  duration?: number;
+  workspace_files?: WorkspaceFile[];
+}
+
+export interface WorkspaceFile {
+  path: string;
+  name?: string;
+  size?: number;
+  operation?: string;
+  modified?: string;
+  content?: string;
+  truncated?: boolean;
 }
 
 export interface Resource {

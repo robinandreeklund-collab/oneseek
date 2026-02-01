@@ -5,18 +5,25 @@ import { PythonOutlined } from "@ant-design/icons";
 import { motion } from "framer-motion";
 import {
   Code,
+  Download,
+  FileDiff,
   FileCode,
   FileText,
   Monitor,
   PencilRuler,
+  Play,
+  RefreshCw,
+  RotateCcw,
+  RotateCw,
   X,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useTheme } from "next-themes";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import SyntaxHighlighter from "react-syntax-highlighter";
 import { docco } from "react-syntax-highlighter/dist/esm/styles/hljs";
 import { dark } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { toast } from "sonner";
 
 import { LoadingAnimation } from "~/components/deer-flow/loading-animation";
 import { RainbowText } from "~/components/deer-flow/rainbow-text";
@@ -28,13 +35,167 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "~/components/ui/accordion";
+import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Card } from "~/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "~/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
+import {
+  exportWorkspaceZip,
+  fetchWorkspaceDiff,
+  fetchWorkspaceFileContent,
+  fetchWorkspaceFiles,
+  fetchWorkspaceHistory,
+  redoWorkspaceChange,
+  runWorkspaceFile,
+  undoWorkspaceChange,
+} from "~/core/api/workspace";
 import { findMCPTool } from "~/core/mcp";
-import type { ToolCallRuntime } from "~/core/messages";
+import type { ToolCallRuntime, WorkspaceFile } from "~/core/messages";
 import { closeCoder, useMessage, useStore } from "~/core/store";
 import { cn } from "~/lib/utils";
+
+type Translator = ReturnType<typeof useTranslations>;
+
+function isToolCallError(result?: string) {
+  if (typeof result !== "string") return false;
+  const trimmed = result.trim();
+  if (!trimmed) return false;
+  const normalized = trimmed.toLowerCase();
+  return (
+    trimmed.startsWith("✗") ||
+    normalized.startsWith("error") ||
+    normalized.includes("error executing") ||
+    normalized.includes("exception") ||
+    normalized.includes("traceback") ||
+    normalized.includes("tool disabled") ||
+    normalized.startsWith("failed") ||
+    normalized.includes("failed:")
+  );
+}
+
+function getToolStatusLabel(toolCall: ToolCallRuntime, t: Translator) {
+  if (toolCall.status === "error") return t("statusError");
+  if (toolCall.result) {
+    return isToolCallError(toolCall.result)
+      ? t("statusError")
+      : t("statusSuccess");
+  }
+  if (toolCall.status === "running") return t("statusRunning");
+  if (
+    toolCall.status === "complete" ||
+    toolCall.status === "completed" ||
+    toolCall.status === "success"
+  ) {
+    return t("statusSuccess");
+  }
+  return t("statusPending");
+}
+
+function sanitizePreviewUrl(value?: string | null) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol === "http:" || url.protocol === "https:") {
+      return url.toString();
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function extractPreviewUrl(result?: string) {
+  if (!result) return null;
+  const trimmed = result.trim();
+  if (!trimmed) return null;
+
+  try {
+    const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+    const candidate =
+      (typeof parsed.preview_url === "string" && parsed.preview_url) ||
+      (typeof parsed.previewUrl === "string" && parsed.previewUrl) ||
+      (typeof parsed.url === "string" && parsed.url);
+    const sanitized = sanitizePreviewUrl(candidate);
+    if (sanitized) return sanitized;
+  } catch {
+    // Not JSON, fall through to regex-based extraction.
+  }
+
+  const patterns = [
+    /preview_url["':\s]+["']?(https?:\/\/[^\s'"]+)/i,
+    /preview url[:\s]+(https?:\/\/[^\s'"]+)/i,
+  ];
+  for (const pattern of patterns) {
+    const match = pattern.exec(trimmed);
+    const sanitized = sanitizePreviewUrl(match?.[1]);
+    if (sanitized) return sanitized;
+  }
+
+  const rawUrlMatch = /(https?:\/\/[^\s'"]+)/.exec(trimmed);
+  return sanitizePreviewUrl(rawUrlMatch?.[1]);
+}
+
+function formatOperationLabel(operation?: string) {
+  const normalized = (operation ?? "unknown").toLowerCase();
+  const labels: Record<string, string> = {
+    created: "new",
+    modified: "modified",
+    deleted: "deleted",
+    deleted_dir: "deleted",
+    created_dir: "created",
+    write: "modified",
+  };
+  return labels[normalized] ?? normalized;
+}
+
+function getOperationBadgeClass(operation?: string) {
+  const normalized = (operation ?? "unknown").toLowerCase();
+  if (normalized.startsWith("delete")) {
+    return "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-200";
+  }
+  if (normalized === "created" || normalized === "new") {
+    return "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200";
+  }
+  if (normalized === "modified" || normalized === "write") {
+    return "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200";
+  }
+  return "";
+}
+
+function formatTimestamp(value?: string) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString();
+}
+
+function getLanguageFromFilePath(path?: string) {
+  if (!path) return "text";
+  const extension = path.split(".").pop()?.toLowerCase();
+  const mapping: Record<string, string> = {
+    ts: "typescript",
+    tsx: "tsx",
+    js: "javascript",
+    jsx: "jsx",
+    json: "json",
+    py: "python",
+    md: "markdown",
+    html: "html",
+    css: "css",
+    scss: "scss",
+    sh: "bash",
+    yml: "yaml",
+    yaml: "yaml",
+  };
+  return extension ? mapping[extension] ?? "text" : "text";
+}
 
 export function CoderSidebar({
   className,
@@ -176,16 +337,15 @@ function CoderActivityItem({ messageId }: { messageId: string }) {
     return null;
   }
 
-  if (!message.isStreaming && message.toolCalls?.length) {
+  if (message.toolCalls?.length) {
     const toolCallComponents = message.toolCalls
-      .filter(
-        (toolCall) =>
-          !(
-            typeof toolCall.result === "string" &&
-            (toolCall.result.trim().startsWith("Error:") || 
-             toolCall.result.trim().startsWith("ERROR:"))
-          ),
-      )
+      .slice()
+      .sort((a, b) => {
+        // Sort in-progress tool calls (no result) before completed ones (with result).
+        if (a.result && !b.result) return 1;
+        if (!a.result && b.result) return -1;
+        return 0;
+      })
       .map((toolCall) => {
         if (toolCall.name === "python_repl_tool") {
           return <PythonToolCall key={toolCall.id} toolCall={toolCall} />;
@@ -215,6 +375,10 @@ function PythonToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
     return (toolCall.args as { code?: string }).code;
   }, [toolCall.args]);
   const { resolvedTheme } = useTheme();
+  const statusLabel = useMemo(
+    () => getToolStatusLabel(toolCall, t),
+    [toolCall, t],
+  );
 
   return (
     <section className="mt-4 pl-4">
@@ -226,6 +390,9 @@ function PythonToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
         >
           {t("runningPython")}
         </RainbowText>
+        <Badge variant="secondary" className="ml-2">
+          {statusLabel}
+        </Badge>
       </div>
       <div>
         <div className="bg-accent mt-2 max-h-[400px] max-w-[calc(100%-120px)] overflow-y-auto rounded-md p-2 text-sm">
@@ -284,6 +451,10 @@ function FileSystemToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
     }
     return undefined;
   }, [toolCall.args, toolCall.argsChunks]);
+  const statusLabel = useMemo(
+    () => getToolStatusLabel(toolCall, t),
+    [toolCall, t],
+  );
 
   return (
     <section className="mt-4 pl-4">
@@ -296,6 +467,9 @@ function FileSystemToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
           {t("fileOperation")}: {operation ?? "unknown"}
           {path && ` → ${path}`}
         </RainbowText>
+        <Badge variant="secondary" className="ml-2">
+          {statusLabel}
+        </Badge>
       </div>
       {toolCall.result && <ToolCallResult result={toolCall.result} />}
     </section>
@@ -304,6 +478,10 @@ function FileSystemToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
 
 function ReactSandboxToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
   const t = useTranslations("chat.coder");
+  const statusLabel = useMemo(
+    () => getToolStatusLabel(toolCall, t),
+    [toolCall, t],
+  );
 
   return (
     <section className="mt-4 pl-4">
@@ -315,6 +493,9 @@ function ReactSandboxToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
         >
           {t("reactSandbox")}
         </RainbowText>
+        <Badge variant="secondary" className="ml-2">
+          {statusLabel}
+        </Badge>
       </div>
       {toolCall.result && <ToolCallResult result={toolCall.result} />}
     </section>
@@ -322,8 +503,13 @@ function ReactSandboxToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
 }
 
 function GenericToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
+  const t = useTranslations("chat.coder");
   const tool = useMemo(() => findMCPTool(toolCall.name), [toolCall.name]);
   const { resolvedTheme } = useTheme();
+  const statusLabel = useMemo(
+    () => getToolStatusLabel(toolCall, t),
+    [toolCall, t],
+  );
 
   return (
     <section className="mt-4 pl-4">
@@ -342,6 +528,9 @@ function GenericToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
                       ? `Executed ${toolCall.name}()`
                       : `Running ${toolCall.name}()`}
                   </RainbowText>
+                  <Badge variant="secondary" className="ml-2">
+                    {statusLabel}
+                  </Badge>
                 </div>
               </Tooltip>
             </AccordionTrigger>
@@ -380,10 +569,7 @@ function GenericToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
 function ToolCallResult({ result }: { result: string }) {
   const t = useTranslations("chat.coder");
   const { resolvedTheme } = useTheme();
-  const hasError = useMemo(
-    () => result.trim().startsWith("Error:") || result.trim().startsWith("ERROR:"),
-    [result],
-  );
+  const hasError = useMemo(() => isToolCallError(result), [result]);
 
   return (
     <>
@@ -414,6 +600,69 @@ function CoderPreviewBlock({ sessionId }: { sessionId: string }) {
     state.coderActivityIds.get(sessionId),
   );
   const messages = useStore((state) => state.messages);
+  const workspaceFilesByMessage = useStore((state) => state.coderWorkspaceFiles);
+  const workspaceSnapshotBySession = useStore(
+    (state) => state.coderWorkspaceSnapshot,
+  );
+  const snapshotFiles = workspaceSnapshotBySession.get(sessionId) ?? [];
+  const previewHtml = useMemo(() => {
+    if (!activityIds) return null;
+    let truncatedFallback: string | null = null;
+    for (const file of [...snapshotFiles].reverse()) {
+      if (!file.path.endsWith(".html")) continue;
+      if (file.content?.trim()) {
+        if (!file.truncated) {
+          return file.content;
+        }
+        if (!truncatedFallback) {
+          truncatedFallback = file.content;
+        }
+      }
+    }
+    for (const activityId of [...activityIds].reverse()) {
+      const workspaceFiles = workspaceFilesByMessage.get(activityId) ?? [];
+      for (const file of workspaceFiles) {
+        if (!file.path.endsWith(".html")) continue;
+        if (file.content?.trim()) {
+          if (!file.truncated) {
+            return file.content;
+          }
+          if (!truncatedFallback) {
+            truncatedFallback = file.content;
+          }
+        }
+      }
+      const message = messages.get(activityId);
+      if (!message?.toolCalls) continue;
+      for (const toolCall of message.toolCalls) {
+        if (toolCall.name !== "file_system_tool") continue;
+        const args = toolCall.args as { path?: string; content?: string; operation?: string };
+        if (!args.path || (args.operation !== "write" && args.operation !== "create")) {
+          continue;
+        }
+        if (!args.path.endsWith(".html")) continue;
+        if (args.content?.trim()) {
+          return args.content;
+        }
+      }
+    }
+    return truncatedFallback;
+  }, [activityIds, messages, workspaceFilesByMessage, snapshotFiles]);
+
+  const hasPreviewError = useMemo(() => {
+    if (!activityIds) return false;
+    for (const activityId of [...activityIds].reverse()) {
+      const message = messages.get(activityId);
+      if (!message?.toolCalls) continue;
+      for (const toolCall of message.toolCalls) {
+        if (toolCall.name !== "react_sandbox_tool") continue;
+        if (toolCall.status === "error" || isToolCallError(toolCall.result)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }, [activityIds, messages]);
 
   const previewUrl = useMemo(() => {
     if (!activityIds) return null;
@@ -424,108 +673,398 @@ function CoderPreviewBlock({ sessionId }: { sessionId: string }) {
 
       for (const toolCall of message.toolCalls) {
         if (toolCall.name === "react_sandbox_tool" && toolCall.result) {
-          try {
-            const result = JSON.parse(toolCall.result);
-            if (result.preview_url) {
-              // Validate URL format and protocol
-              try {
-                const url = new URL(result.preview_url);
-                if (url.protocol === "http:" || url.protocol === "https:") {
-                  return result.preview_url;
-                }
-              } catch {
-                // Invalid URL format
-                return null;
-              }
-            }
-          } catch (e) {
-            // Not JSON, try to extract URL with more robust pattern
-            const urlMatch = toolCall.result.match(
-              /preview_url["':\s]+["']?(https?:\/\/[^\s'"]+)["']?/,
-            );
-            if (urlMatch?.[1]) {
-              try {
-                const url = new URL(urlMatch[1]);
-                if (url.protocol === "http:" || url.protocol === "https:") {
-                  return urlMatch[1];
-                }
-              } catch {
-                return null;
-              }
-            }
-          }
+          const candidate = extractPreviewUrl(toolCall.result);
+          if (candidate) return candidate;
         }
       }
     }
     return null;
   }, [activityIds, messages]);
 
-  return (
-    <div className="h-full w-full py-4">
-      {previewUrl ? (
-        <iframe
-          src={previewUrl}
-          className="h-full w-full rounded-lg border"
-          title="React App Preview"
-          sandbox="allow-scripts"
-        />
-      ) : (
-        <div className="flex h-full w-full items-center justify-center">
-          <div className="text-center">
-            <Monitor className="mx-auto mb-4 h-12 w-12 opacity-50" />
-            <p className="text-muted-foreground">{t("noPreview")}</p>
+    return (
+      <div className="h-full w-full py-4">
+        {previewUrl ? (
+          <iframe
+            src={previewUrl}
+            key={previewUrl}
+            className="h-full w-full rounded-lg border"
+            title="React App Preview"
+            sandbox="allow-scripts"
+          />
+        ) : previewHtml ? (
+          <iframe
+            srcDoc={previewHtml}
+            key={previewHtml}
+            className="h-full w-full rounded-lg border"
+            title="HTML Preview"
+            sandbox="allow-scripts"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center">
+            <div className="text-center">
+              <Monitor className="mx-auto mb-4 h-12 w-12 opacity-50" />
+              <p className="text-muted-foreground">
+                {hasPreviewError ? t("error") : t("noPreview")}
+              </p>
+            </div>
           </div>
-        </div>
-      )}
-    </div>
-  );
+        )}
+      </div>
+    );
 }
 
 function CoderFilesBlock({ sessionId }: { sessionId: string }) {
   const t = useTranslations("chat.coder");
+  const threadId = useStore((state) => state.threadId);
   const activityIds = useStore((state) =>
     state.coderActivityIds.get(sessionId),
   );
   const messages = useStore((state) => state.messages);
+  const workspaceFilesByMessage = useStore((state) => state.coderWorkspaceFiles);
+  const workspaceSnapshotBySession = useStore(
+    (state) => state.coderWorkspaceSnapshot,
+  );
+  const setWorkspaceSnapshot = useStore(
+    (state) => state.setCoderWorkspaceSnapshot,
+  );
+  const snapshotFiles = workspaceSnapshotBySession.get(sessionId) ?? [];
+  const [selectedFile, setSelectedFile] = useState<WorkspaceFile | null>(null);
+  const [selectedFileContent, setSelectedFileContent] = useState<string>("");
+  const [fileContentLoading, setFileContentLoading] = useState(false);
+  const [fileContentError, setFileContentError] = useState<string | null>(null);
+  const [diffView, setDiffView] = useState<"content" | "diff">("content");
+  const [diffText, setDiffText] = useState<string | null>(null);
+  const [diffLoading, setDiffLoading] = useState(false);
+  const [diffError, setDiffError] = useState<string | null>(null);
+  const [diffTruncated, setDiffTruncated] = useState(false);
+  const [historyCounts, setHistoryCounts] = useState({
+    undo_count: 0,
+    redo_count: 0,
+  });
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [filesRefreshing, setFilesRefreshing] = useState(false);
+  const [runTarget, setRunTarget] = useState<string | null>(null);
+  const [runResult, setRunResult] = useState<string | null>(null);
+  const [runError, setRunError] = useState<string | null>(null);
+  const [runLoading, setRunLoading] = useState(false);
+  const { resolvedTheme } = useTheme();
+
+  const refreshHistory = async () => {
+    if (!threadId) return;
+    setHistoryLoading(true);
+    try {
+      const history = await fetchWorkspaceHistory(threadId);
+      setHistoryCounts(history);
+    } catch (error) {
+      toast.error("Failed to load workspace history");
+      console.error(error);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const refreshWorkspaceFiles = async () => {
+    if (!threadId) return;
+    setFilesRefreshing(true);
+    try {
+      const data = await fetchWorkspaceFiles(threadId);
+      const files = (data.files ?? [])
+        .map((file) => ({
+          path: String(file.path ?? ""),
+          name: typeof file.name === "string" ? file.name : undefined,
+          size: typeof file.size === "number" ? file.size : undefined,
+          operation:
+            typeof file.operation === "string" ? file.operation : "existing",
+          modified:
+            typeof file.modified === "string" ? file.modified : undefined,
+        }))
+        .filter((file) => file.path);
+      setWorkspaceSnapshot(sessionId, files);
+    } catch (error) {
+      toast.error("Failed to refresh workspace files");
+      console.error(error);
+    } finally {
+      setFilesRefreshing(false);
+    }
+  };
+
+  const handleUndo = async () => {
+    if (!threadId) return;
+    try {
+      await undoWorkspaceChange(threadId);
+      await refreshHistory();
+      await refreshWorkspaceFiles();
+    } catch (error) {
+      toast.error("Undo failed");
+      console.error(error);
+    }
+  };
+
+  const handleRedo = async () => {
+    if (!threadId) return;
+    try {
+      await redoWorkspaceChange(threadId);
+      await refreshHistory();
+      await refreshWorkspaceFiles();
+    } catch (error) {
+      toast.error("Redo failed");
+      console.error(error);
+    }
+  };
+
+  const handleExport = async () => {
+    if (!threadId) return;
+    try {
+      const blob = await exportWorkspaceZip(threadId);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `workspace-${threadId}.zip`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast.error("Export failed");
+      console.error(error);
+    }
+  };
+
+  const handleRunFile = async (path: string) => {
+    if (!threadId) return;
+    setRunLoading(true);
+    setRunTarget(path);
+    setRunResult(null);
+    setRunError(null);
+    try {
+      const result = await runWorkspaceFile(threadId, path);
+      const output =
+        result.output ??
+        [result.stdout, result.stderr].filter(Boolean).join("\n");
+      setRunResult(output || "(no output)");
+      if (result.status === "error" && result.error) {
+        setRunError(result.error);
+      }
+    } catch (error) {
+      setRunError("Failed to run file");
+      console.error(error);
+    } finally {
+      setRunLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!sessionId) return;
+    refreshHistory();
+    refreshWorkspaceFiles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (!activityIds) return;
+    refreshHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activityIds?.length]);
+
+  useEffect(() => {
+    if (!selectedFile) return;
+    setDiffView("content");
+    setDiffText(null);
+    setDiffError(null);
+    setDiffTruncated(false);
+    setFileContentError(null);
+    setSelectedFileContent(selectedFile.content ?? "");
+    if (selectedFile.content?.trim()) {
+      setSelectedFileContent(selectedFile.content);
+      return;
+    }
+    if (!threadId) return;
+    setFileContentLoading(true);
+    fetchWorkspaceFileContent(threadId, selectedFile.path)
+      .then((result) => {
+        if (result.status !== "ok") {
+          setFileContentError("File not found");
+          return;
+        }
+        setSelectedFileContent(result.content ?? "");
+      })
+      .catch((error) => {
+        setFileContentError("Failed to load file content");
+        console.error(error);
+      })
+      .finally(() => setFileContentLoading(false));
+  }, [selectedFile, threadId]);
+
+  useEffect(() => {
+    if (!selectedFile || diffView !== "diff" || !threadId) return;
+    setDiffLoading(true);
+    setDiffError(null);
+    fetchWorkspaceDiff(threadId, selectedFile.path)
+      .then((result) => {
+        if (result.status !== "ok") {
+          setDiffError("No diff available");
+          return;
+        }
+        setDiffText(result.diff ?? "");
+        setDiffTruncated(Boolean(result.truncated));
+      })
+      .catch((error) => {
+        setDiffError("Failed to load diff");
+        console.error(error);
+      })
+      .finally(() => setDiffLoading(false));
+  }, [diffView, selectedFile, threadId]);
 
   const files = useMemo(() => {
-    const fileSet = new Set<string>();
+    const fileMap = new Map<string, WorkspaceFile>();
     if (!activityIds) return [];
+
+    if (snapshotFiles.length > 0) {
+      snapshotFiles.forEach((file) => {
+        fileMap.set(file.path, file);
+      });
+    }
 
     for (const activityId of activityIds) {
       const message = messages.get(activityId);
       if (!message?.toolCalls) continue;
 
       for (const toolCall of message.toolCalls) {
-        if (toolCall.name === "file_system_tool") {
-          const args = toolCall.args as { path?: string; operation?: string };
-          if (
-            args.path &&
-            (args.operation === "write" || args.operation === "create")
-          ) {
-            fileSet.add(args.path);
-          }
-        }
+        if (toolCall.name !== "file_system_tool") continue;
+        const args = toolCall.args as {
+          path?: string;
+          operation?: string;
+          content?: string;
+        };
+        if (!args.path) continue;
+        const operation = args.operation ?? "unknown";
+        fileMap.set(args.path, {
+          path: args.path,
+          name: args.path.split("/").pop() ?? args.path,
+          operation,
+          content: args.content ?? toolCall.result ?? "",
+        });
+      }
+
+      const workspaceFiles = workspaceFilesByMessage.get(activityId) ?? [];
+      if (workspaceFiles.length > 0) {
+        workspaceFiles.forEach((file) => {
+          const existing = fileMap.get(file.path);
+          fileMap.set(file.path, {
+            ...existing,
+            ...file,
+            content: file.content ?? existing?.content,
+            operation: file.operation ?? existing?.operation,
+          });
+        });
       }
     }
 
-    return Array.from(fileSet);
-  }, [activityIds, messages]);
+    return Array.from(fileMap.values()).sort((a, b) => {
+      const aTime = a.modified ? new Date(a.modified).getTime() : 0;
+      const bTime = b.modified ? new Date(b.modified).getTime() : 0;
+      if (aTime !== bTime) return bTime - aTime;
+      return a.path.localeCompare(b.path);
+    });
+  }, [activityIds, messages, workspaceFilesByMessage, snapshotFiles]);
 
   return (
     <div className="py-4">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleUndo}
+          disabled={historyLoading || historyCounts.undo_count === 0}
+        >
+          <RotateCcw className="mr-2 h-4 w-4" />
+          Undo {historyCounts.undo_count}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleRedo}
+          disabled={historyLoading || historyCounts.redo_count === 0}
+        >
+          <RotateCw className="mr-2 h-4 w-4" />
+          Redo {historyCounts.redo_count}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={refreshWorkspaceFiles}
+          disabled={filesRefreshing}
+        >
+          <RefreshCw
+            className={cn(
+              "mr-2 h-4 w-4",
+              filesRefreshing ? "animate-spin" : "",
+            )}
+          />
+          Refresh
+        </Button>
+        <Button size="sm" variant="outline" onClick={handleExport}>
+          <Download className="mr-2 h-4 w-4" />
+          Export zip
+        </Button>
+      </div>
       {files.length > 0 ? (
         <ul className="flex flex-col gap-2">
           {files.map((file, i) => (
             <motion.li
-              key={file}
-              className="bg-accent flex items-center gap-2 rounded-md p-3"
+              key={file.path}
+              className="bg-accent flex items-center justify-between gap-2 rounded-md p-3"
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.2, delay: i * 0.05 }}
             >
-              <FileText className="h-4 w-4 shrink-0" />
-              <span className="font-mono text-sm">{file}</span>
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                onClick={() => setSelectedFile(file)}
+              >
+                <FileText className="h-4 w-4 shrink-0" />
+                <div className="min-w-0">
+                  <span className="block truncate font-mono text-sm">
+                    {file.path}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {formatTimestamp(file.modified) ?? "—"}
+                    {typeof file.size === "number" && (
+                      <> • {file.size} bytes</>
+                    )}
+                  </span>
+                </div>
+              </button>
+              <div className="flex items-center gap-2">
+                {file.path.endsWith(".py") && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleRunFile(file.path);
+                    }}
+                    disabled={runLoading}
+                  >
+                    <Play
+                      className={cn(
+                        "h-4 w-4",
+                        runLoading && runTarget === file.path
+                          ? "animate-pulse"
+                          : "",
+                      )}
+                    />
+                  </Button>
+                )}
+                <Badge
+                  variant="secondary"
+                  className={cn(
+                    "shrink-0",
+                    getOperationBadgeClass(file.operation),
+                  )}
+                >
+                  {formatOperationLabel(file.operation)}
+                </Badge>
+              </div>
             </motion.li>
           ))}
         </ul>
@@ -537,6 +1076,133 @@ function CoderFilesBlock({ sessionId }: { sessionId: string }) {
           </div>
         </div>
       )}
+      <Dialog
+        open={Boolean(selectedFile)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedFile(null);
+        }}
+      >
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{selectedFile?.path}</DialogTitle>
+            <DialogDescription>
+              {[
+                formatOperationLabel(selectedFile?.operation),
+                formatTimestamp(selectedFile?.modified),
+                typeof selectedFile?.size === "number"
+                  ? `${selectedFile.size} bytes`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" • ")}
+            </DialogDescription>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant={diffView === "content" ? "secondary" : "ghost"}
+                onClick={() => setDiffView("content")}
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                Content
+              </Button>
+              <Button
+                size="sm"
+                variant={diffView === "diff" ? "secondary" : "ghost"}
+                onClick={() => setDiffView("diff")}
+              >
+                <FileDiff className="mr-2 h-4 w-4" />
+                Diff
+              </Button>
+            </div>
+          </DialogHeader>
+          <div className="bg-accent max-h-[60vh] overflow-auto rounded-md p-4 text-sm">
+            {diffView === "diff" ? (
+              diffLoading ? (
+                <LoadingAnimation className="mx-auto my-12" />
+              ) : diffError ? (
+                <p className="text-sm text-muted-foreground">{diffError}</p>
+              ) : (
+                <SyntaxHighlighter
+                  language="diff"
+                  style={resolvedTheme === "dark" ? dark : docco}
+                  customStyle={{
+                    background: "transparent",
+                    border: "none",
+                    boxShadow: "none",
+                  }}
+                >
+                  {diffText?.trim() || "(empty diff)"}
+                </SyntaxHighlighter>
+              )
+            ) : fileContentLoading ? (
+              <LoadingAnimation className="mx-auto my-12" />
+            ) : fileContentError ? (
+              <p className="text-sm text-muted-foreground">{fileContentError}</p>
+            ) : (
+              <SyntaxHighlighter
+                language={getLanguageFromFilePath(selectedFile?.path)}
+                style={resolvedTheme === "dark" ? dark : docco}
+                customStyle={{
+                  background: "transparent",
+                  border: "none",
+                  boxShadow: "none",
+                }}
+              >
+                {selectedFileContent.trim() || "(empty)"}
+              </SyntaxHighlighter>
+            )}
+          </div>
+          {diffView === "diff" && diffTruncated && (
+            <p className="text-xs text-muted-foreground">
+              Diff truncated due to size limits
+            </p>
+          )}
+          {diffView === "content" && selectedFile?.truncated && (
+            <p className="text-xs text-muted-foreground">
+              Showing truncated content
+            </p>
+          )}
+          </DialogContent>
+        </Dialog>
+      <Dialog
+        open={Boolean(runTarget)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRunTarget(null);
+            setRunResult(null);
+            setRunError(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Run output</DialogTitle>
+            <DialogDescription>{runTarget ?? ""}</DialogDescription>
+          </DialogHeader>
+          <div className="bg-accent max-h-[60vh] overflow-auto rounded-md p-4 text-sm">
+            {runLoading ? (
+              <LoadingAnimation className="mx-auto my-12" />
+            ) : (
+              <SyntaxHighlighter
+                language="text"
+                style={resolvedTheme === "dark" ? dark : docco}
+                customStyle={{
+                  background: "transparent",
+                  border: "none",
+                  boxShadow: "none",
+                }}
+              >
+                {runResult?.trim() || "(no output)"}
+              </SyntaxHighlighter>
+            )}
+          </div>
+          {runError && (
+            <p className="text-xs text-red-500">
+              {runError}
+            </p>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

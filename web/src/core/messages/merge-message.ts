@@ -53,7 +53,12 @@ export function mergeMessage(message: Message, event: ChatEvent) {
   } else if (event.type === "interrupt") {
     mergeInterruptMessage(message, event);
   }
-  if (event.type !== "citations" && event.data.finish_reason) {
+  if (
+    event.type !== "citations" &&
+    event.type !== "data" &&
+    "finish_reason" in event.data &&
+    event.data.finish_reason
+  ) {
     message.finishReason = event.data.finish_reason;
     message.isStreaming = false;
     if (message.toolCalls) {
@@ -94,12 +99,17 @@ function mergeToolCallMessage(
   event: ToolCallsEvent | ToolCallChunksEvent,
 ) {
   if (event.type === "tool_calls" && event.data.tool_calls[0]?.name) {
-    message.toolCalls = event.data.tool_calls.map((raw) => ({
-      id: raw.id,
-      name: raw.name,
-      args: raw.args,
-      result: undefined,
-    }));
+    const existingToolCalls = message.toolCalls ?? [];
+    message.toolCalls = event.data.tool_calls.map((raw) => {
+      const existing = existingToolCalls.find((toolCall) => toolCall.id === raw.id);
+      return {
+        id: raw.id,
+        name: raw.name,
+        args: raw.args,
+        result: existing?.result,
+        argsChunks: existing?.argsChunks,
+      };
+    });
   }
 
   message.toolCalls ??= [];
@@ -125,7 +135,7 @@ function mergeToolCallMessage(
     }
     
     // Parse partial args for streaming UI feedback
-    if (targetToolCall && targetToolCall.argsChunks?.length) {
+    if (targetToolCall?.argsChunks?.length) {
       // Use safeParseToolArgs which uses best-effort-json-parser to handle incomplete JSON
       targetToolCall.args = safeParseToolArgs(targetToolCall.argsChunks.join(""));
     }

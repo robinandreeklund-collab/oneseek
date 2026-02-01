@@ -6,6 +6,7 @@ Code-related tools for the Coder node in LangGraph.
 Provides Linux sandbox, file system management, and React preview capabilities.
 """
 
+import contextvars
 import logging
 import os
 import subprocess
@@ -27,10 +28,310 @@ logger = logging.getLogger(__name__)
 _workspace_files_by_run: Dict[str, List[Dict[str, Any]]] = {}
 _workspace_files_lock = threading.Lock()
 _current_run_id: Dict[int, str] = {}  # Maps thread_id to run_id
+_run_id_var: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "workspace_run_id",
+    default=None,
+)
+
+_workspace_history_by_run: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
+_workspace_history_lock = threading.Lock()
+_WORKSPACE_HISTORY_MAX_ENTRIES = int(
+    os.getenv("WORKSPACE_HISTORY_MAX_ENTRIES", "50")
+)
+_WORKSPACE_HISTORY_MAX_CONTENT_BYTES = int(
+    os.getenv("WORKSPACE_HISTORY_MAX_CONTENT_BYTES", "1000000")
+)
+
+
+def get_workspace_root() -> Path:
+    """Get or initialize the workspace root directory."""
+    code_workspace = os.getenv("CODE_WORKSPACE_ROOT", None)
+    if code_workspace:
+        workspace_root = Path(code_workspace)
+    else:
+        workspace_root = Path(tempfile.gettempdir()) / "oneseek_workspace"
+    workspace_root.mkdir(parents=True, exist_ok=True)
+    return workspace_root
+
+
+def _resolve_workspace_path(path: str, workspace_root: Path) -> Path:
+    target_path = (workspace_root / path).resolve()
+    if not str(target_path).startswith(str(workspace_root)):
+        raise ValueError(f"Security error: Path '{path}' is outside workspace")
+    return target_path
+
+
+def _read_file_content_if_small(target_path: Path) -> tuple[Optional[str], int]:
+    try:
+        file_size = target_path.stat().st_size
+    except OSError:
+        return None, 0
+    if file_size > _WORKSPACE_HISTORY_MAX_CONTENT_BYTES:
+        return None, file_size
+    try:
+        return target_path.read_text(encoding="utf-8", errors="replace"), file_size
+    except OSError:
+        return None, file_size
+
+
+def _init_workspace_history(run_id: str) -> Dict[str, List[Dict[str, Any]]]:
+    if run_id not in _workspace_history_by_run:
+        _workspace_history_by_run[run_id] = {"undo": [], "redo": []}
+    return _workspace_history_by_run[run_id]
+
+
+def record_workspace_change(run_id: str, entry: Dict[str, Any]):
+    """Record a workspace change for undo/redo."""
+    with _workspace_history_lock:
+        history = _init_workspace_history(run_id)
+        history["undo"].append(entry)
+        history["redo"].clear()
+        if len(history["undo"]) > _WORKSPACE_HISTORY_MAX_ENTRIES:
+            history["undo"] = history["undo"][-_WORKSPACE_HISTORY_MAX_ENTRIES:]
+
+
+def get_workspace_history_counts(run_id: str) -> Dict[str, int]:
+    with _workspace_history_lock:
+        history = _init_workspace_history(run_id)
+        return {
+            "undo_count": len(history["undo"]),
+            "redo_count": len(history["redo"]),
+        }
+
+
+def _apply_workspace_change(
+    target_path: Path,
+    entry: Dict[str, Any],
+    apply_after: bool,
+) -> tuple[bool, str]:
+    operation = entry.get("operation")
+    before_content = entry.get("before_content")
+    after_content = entry.get("after_content")
+    is_dir = entry.get("is_dir", False)
+    before_exists = entry.get("before_exists", False)
+    after_exists = entry.get("after_exists", False)
+
+    if apply_after:
+        content = after_content
+        exists = after_exists
+        operation_label = operation
+    else:
+        content = before_content
+        exists = before_exists
+        operation_label = operation
+
+    if operation_label in ("created", "modified"):
+        if not exists and not apply_after:
+            if target_path.exists():
+                target_path.unlink()
+            return True, "deleted"
+        if content is None:
+            return False, "Missing content snapshot for restore"
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_text(content, encoding="utf-8")
+        return True, "restored" if not apply_after else "modified"
+    if operation_label == "deleted":
+        if apply_after:
+            if target_path.exists():
+                target_path.unlink()
+            return True, "deleted"
+        if content is None:
+            return False, "Missing content snapshot for restore"
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_text(content, encoding="utf-8")
+        return True, "restored"
+    if operation_label == "created_dir":
+        if apply_after:
+            target_path.mkdir(parents=True, exist_ok=True)
+            return True, "created_dir"
+        if target_path.exists():
+            import shutil
+            shutil.rmtree(target_path)
+        return True, "deleted_dir"
+    if operation_label == "deleted_dir":
+        if apply_after:
+            if target_path.exists():
+                import shutil
+                shutil.rmtree(target_path)
+            return True, "deleted_dir"
+        target_path.mkdir(parents=True, exist_ok=True)
+        return True, "created_dir"
+
+    return False, f"Unsupported operation: {operation_label}"
+
+
+def undo_workspace_change(run_id: str) -> Dict[str, Any]:
+    with _workspace_history_lock:
+        history = _init_workspace_history(run_id)
+        if not history["undo"]:
+            return {"status": "empty"}
+        entry = history["undo"].pop()
+
+    workspace_root = get_workspace_root()
+    try:
+        target_path = _resolve_workspace_path(entry["path"], workspace_root)
+    except ValueError as exc:
+        with _workspace_history_lock:
+            history = _init_workspace_history(run_id)
+            history["undo"].append(entry)
+        return {"status": "error", "message": str(exc)}
+
+    try:
+        success, applied_operation = _apply_workspace_change(
+            target_path, entry, apply_after=False
+        )
+    except Exception as exc:  # noqa: BLE001
+        with _workspace_history_lock:
+            history = _init_workspace_history(run_id)
+            history["undo"].append(entry)
+        return {"status": "error", "message": str(exc)}
+
+    if not success:
+        with _workspace_history_lock:
+            history = _init_workspace_history(run_id)
+            history["undo"].append(entry)
+        return {"status": "error", "message": applied_operation}
+
+    with _workspace_history_lock:
+        history = _init_workspace_history(run_id)
+        history["redo"].append(entry)
+        if len(history["redo"]) > _WORKSPACE_HISTORY_MAX_ENTRIES:
+            history["redo"] = history["redo"][-_WORKSPACE_HISTORY_MAX_ENTRIES:]
+
+    try:
+        file_size = target_path.stat().st_size if target_path.exists() else 0
+    except OSError:
+        file_size = 0
+    track_workspace_file(
+        entry["path"],
+        f"undo:{applied_operation}",
+        file_size,
+        None,
+        run_id=run_id,
+    )
+    return {"status": "success", "entry": entry, "operation": applied_operation}
+
+
+def redo_workspace_change(run_id: str) -> Dict[str, Any]:
+    with _workspace_history_lock:
+        history = _init_workspace_history(run_id)
+        if not history["redo"]:
+            return {"status": "empty"}
+        entry = history["redo"].pop()
+
+    workspace_root = get_workspace_root()
+    try:
+        target_path = _resolve_workspace_path(entry["path"], workspace_root)
+    except ValueError as exc:
+        with _workspace_history_lock:
+            history = _init_workspace_history(run_id)
+            history["redo"].append(entry)
+        return {"status": "error", "message": str(exc)}
+
+    try:
+        success, applied_operation = _apply_workspace_change(
+            target_path, entry, apply_after=True
+        )
+    except Exception as exc:  # noqa: BLE001
+        with _workspace_history_lock:
+            history = _init_workspace_history(run_id)
+            history["redo"].append(entry)
+        return {"status": "error", "message": str(exc)}
+
+    if not success:
+        with _workspace_history_lock:
+            history = _init_workspace_history(run_id)
+            history["redo"].append(entry)
+        return {"status": "error", "message": applied_operation}
+
+    with _workspace_history_lock:
+        history = _init_workspace_history(run_id)
+        history["undo"].append(entry)
+        if len(history["undo"]) > _WORKSPACE_HISTORY_MAX_ENTRIES:
+            history["undo"] = history["undo"][-_WORKSPACE_HISTORY_MAX_ENTRIES:]
+
+    try:
+        file_size = target_path.stat().st_size if target_path.exists() else 0
+    except OSError:
+        file_size = 0
+    track_workspace_file(
+        entry["path"],
+        f"redo:{applied_operation}",
+        file_size,
+        None,
+        run_id=run_id,
+    )
+    return {"status": "success", "entry": entry, "operation": applied_operation}
+
+
+def list_workspace_files(
+    run_id: Optional[str] = None,
+    max_files: int = 1000,
+) -> List[Dict[str, Any]]:
+    workspace_root = get_workspace_root()
+    files: List[Dict[str, Any]] = []
+    count = 0
+    for path in sorted(workspace_root.rglob("*")):
+        if count >= max_files:
+            break
+        if path.is_dir():
+            continue
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        relative_path = path.relative_to(workspace_root).as_posix()
+        files.append(
+            {
+                "path": relative_path,
+                "name": path.name,
+                "size": stat.st_size,
+                "operation": "existing",
+                "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            }
+        )
+        count += 1
+    return files
+
+
+def get_workspace_file_content(path: str, run_id: Optional[str] = None) -> Dict[str, Any]:
+    workspace_root = get_workspace_root()
+    target_path = _resolve_workspace_path(path, workspace_root)
+    if not target_path.exists() or not target_path.is_file():
+        return {"status": "missing"}
+    content, size = _read_file_content_if_small(target_path)
+    return {
+        "status": "ok",
+        "content": content or "",
+        "truncated": content is None and size > 0,
+        "size": size,
+    }
+
+
+def get_latest_workspace_diff(run_id: str, path: str) -> Dict[str, Any]:
+    with _workspace_history_lock:
+        history = _init_workspace_history(run_id)
+        candidates = list(reversed(history["undo"])) + list(reversed(history["redo"]))
+    for entry in candidates:
+        if entry.get("path") == path:
+            before = entry.get("before_content")
+            after = entry.get("after_content")
+            return {
+                "status": "ok",
+                "before": before,
+                "after": after,
+                "before_truncated": entry.get("before_truncated", False),
+                "after_truncated": entry.get("after_truncated", False),
+                "before_exists": entry.get("before_exists", False),
+                "after_exists": entry.get("after_exists", False),
+                "operation": entry.get("operation"),
+            }
+    return {"status": "missing"}
 
 
 def set_current_run_id(run_id: str):
     """Set the current run_id for this thread."""
+    _run_id_var.set(run_id)
     thread_id = threading.get_ident()
     _current_run_id[thread_id] = run_id
     logger.info(f"Set run_id={run_id} for thread={thread_id}")
@@ -38,6 +339,9 @@ def set_current_run_id(run_id: str):
 
 def get_current_run_id() -> str:
     """Get the current run_id for this thread, or 'default' if not set."""
+    run_id = _run_id_var.get()
+    if run_id:
+        return run_id
     thread_id = threading.get_ident()
     return _current_run_id.get(thread_id, "default")
 
@@ -129,12 +433,7 @@ def ensure_workspace_requirements() -> str:
     """
     # Get workspace root - use CODE_WORKSPACE_ROOT directly (no extra subdirectory)
     # Only add 'oneseek_workspace' if using temp directory (fallback)
-    code_workspace = os.getenv("CODE_WORKSPACE_ROOT", None)
-    if code_workspace:
-        workspace_root = Path(code_workspace)
-    else:
-        workspace_root = Path(tempfile.gettempdir()) / "oneseek_workspace"
-    workspace_root.mkdir(parents=True, exist_ok=True)
+    workspace_root = get_workspace_root()
     
     requirements_path = workspace_root / "workspace_requirements.txt"
     
@@ -287,25 +586,14 @@ def file_system_tool(
     
     # Get workspace root - use CODE_WORKSPACE_ROOT directly (no extra subdirectory)
     # Only add 'oneseek_workspace' if using temp directory (fallback)
-    code_workspace = os.getenv("CODE_WORKSPACE_ROOT", None)
-    if code_workspace:
-        workspace_root = Path(code_workspace)
-    else:
-        workspace_root = Path(tempfile.gettempdir()) / "oneseek_workspace"
-    workspace_root.mkdir(parents=True, exist_ok=True)
+    workspace_root = get_workspace_root()
     
     # Ensure workspace_requirements.txt exists in workspace
     ensure_workspace_requirements()
     
     # Resolve and validate path
     try:
-        target_path = (workspace_root / path).resolve()
-        
-        # Security check: ensure path is within workspace
-        if not str(target_path).startswith(str(workspace_root)):
-            error_msg = f"Security error: Path '{path}' is outside workspace"
-            logger.error(error_msg)
-            return f"✗ {error_msg}"
+        target_path = _resolve_workspace_path(path, workspace_root)
         
         logger.info(f"File system operation: {operation} on {target_path}")
         
@@ -322,12 +610,43 @@ def file_system_tool(
             if content is None:
                 return f"✗ No content provided for write operation"
             
+            existed = target_path.exists()
+            before_content = None
+            before_size = 0
+            before_truncated = False
+            if existed and target_path.is_file():
+                before_content, before_size = _read_file_content_if_small(target_path)
+                before_truncated = (
+                    before_content is None
+                    and before_size > _WORKSPACE_HISTORY_MAX_CONTENT_BYTES
+                )
             target_path.parent.mkdir(parents=True, exist_ok=True)
             target_path.write_text(content, encoding='utf-8')
             
             # Track this file operation
             file_size = len(content.encode('utf-8'))
-            track_workspace_file(path, operation, file_size, content)
+            operation_label = "created" if not existed else "modified"
+            track_workspace_file(path, operation_label, file_size, content)
+
+            after_truncated = file_size > _WORKSPACE_HISTORY_MAX_CONTENT_BYTES
+            after_content = content if not after_truncated else None
+            record_workspace_change(
+                get_current_run_id(),
+                {
+                    "path": path,
+                    "operation": operation_label,
+                    "before_content": before_content,
+                    "after_content": after_content,
+                    "before_truncated": before_truncated,
+                    "after_truncated": after_truncated,
+                    "before_exists": existed,
+                    "after_exists": True,
+                    "is_dir": False,
+                    "before_size": before_size,
+                    "after_size": file_size,
+                    "timestamp": datetime.now().isoformat(),
+                },
+            )
             
             return f"✓ Successfully wrote {len(content)} bytes to '{path}'"
         
@@ -349,15 +668,79 @@ def file_system_tool(
                 return f"✗ Path not found: {path}"
             
             if target_path.is_file():
+                before_content, before_size = _read_file_content_if_small(target_path)
+                before_truncated = (
+                    before_content is None
+                    and before_size > _WORKSPACE_HISTORY_MAX_CONTENT_BYTES
+                )
+                try:
+                    file_size = target_path.stat().st_size
+                except OSError:
+                    file_size = 0
+                track_workspace_file(path, "deleted", file_size)
+                record_workspace_change(
+                    get_current_run_id(),
+                    {
+                        "path": path,
+                        "operation": "deleted",
+                        "before_content": before_content,
+                        "after_content": None,
+                        "before_truncated": before_truncated,
+                        "after_truncated": False,
+                        "before_exists": True,
+                        "after_exists": False,
+                        "is_dir": False,
+                        "before_size": before_size,
+                        "after_size": 0,
+                        "timestamp": datetime.now().isoformat(),
+                    },
+                )
                 target_path.unlink()
                 return f"✓ Deleted file: {path}"
             elif target_path.is_dir():
                 import shutil
+                track_workspace_file(path, "deleted_dir", 0)
+                record_workspace_change(
+                    get_current_run_id(),
+                    {
+                        "path": path,
+                        "operation": "deleted_dir",
+                        "before_content": None,
+                        "after_content": None,
+                        "before_truncated": False,
+                        "after_truncated": False,
+                        "before_exists": True,
+                        "after_exists": False,
+                        "is_dir": True,
+                        "before_size": 0,
+                        "after_size": 0,
+                        "timestamp": datetime.now().isoformat(),
+                    },
+                )
                 shutil.rmtree(target_path)
                 return f"✓ Deleted directory: {path}"
         
         elif operation == "create_dir":
+            existed = target_path.exists()
             target_path.mkdir(parents=True, exist_ok=True)
+            track_workspace_file(path, "created_dir", 0)
+            record_workspace_change(
+                get_current_run_id(),
+                {
+                    "path": path,
+                    "operation": "created_dir",
+                    "before_content": None,
+                    "after_content": None,
+                    "before_truncated": False,
+                    "after_truncated": False,
+                    "before_exists": existed,
+                    "after_exists": True,
+                    "is_dir": True,
+                    "before_size": 0,
+                    "after_size": 0,
+                    "timestamp": datetime.now().isoformat(),
+                },
+            )
             return f"✓ Created directory: {path}"
         
         else:

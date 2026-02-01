@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+from uuid import uuid4
 from functools import partial
 from typing import Annotated, Any, Literal
 
@@ -14,6 +15,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 # MCP adapters import moved to conditional block where it's used
 # from langchain_mcp_adapters.client import MultiServerMCPClient
+from langgraph.graph import END
 from langgraph.types import Command, interrupt
 
 from backend.deer_flow.agents import create_agent
@@ -29,7 +31,16 @@ from backend.deer_flow.tools import (
     get_web_search_tool,
     python_repl_tool,
 )
-from backend.deer_flow.tools.ai_comparison_tools import get_ai_comparison_tools
+from backend.deer_flow.tools.ai_comparison_tools import (
+    fact_check_responses,
+    query_deepseek,
+    query_gemini_flash,
+    query_gpt35,
+    query_grok4,
+    run_meta_analysis,
+    set_ai_comparison_context,
+    synthesize_optimal_answer,
+)
 from backend.deer_flow.tools.debate_tools import get_debate_tools
 from backend.deer_flow.tools.search import LoggedTavilySearch
 from backend.deer_flow.utils.context_manager import ContextManager, validate_message_content
@@ -83,6 +94,26 @@ def strip_think_tags(content: str, expect_json: bool = False) -> str:
     """
     if not content or '<think>' not in content or '</think>' not in content:
         return content
+
+
+def _parse_json_content(content: str) -> dict[str, Any]:
+    """Parse JSON content from a message string."""
+    if not content:
+        return {}
+    content = content.strip()
+    if content.startswith("```"):
+        match = re.search(r"```json\s*(.*?)```", content, re.S | re.I)
+        if match:
+            content = match.group(1).strip()
+        else:
+            # Fallback to any fenced block
+            match = re.search(r"```(.*?)```", content, re.S)
+            if match:
+                content = match.group(1).strip()
+    try:
+        return json.loads(repair_json_output(content))
+    except Exception:
+        return {}
     
     think_start = content.find('<think>')
     think_end = content.find('</think>')
@@ -257,6 +288,20 @@ def preserve_state_meta_fields(state: State) -> dict:
         "locale": state.get("locale", "en-US"),
         "research_topic": state.get("research_topic", ""),
         "clarified_research_topic": state.get("clarified_research_topic", ""),
+        "plan_source": state.get("plan_source", "planner"),
+        "enable_code_mode": state.get("enable_code_mode", False),
+        "code_report_complete": state.get("code_report_complete", False),
+        "enable_ai_comparison": state.get("enable_ai_comparison", False),
+        "ai_compare_responses": state.get("ai_compare_responses", []),
+        "ai_compare_responses_json": state.get("ai_compare_responses_json"),
+        "ai_compare_fact_check": state.get("ai_compare_fact_check"),
+        "ai_compare_fact_check_json": state.get("ai_compare_fact_check_json"),
+        "ai_compare_meta": state.get("ai_compare_meta"),
+        "ai_compare_meta_json": state.get("ai_compare_meta_json"),
+        "ai_compare_synthesis": state.get("ai_compare_synthesis"),
+        "ai_compare_synthesis_json": state.get("ai_compare_synthesis_json"),
+        "ai_compare_report_complete": state.get("ai_compare_report_complete", False),
+        "ai_compare_pending_tool": state.get("ai_compare_pending_tool"),
         "clarification_history": state.get("clarification_history", []),
         "enable_clarification": state.get("enable_clarification", False),
         "max_clarification_rounds": state.get("max_clarification_rounds", 3),
@@ -276,6 +321,16 @@ def preserve_state_meta_fields(state: State) -> dict:
         "debate_pending_model": state.get("debate_pending_model"),
         "debate_model_ids": state.get("debate_model_ids", []),
     }
+
+
+def get_team_route(state: State) -> str:
+    """Return the appropriate team router for the current plan."""
+    plan_source = state.get("plan_source")
+    if plan_source == "code_planner":
+        return "code_team"
+    if plan_source == "ai_comparison":
+        return "ai_compare_team"
+    return "research_team"
 
 
 def get_thread_id_from_config(config: RunnableConfig | None) -> str:
@@ -623,6 +678,7 @@ def planner_node(
             update={
                 "messages": [AIMessage(content=full_response, name="planner")],
                 "current_plan": new_plan,
+                "plan_source": "planner",
                 **preserve_state_meta_fields(state),
             },
             goto="reporter",
@@ -634,6 +690,7 @@ def planner_node(
             update={
                 "messages": [AIMessage(content=full_response, name="planner")],
                 "current_plan": full_response,
+                "plan_source": "planner",
                 **preserve_state_meta_fields(state),
             },
             goto="ai_comparison",
@@ -643,6 +700,7 @@ def planner_node(
         update={
             "messages": [AIMessage(content=full_response, name="planner")],
             "current_plan": full_response,
+            "plan_source": "planner",
             **preserve_state_meta_fields(state),
         },
         goto="human_feedback",
@@ -730,6 +788,19 @@ def debate_planner_node(
     # Validate and fix plan to ensure web search requirements are met (matching planner_node)
     if isinstance(curr_plan, dict):
         curr_plan = validate_and_fix_plan(curr_plan, configurable.enforce_web_search, configurable.enable_web_search)
+        # Enforce code planner rule: never use research steps
+        steps = curr_plan.get("steps", [])
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+            if step.get("step_type") == "research" or step.get("need_search"):
+                step["step_type"] = "processing"
+                step["need_search"] = False
+                step["description"] = (
+                    "Include any necessary documentation lookup as part of implementation. "
+                    + (step.get("description") or "")
+                ).strip()
+        curr_plan["steps"] = steps
     
     # Check if plan has enough context (matching planner_node)
     if isinstance(curr_plan, dict) and curr_plan.get("has_enough_context"):
@@ -739,6 +810,7 @@ def debate_planner_node(
             update={
                 "messages": [AIMessage(content=json.dumps(curr_plan, ensure_ascii=False, indent=2), name="planner")],
                 "current_plan": new_plan,
+                "plan_source": "code_planner",
                 **preserve_state_meta_fields(state),
             },
             goto="reporter",
@@ -754,6 +826,7 @@ def debate_planner_node(
         update={
             "messages": [AIMessage(content=full_response, name="planner")],
             "current_plan": full_response,  # Pass as JSON string like planner does
+            "plan_source": "code_planner",
             **preserve_state_meta_fields(state),
         },
         goto="human_feedback",
@@ -849,6 +922,7 @@ def code_planner_node(
             update={
                 "messages": [AIMessage(content=json.dumps(curr_plan, ensure_ascii=False, indent=2), name="planner")],
                 "current_plan": new_plan,
+                "plan_source": "debate_planner",
                 **preserve_state_meta_fields(state),
             },
             goto="reporter",
@@ -864,6 +938,7 @@ def code_planner_node(
         update={
             "messages": [AIMessage(content=full_response, name="planner")],
             "current_plan": full_response,  # Pass as JSON string like planner does
+            "plan_source": "debate_planner",
             **preserve_state_meta_fields(state),
         },
         goto="human_feedback",
@@ -912,7 +987,23 @@ def extract_plan_content(plan_data: str | dict | Any) -> str:
 
 def human_feedback_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["planner", "research_team", "reporter", "debate_orchestrator", "__end__"]]:
+) -> Command[
+    Literal[
+        "planner",
+        "research_team",
+        "code_team",
+        "ai_compare_team",
+        "reporter",
+        "debate_orchestrator",
+        "__end__",
+    ]
+]:
+    if state.get("final_report") and state.get("plan_source") == "code_planner":
+        logger.info("[human_feedback_node] Code plan complete, routing to END")
+        return Command(
+            update=preserve_state_meta_fields(state),
+            goto=END,
+        )
     coder_flag = state.get('coder_just_completed', False)
     logger.info(f"[human_feedback_node] ENTERED - coder_just_completed={coder_flag}")
     logger.info(f"[human_feedback_node] State keys: {list(state.keys())}")
@@ -925,9 +1016,9 @@ def human_feedback_node(
         
         # Ask in appropriate language
         if locale.startswith("sv"):
-            prompt = "Kodningen är klar! Vill du att jag testar koden?\n\nSvara '[TEST]' för att köra tester (pytest, pylint, mypy), eller '[SKIP]' för att hoppa över testning."
+            prompt = "[CODE_TEST_PROMPT|sv-SE]\nKodningen är klar! Vill du att jag testar koden?\n\nSvara '[TEST]' för att köra tester (pytest, pylint, mypy), eller '[SKIP]' för att hoppa över testning."
         else:
-            prompt = "Coding is complete! Would you like me to test the code?\n\nReply '[TEST]' to run tests (pytest, pylint, mypy), or '[SKIP]' to skip testing."
+            prompt = "[CODE_TEST_PROMPT|en-US]\nCoding is complete! Would you like me to test the code?\n\nReply '[TEST]' to run tests (pytest, pylint, mypy), or '[SKIP]' to skip testing."
         
         logger.info(f"[human_feedback_node] Calling interrupt() with prompt (locale={locale}): {prompt[:100]}...")
         feedback = interrupt(prompt)
@@ -947,7 +1038,7 @@ def human_feedback_node(
         feedback_normalized = str(feedback).strip().upper()
         
         if feedback_normalized.startswith("[TEST]"):
-            logger.info("User requested testing. Creating TESTING step and routing to research_team.")
+            logger.info("User requested testing. Creating TESTING step and routing to team.")
             # Add a TESTING step to the current plan
             current_plan = state.get("current_plan")
             if current_plan and hasattr(current_plan, 'steps'):
@@ -972,7 +1063,7 @@ def human_feedback_node(
                         "coder_just_completed": False,  # Clear flag
                         **preserve_state_meta_fields(state),
                     },
-                    goto="research_team"
+                    goto=get_team_route(state),
                 )
         
         # If [SKIP] or any other response, skip testing and go to reporter
@@ -1040,27 +1131,46 @@ def human_feedback_node(
         goto = "debate_orchestrator"
         logger.info("[human_feedback_node] Plan approved in debate mode, routing to debate_orchestrator")
     else:
-        # Normal mode - route to research_team
-        goto = "research_team"
-        logger.info("[human_feedback_node] Plan approved, routing to research_team")
+        # Normal mode - route to appropriate team
+        goto = get_team_route(state)
+        logger.info(f"[human_feedback_node] Plan approved, routing to {goto}")
     
     try:
-        # Safely extract plan content from different types (string, AIMessage, dict)
+        # Safely extract plan content from different types (string, AIMessage, dict, Plan)
         original_plan = current_plan
-        
-        # Repair the JSON output
-        current_plan = repair_json_output(current_plan)
-        # parse the plan to dict
-        current_plan = json.loads(current_plan)
-        current_plan_content = extract_plan_content(current_plan)
+
+        if isinstance(current_plan, Plan):
+            new_plan = current_plan.model_dump()
+        else:
+            # Repair the JSON output
+            current_plan = repair_json_output(current_plan)
+            # parse the plan to dict
+            current_plan = json.loads(current_plan)
+            current_plan_content = extract_plan_content(current_plan)
+            # parse the plan
+            new_plan = json.loads(repair_json_output(current_plan_content))
         
         # increment the plan iterations
         plan_iterations += 1
-        # parse the plan
-        new_plan = json.loads(repair_json_output(current_plan_content))
         # Validate and fix plan to ensure web search requirements are met
         configurable = Configuration.from_runnable_config(config)
-        new_plan = validate_and_fix_plan(new_plan, configurable.enforce_web_search, configurable.enable_web_search)
+        enforce_web_search = configurable.enforce_web_search
+        if state.get("plan_source") in ("code_planner", "ai_comparison"):
+            enforce_web_search = False
+        new_plan = validate_and_fix_plan(new_plan, enforce_web_search, configurable.enable_web_search)
+        if state.get("plan_source") == "code_planner":
+            steps = new_plan.get("steps", [])
+            for step in steps:
+                if not isinstance(step, dict):
+                    continue
+                if step.get("step_type") == "research" or step.get("need_search"):
+                    step["step_type"] = "processing"
+                    step["need_search"] = False
+                    step["description"] = (
+                        "Include any necessary documentation lookup as part of implementation. "
+                        + (step.get("description") or "")
+                    ).strip()
+            new_plan["steps"] = steps
         
         if selected_models:
             from backend.debate_flow import DEBATE_MODELS
@@ -1123,6 +1233,16 @@ def coordinator_node(
     logger.info("Coordinator talking.")
     configurable = Configuration.from_runnable_config(config)
 
+    if state.get("enable_code_mode"):
+        logger.info("[coordinator_node] Code mode enabled, routing to code_planner")
+        return Command(
+            update={
+                "research_topic": state.get("research_topic", ""),
+                **preserve_state_meta_fields(state),
+            },
+            goto="code_planner",
+        )
+
     # Check if clarification is enabled
     enable_clarification = state.get("enable_clarification", False)
     initial_topic = state.get("research_topic", "")
@@ -1170,8 +1290,8 @@ def coordinator_node(
                             goto = "debate_planner"
                         # Check AI comparison mode - route to planner (which routes to ai_comparison)
                         elif state.get("enable_ai_comparison", False):
-                            logger.info("AI comparison mode enabled, planner will route to ai_comparison")
-                            goto = "planner"
+                            logger.info("AI comparison mode enabled, routing to ai_comparison planner")
+                            goto = "ai_comparison"
                         # Normal research mode
                         else:
                             goto = "planner"
@@ -1401,8 +1521,8 @@ def coordinator_node(
                         goto = "debate_planner"
                     # Check AI comparison mode - route to planner (which routes to ai_comparison)
                     elif state.get("enable_ai_comparison", False):
-                        logger.info("AI comparison mode enabled, planner will route to ai_comparison")
-                        goto = "planner"
+                        logger.info("AI comparison mode enabled, routing to ai_comparison planner")
+                        goto = "ai_comparison"
                     # Normal research mode
                     else:
                         goto = "planner"
@@ -1776,6 +1896,20 @@ def research_team_node(state: State):
     pass
 
 
+def code_team_node(state: State):
+    """Code team node that orchestrates code-only tasks."""
+    logger.info("Code team is collaborating on code tasks.")
+    logger.debug("Entering code_team_node - coordinating code-only agents")
+    pass
+
+
+def ai_compare_team_node(state: State):
+    """AI comparison team node that orchestrates comparison tasks."""
+    logger.info("AI comparison team is collaborating on comparison tasks.")
+    logger.debug("Entering ai_compare_team_node - coordinating ai comparison agents")
+    pass
+
+
 def validate_web_search_usage(messages: list, agent_name: str = "agent") -> bool:
     """
     Validate if the agent has used the web search tool during execution.
@@ -1821,9 +1955,10 @@ def validate_web_search_usage(messages: list, agent_name: str = "agent") -> bool
 
 async def _execute_agent_step(
     state: State, agent, agent_name: str, config: RunnableConfig = None
-) -> Command[Literal["research_team"]]:
+) -> Command[Literal["research_team", "code_team", "ai_compare_team"]]:
     """Helper function to execute a step using the specified agent."""
     logger.debug(f"[_execute_agent_step] Starting execution for agent: {agent_name}")
+    team_goto = get_team_route(state)
     
     current_plan = state.get("current_plan")
     
@@ -1844,7 +1979,7 @@ async def _execute_agent_step(
             # Return to research_team if parsing fails
             return Command(
                 update=preserve_state_meta_fields(state),
-                goto="research_team"
+                goto=team_goto
             )
     
     # Handle case where current_plan is None (direct call from coordinator for code questions)
@@ -1897,7 +2032,7 @@ async def _execute_agent_step(
         logger.warning(f"[_execute_agent_step] No unexecuted step found in {len(current_plan.steps)} total steps")
         return Command(
             update=preserve_state_meta_fields(state),
-            goto="research_team"
+            goto=team_goto
         )
 
     logger.info(f"[_execute_agent_step] Executing step: {current_step.title}, agent: {agent_name}")
@@ -2027,7 +2162,7 @@ async def _execute_agent_step(
                 "observations": observations + [detailed_error],
                 **preserve_state_meta_fields(state),
             },
-            goto="research_team",
+            goto=team_goto,
         )
 
     # Process the result
@@ -2149,7 +2284,7 @@ async def _execute_agent_step(
             "observations": observations + [response_content + validation_info],
             "citations": merged_citations,  # Store merged citations based on existing state and new tool results
         },
-        goto="research_team",
+        goto=team_goto,
     )
 
 
@@ -2158,7 +2293,7 @@ async def _setup_and_execute_agent_step(
     config: RunnableConfig,
     agent_type: str,
     default_tools: list,
-) -> Command[Literal["research_team"]]:
+) -> Command[Literal["research_team", "code_team", "ai_compare_team"]]:
     """Helper function to set up an agent with appropriate tools and execute a step.
 
     This function handles the common logic for both researcher_node and coder_node:
@@ -2173,7 +2308,7 @@ async def _setup_and_execute_agent_step(
         default_tools: The default tools to add to the agent
 
     Returns:
-        Command to update state and go to research_team
+        Command to update state and go to the appropriate team router
     """
     configurable = Configuration.from_runnable_config(config)
     mcp_servers = {}
@@ -2284,6 +2419,33 @@ async def researcher_node(
     )
 
 
+async def code_researcher_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["code_team"]]:
+    """Code researcher node that gathers code/documentation references."""
+    logger.info("Code researcher node is researching code references.")
+    logger.debug("[code_researcher_node] Starting code researcher agent")
+
+    configurable = Configuration.from_runnable_config(config)
+
+    tools = []
+    if configurable.enable_web_search:
+        tools.extend([get_web_search_tool(configurable.max_search_results), crawl_tool])
+    else:
+        logger.info("[code_researcher_node] Web search disabled, using local resources only")
+
+    retriever_tool = get_retriever_tool(state.get("resources", []))
+    if retriever_tool:
+        tools.insert(0, retriever_tool)
+
+    return await _setup_and_execute_agent_step(
+        state,
+        config,
+        "code_researcher",
+        tools,
+    )
+
+
 async def coder_node(
     state: State, config: RunnableConfig
 ) -> Command[Literal["research_team", "human_feedback", "__end__"]]:
@@ -2357,6 +2519,112 @@ async def coder_node(
     )
 
 
+async def code_reviewer_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["research_team"]]:
+    """Code reviewer node that inspects changes and flags risks."""
+    logger.info("Code reviewer is analyzing code changes.")
+    logger.debug("[code_reviewer_node] Starting code reviewer agent")
+
+    tools = []
+    try:
+        from backend.deer_flow.tools.code_tools import file_system_tool
+        tools.append(file_system_tool)
+    except Exception as e:
+        logger.debug(f"[code_reviewer_node] file_system_tool unavailable: {e}")
+
+    return await _setup_and_execute_agent_step(
+        state,
+        config,
+        "code_reviewer",
+        tools,
+    )
+
+
+async def code_architect_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["research_team"]]:
+    """Code architect node that evaluates design and architecture."""
+    logger.info("Code architect is reviewing architecture.")
+    logger.debug("[code_architect_node] Starting code architect agent")
+
+    tools = []
+    try:
+        from backend.deer_flow.tools.code_tools import file_system_tool
+        tools.append(file_system_tool)
+    except Exception as e:
+        logger.debug(f"[code_architect_node] file_system_tool unavailable: {e}")
+
+    return await _setup_and_execute_agent_step(
+        state,
+        config,
+        "code_architect",
+        tools,
+    )
+
+
+async def code_refiner_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["research_team"]]:
+    """Code refiner node that cleans up and formats code changes."""
+    logger.info("Code refiner is refining code changes.")
+    logger.debug("[code_refiner_node] Starting code refiner agent")
+
+    from backend.deer_flow.tools.code_tools import get_code_tools
+
+    tools = [python_repl_tool]
+    tools.extend(get_code_tools())
+
+    return await _setup_and_execute_agent_step(
+        state,
+        config,
+        "code_refiner",
+        tools,
+    )
+
+
+async def code_tester_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["research_team"]]:
+    """Code tester node that runs test tools only."""
+    logger.info("Code tester is running tests.")
+    logger.debug("[code_tester_node] Starting code tester agent")
+
+    from backend.deer_flow.tools.test_tools import get_test_tools
+
+    tools = get_test_tools()
+
+    return await _setup_and_execute_agent_step(
+        state,
+        config,
+        "code_tester",
+        tools,
+    )
+
+
+async def code_reporter_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["__end__"]]:
+    """Code reporter node that outputs a code-focused summary."""
+    logger.info("Code reporter generating code-focused summary.")
+    configurable = Configuration.from_runnable_config(config)
+    locale = state.get("locale", "en-US")
+
+    messages = apply_prompt_template("code_reporter", state, configurable, locale)
+    llm = get_llm_by_type(AGENT_LLM_MAP.get("code_reporter", "basic"))
+    response = llm.invoke(messages)
+    content = strip_think_tags(get_message_content(response) or "")
+
+    return Command(
+        update={
+            "messages": [AIMessage(content=content, name="code_reporter")],
+            "code_report_complete": True,
+            **preserve_state_meta_fields(state),
+        },
+        goto="__end__",
+    )
+
+
 async def tester_node(
     state: State, config: RunnableConfig
 ) -> Command[Literal["research_team"]]:
@@ -2422,122 +2690,176 @@ async def analyst_node(
 
 async def ai_comparison_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["reporter"]]:
-    """
-    AI Comparison node that runs sequential queries across multiple AI models.
-    Implements Debate OS functionality for DeerFlow with real-time streaming.
-    
-    Executes AI comparison agent with tools, then goes directly to reporter.
-    Does NOT use research_team routing to avoid loops.
-    """
-    # CRITICAL: Do NOT run ai_comparison when debate_mode is enabled
-    # Debate uses completely separate chain with debate_tools
+) -> Command[Literal["human_feedback"]]:
+    """AI comparison planner node that creates a comparison plan."""
     if state.get("enable_debate_mode", False):
-        logger.warning("AI Comparison node called with debate_mode=True - this should NOT happen! Skipping ai_comparison.")
-        return Command(
-            update=preserve_state_meta_fields(state),
-            goto="reporter"
-        )
-    
-    logger.info("AI Comparison node starting - Debate OS mode")
-    
+        logger.warning("AI Comparison node called with debate_mode=True - skipping.")
+        return Command(update=preserve_state_meta_fields(state), goto="reporter")
+
     configurable = Configuration.from_runnable_config(config)
-    
-    # Get AI comparison tools
-    tools = get_ai_comparison_tools()
-    logger.info(f"AI comparison tools count: {len(tools)}")
-    
-    # Get locale and research topic from state
     locale = state.get("locale", "en-US")
     research_topic = state.get("research_topic", "Unknown topic")
-    logger.info(f"Research topic: {research_topic}")
-    
-    # Create a simple plan with one step for AI comparison
-    # This allows us to use _setup_and_execute_agent_step() which we KNOW works for streaming
+
+    set_ai_comparison_context(
+        max_search_results=configurable.max_search_results,
+        resources=state.get("resources", []),
+    )
+
     from backend.deer_flow.prompts.planner_model import Plan, Step, StepType
-    
-    comparison_step = Step(
-        need_search=False,  # AI comparison doesn't need web search, it queries AI models
-        step_type=StepType.RESEARCH,
-        title="AI Model Comparison",
-        description=f"""Query and compare responses from multiple AI models for: {research_topic}
 
-Follow these steps:
-1. Query each AI model individually (call tools one at a time for streaming):
-   - query_gpt35
-   - query_gemini_flash
-   - query_deepseek  
-   - query_grok4
-   - query_oneseek_local
+    if locale.startswith("sv"):
+        thought = "Kör AI‑jämförelse med modellfrågor, faktakoll, meta‑analys och syntes."
+        steps = [
+            Step(
+                need_search=False,
+                step_type=StepType.AI_QUERY,
+                title="GPT‑3.5",
+                description="Model: gpt-3.5-turbo",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_QUERY,
+                title="Gemini 2.5 Flash",
+                description="Model: gemini-2.5-flash",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_QUERY,
+                title="DeepSeek Chat",
+                description="Model: deepseek-chat",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_QUERY,
+                title="Grok‑4 Fast Reasoning",
+                description="Model: grok-4-fast-reasoning",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_FACT_CHECK,
+                title="Faktakoll",
+                description="Verifiera centrala påståenden med externa källor.",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_META,
+                title="Meta‑analys",
+                description="Poängsätt modellerna över meta‑analytiska dimensioner.",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_SYNTH,
+                title="Syntetisera svar",
+                description="Skapa en optimal syntes baserad på all input.",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_REPORT,
+                title="Skapa jämförelserapport",
+                description="Skriv slutrapporten med tabeller och källor.",
+                execution_res=None,
+            ),
+        ]
+    else:
+        thought = "Run AI comparison with model queries, fact-checking, meta-analysis, and synthesis."
+        steps = [
+            Step(
+                need_search=False,
+                step_type=StepType.AI_QUERY,
+                title="GPT-3.5",
+                description="Model: gpt-3.5-turbo",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_QUERY,
+                title="Gemini 2.5 Flash",
+                description="Model: gemini-2.5-flash",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_QUERY,
+                title="DeepSeek Chat",
+                description="Model: deepseek-chat",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_QUERY,
+                title="Grok-4 Fast Reasoning",
+                description="Model: grok-4-fast-reasoning",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_FACT_CHECK,
+                title="Fact Check",
+                description="Verify key claims with external sources.",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_META,
+                title="Meta Analysis",
+                description="Score models across meta-analysis dimensions.",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_SYNTH,
+                title="Synthesize Answer",
+                description="Produce optimal synthesized answer from all inputs.",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_REPORT,
+                title="Generate Comparison Report",
+                description="Write the final comparison report with tables.",
+                execution_res=None,
+            ),
+        ]
 
-2. Fact-check responses using fact_check_responses tool
-
-3. Run meta-analysis using run_meta_analysis tool
-
-4. Synthesize optimal answer using synthesize_optimal_answer tool
-
-Provide a comprehensive comparison report with citations.""",
-        execution_res=None
-    )
-    
     comparison_plan = Plan(
-        locale=state.get("locale", "en-US"),  # Get locale from state, default to en-US
-        has_enough_context=False,  # We need to execute this comparison step
-        thought="Running AI comparison across multiple models to provide comprehensive analysis.",
+        locale=locale,
+        has_enough_context=False,
+        thought=thought,
         title=research_topic,
-        steps=[comparison_step]
+        steps=steps,
     )
-    
-    # Update state directly with the comparison plan
-    # State is a dict-like object, so we can mutate it
-    state["current_plan"] = comparison_plan
-    state["locale"] = locale
-    state["research_topic"] = research_topic
-    
-    logger.info("Created comparison plan with 1 step, using standard execution path")
-    
-    # Set a higher recursion limit for AI comparison since it needs to call 8+ tools sequentially
-    # Each tool call counts as ~2-3 recursion steps, so 8 tools = ~24 steps minimum
-    # We set to 50 to give plenty of buffer
-    import os
-    original_recursion_limit = os.getenv("AGENT_RECURSION_LIMIT")
-    os.environ["AGENT_RECURSION_LIMIT"] = "50"
-    
-    try:
-        # Planner node already created the planner message before routing to ai_comparison
-        # So we don't need to create it again here - it already exists in state["messages"]
-        logger.info("Planner already created planner message, executing AI comparison step")
-        
-        # Use the EXACT SAME execution path as researcher/coder
-        # This is what makes streaming work correctly!
-        result = await _setup_and_execute_agent_step(
-            state,
-            config,
-            "ai_comparison",
-            tools,
-        )
-        
-        # Mark the comparison step as complete to prevent research_team from routing to researcher
-        comparison_step.execution_res = "AI comparison completed successfully"
-        
-        # Go directly to reporter instead of research_team to avoid researcher loops
-        # The ai_comparison agent has already executed all tools (query models, fact_check, meta_analysis, synthesize)
-        logger.info("AI comparison complete, routing directly to reporter")
-        
-        # Return updated state with completed step and goto reporter
-        return Command(
-            update={
-                **result.update,
-                "current_plan": comparison_plan,  # Update with completed step
-            },
-            goto="reporter",
-        )
-    finally:
-        # Restore original recursion limit
-        if original_recursion_limit is not None:
-            os.environ["AGENT_RECURSION_LIMIT"] = original_recursion_limit
-        elif "AGENT_RECURSION_LIMIT" in os.environ:
-            del os.environ["AGENT_RECURSION_LIMIT"]
+
+    return Command(
+        update={
+            **preserve_state_meta_fields(state),
+            "messages": [
+                AIMessage(
+                    content=json.dumps(comparison_plan.model_dump(), ensure_ascii=False, indent=2),
+                    name="planner",
+                )
+            ],
+            "current_plan": comparison_plan,
+            "plan_source": "ai_comparison",
+            "ai_compare_responses": [],
+            "ai_compare_responses_json": None,
+            "ai_compare_fact_check": None,
+            "ai_compare_fact_check_json": None,
+            "ai_compare_meta": None,
+            "ai_compare_meta_json": None,
+            "ai_compare_synthesis": None,
+            "ai_compare_synthesis_json": None,
+            "ai_compare_report_complete": False,
+            "ai_compare_pending_tool": None,
+        },
+        goto="human_feedback",
+    )
 
 
 async def debate_node(
@@ -2688,6 +3010,533 @@ Provide a comprehensive debate report with all rounds, voting results, and concl
         elif "AGENT_RECURSION_LIMIT" in os.environ:
             del os.environ["AGENT_RECURSION_LIMIT"]
 
+
+async def ai_compare_query_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["ai_compare_team"]]:
+    """Query AI models sequentially and store responses."""
+    configurable = Configuration.from_runnable_config(config)
+    from backend.deer_flow.prompts.planner_model import Plan, StepType
+    set_ai_comparison_context(
+        max_search_results=configurable.max_search_results,
+        resources=state.get("resources", []),
+    )
+    current_plan = state.get("current_plan")
+    current_step = None
+    if isinstance(current_plan, Plan):
+        for step in current_plan.steps:
+            if not step.execution_res and step.step_type == StepType.AI_QUERY:
+                current_step = step
+                break
+
+    model_tool_map = {
+        "gpt-3.5-turbo": query_gpt35,
+        "gemini-2.5-flash": query_gemini_flash,
+        "deepseek-chat": query_deepseek,
+        "grok-4-fast-reasoning": query_grok4,
+    }
+    pending_tool = state.get("ai_compare_pending_tool") or {}
+    if pending_tool.get("step") == "ai_compare_query":
+        selected_model = pending_tool.get("model_key")
+        tool_args = pending_tool.get("tool_args") or {}
+        tool_call_id = pending_tool.get("tool_call_id") or uuid4().hex
+        selected_tool = model_tool_map.get(selected_model)
+        if not selected_tool:
+            return Command(
+                update={
+                    **preserve_state_meta_fields(state),
+                    "ai_compare_pending_tool": None,
+                },
+                goto="ai_compare_team",
+            )
+
+        try:
+            tool_output = await selected_tool.ainvoke(tool_args)
+        except Exception as exc:
+            tool_output = json.dumps(
+                {
+                    "model": selected_model or "unknown",
+                    "display_name": selected_model or "Unknown",
+                    "response": None,
+                    "success": False,
+                    "error": str(exc),
+                },
+                ensure_ascii=False,
+            )
+
+        payload = _parse_json_content(str(tool_output))
+        responses = []
+        if isinstance(payload, dict) and payload:
+            responses = [payload]
+        existing = state.get("ai_compare_responses", [])
+        merged = {resp.get("model"): resp for resp in existing if isinstance(resp, dict)}
+        for resp in responses:
+            if isinstance(resp, dict):
+                merged[resp.get("model")] = resp
+        merged_responses = [resp for resp in merged.values() if resp]
+        responses_json = json.dumps(merged_responses, ensure_ascii=False)
+        if current_step:
+            display = selected_model or current_step.title
+            current_step.execution_res = f"Completed: {display}"
+        display_name = None
+        if responses and isinstance(responses[0], dict):
+            display_name = responses[0].get("display_name")
+        name = display_name or tool_args.get("display_name") or selected_model or "Model"
+        response_text = ""
+        if responses and isinstance(responses[0], dict):
+            response = responses[0].get("response")
+            error = responses[0].get("error")
+            if response:
+                response_text = f"### {name}\n\n{response}"
+            elif error:
+                response_text = f"### {name}\n\nError: {error}"
+            else:
+                response_text = f"### {name}\n\n(No response)"
+        messages = [
+            ToolMessage(
+                content=response_text or str(tool_output),
+                tool_call_id=tool_call_id,
+                name="query_model_in_round",
+            ),
+            AIMessage(
+                content=response_text or "",
+                name="ai_compare_query",
+            ),
+        ]
+        return Command(
+            update={
+                **preserve_state_meta_fields(state),
+                "ai_compare_pending_tool": None,
+                "ai_compare_responses": merged_responses,
+                "ai_compare_responses_json": responses_json,
+                "messages": messages,
+                "current_plan": current_plan,
+            },
+            goto="ai_compare_team",
+        )
+
+    selected_tool = None
+    selected_model = None
+    if current_step:
+        step_text = f"{current_step.title} {current_step.description}".lower()
+        for model_key, tool in model_tool_map.items():
+            if model_key in step_text or model_key.replace("-", " ") in step_text:
+                selected_tool = tool
+                selected_model = model_key
+                break
+    if not selected_tool:
+        return Command(update=preserve_state_meta_fields(state), goto="ai_compare_team")
+
+    existing = state.get("ai_compare_responses", [])
+    already_completed = False
+    for resp in existing:
+        if (
+            isinstance(resp, dict)
+            and resp.get("model") == selected_model
+            and (resp.get("response") or resp.get("error"))
+        ):
+            already_completed = True
+            break
+    if already_completed:
+        if current_step and not current_step.execution_res:
+            display = selected_model or current_step.title
+            current_step.execution_res = f"Completed: {display}"
+        return Command(
+            update={
+                **preserve_state_meta_fields(state),
+                "current_plan": current_plan,
+            },
+            goto="ai_compare_team",
+        )
+
+    query = state.get("research_topic", "")
+    tool_call_id = uuid4().hex
+    tool_args = {
+        "query": query,
+        "model_key": selected_model,
+        "user_query": query,
+        "locale": state.get("locale", "en-US"),
+        "display_name": current_step.title if current_step else selected_model,
+    }
+    messages = [
+        AIMessage(
+            content="",
+            name="ai_compare_query",
+            tool_calls=[
+                {
+                    "id": tool_call_id,
+                    "name": "query_model_in_round",
+                    "args": tool_args,
+                }
+            ],
+        ),
+    ]
+    return Command(
+        update={
+            **preserve_state_meta_fields(state),
+            "ai_compare_pending_tool": {
+                "step": "ai_compare_query",
+                "tool_call_id": tool_call_id,
+                "tool_args": tool_args,
+                "model_key": selected_model,
+            },
+            "messages": messages,
+            "current_plan": current_plan,
+        },
+        goto="ai_compare_team",
+    )
+
+
+async def ai_compare_fact_check_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["ai_compare_team"]]:
+    """Fact-check AI model responses."""
+    configurable = Configuration.from_runnable_config(config)
+    set_ai_comparison_context(
+        max_search_results=configurable.max_search_results,
+        resources=state.get("resources", []),
+    )
+    current_plan = state.get("current_plan")
+    from backend.deer_flow.prompts.planner_model import Plan, StepType
+    pending_tool = state.get("ai_compare_pending_tool") or {}
+    if pending_tool.get("step") == "ai_compare_fact_check":
+        tool_call_id = pending_tool.get("tool_call_id") or uuid4().hex
+        tool_args = pending_tool.get("tool_args") or {}
+        if not tool_args:
+            query = state.get("research_topic", "")
+            model_responses_json = state.get("ai_compare_responses_json") or json.dumps(
+                state.get("ai_compare_responses", []), ensure_ascii=False
+            )
+            tool_args = {"query": query, "model_responses_json": model_responses_json}
+        try:
+            tool_output = await fact_check_responses.ainvoke(tool_args)
+        except Exception as exc:
+            tool_output = json.dumps({"error": str(exc)}, ensure_ascii=False)
+        payload = _parse_json_content(str(tool_output))
+        ui_text = ""
+        if isinstance(payload, dict) and payload:
+            summary = payload.get("fact_check_summary") or payload.get("summary")
+            if summary:
+                ui_text = f"### Faktakoll\n\n{summary}"
+        messages = [
+            ToolMessage(
+                content=ui_text or str(tool_output),
+                tool_call_id=tool_call_id,
+                name="fact_check_responses",
+            ),
+            AIMessage(
+                content=ui_text or "",
+                name="ai_compare_fact_check",
+            ),
+        ]
+        if isinstance(current_plan, Plan):
+            for step in current_plan.steps:
+                if not step.execution_res and step.step_type == StepType.AI_FACT_CHECK:
+                    step.execution_res = "Fact check completed"
+                    break
+        fact_check_json = json.dumps(payload, ensure_ascii=False) if payload else None
+        return Command(
+            update={
+                **preserve_state_meta_fields(state),
+                "ai_compare_pending_tool": None,
+                "ai_compare_fact_check": payload or None,
+                "ai_compare_fact_check_json": fact_check_json,
+                "messages": messages,
+                "current_plan": current_plan,
+            },
+            goto="ai_compare_team",
+        )
+
+    query = state.get("research_topic", "")
+    model_responses_json = state.get("ai_compare_responses_json") or json.dumps(
+        state.get("ai_compare_responses", []), ensure_ascii=False
+    )
+    tool_call_id = uuid4().hex
+    tool_args = {"query": query, "model_responses_json": model_responses_json}
+    messages = [
+        AIMessage(
+            content="",
+            name="ai_compare_fact_check",
+            tool_calls=[
+                {"id": tool_call_id, "name": "fact_check_responses", "args": tool_args}
+            ],
+        ),
+    ]
+    return Command(
+        update={
+            **preserve_state_meta_fields(state),
+            "ai_compare_pending_tool": {
+                "step": "ai_compare_fact_check",
+                "tool_call_id": tool_call_id,
+                "tool_args": tool_args,
+            },
+            "messages": messages,
+            "current_plan": current_plan,
+        },
+        goto="ai_compare_team",
+    )
+
+
+async def ai_compare_meta_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["ai_compare_team"]]:
+    """Run meta-analysis on AI model responses."""
+    configurable = Configuration.from_runnable_config(config)
+    set_ai_comparison_context(
+        max_search_results=configurable.max_search_results,
+        resources=state.get("resources", []),
+    )
+    current_plan = state.get("current_plan")
+    from backend.deer_flow.prompts.planner_model import Plan, StepType
+    pending_tool = state.get("ai_compare_pending_tool") or {}
+    if pending_tool.get("step") == "ai_compare_meta":
+        tool_call_id = pending_tool.get("tool_call_id") or uuid4().hex
+        tool_args = pending_tool.get("tool_args") or {}
+        if not tool_args:
+            query = state.get("research_topic", "")
+            model_responses_json = state.get("ai_compare_responses_json") or json.dumps(
+                state.get("ai_compare_responses", []), ensure_ascii=False
+            )
+            analysis_json = state.get("ai_compare_fact_check_json") or json.dumps(
+                state.get("ai_compare_fact_check") or {}, ensure_ascii=False
+            )
+            tool_args = {
+                "query": query,
+                "model_responses_json": model_responses_json,
+                "analysis_json": analysis_json,
+            }
+        try:
+            tool_output = await run_meta_analysis.ainvoke(tool_args)
+        except Exception as exc:
+            tool_output = json.dumps({"error": str(exc)}, ensure_ascii=False)
+        payload = _parse_json_content(str(tool_output))
+        messages = [
+            ToolMessage(
+                content=str(tool_output),
+                tool_call_id=tool_call_id,
+                name="run_meta_analysis",
+            ),
+            AIMessage(
+                content=(json.dumps(payload, ensure_ascii=False) if payload else ""),
+                name="ai_compare_meta",
+            ),
+        ]
+        if isinstance(current_plan, Plan):
+            for step in current_plan.steps:
+                if not step.execution_res and step.step_type == StepType.AI_META:
+                    step.execution_res = "Meta analysis completed"
+                    break
+        meta_results = payload.get("meta_results") if payload else None
+        meta_payload = meta_results or payload
+        meta_json = json.dumps(meta_payload, ensure_ascii=False) if meta_payload else None
+        return Command(
+            update={
+                **preserve_state_meta_fields(state),
+                "ai_compare_pending_tool": None,
+                "ai_compare_meta": meta_payload,
+                "ai_compare_meta_json": meta_json,
+                "messages": messages,
+                "current_plan": current_plan,
+            },
+            goto="ai_compare_team",
+        )
+
+    query = state.get("research_topic", "")
+    model_responses_json = state.get("ai_compare_responses_json") or json.dumps(
+        state.get("ai_compare_responses", []), ensure_ascii=False
+    )
+    analysis_json = state.get("ai_compare_fact_check_json") or json.dumps(
+        state.get("ai_compare_fact_check") or {}, ensure_ascii=False
+    )
+    tool_call_id = uuid4().hex
+    tool_args = {
+        "query": query,
+        "model_responses_json": model_responses_json,
+        "analysis_json": analysis_json,
+    }
+    messages = [
+        AIMessage(
+            content="",
+            name="ai_compare_meta",
+            tool_calls=[
+                {"id": tool_call_id, "name": "run_meta_analysis", "args": tool_args}
+            ],
+        ),
+    ]
+    return Command(
+        update={
+            **preserve_state_meta_fields(state),
+            "ai_compare_pending_tool": {
+                "step": "ai_compare_meta",
+                "tool_call_id": tool_call_id,
+                "tool_args": tool_args,
+            },
+            "messages": messages,
+            "current_plan": current_plan,
+        },
+        goto="ai_compare_team",
+    )
+
+
+async def ai_compare_synth_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["ai_compare_team"]]:
+    """Synthesize optimal answer."""
+    configurable = Configuration.from_runnable_config(config)
+    set_ai_comparison_context(
+        max_search_results=configurable.max_search_results,
+        resources=state.get("resources", []),
+    )
+    current_plan = state.get("current_plan")
+    from backend.deer_flow.prompts.planner_model import Plan, StepType
+    pending_tool = state.get("ai_compare_pending_tool") or {}
+    if pending_tool.get("step") == "ai_compare_synth":
+        tool_call_id = pending_tool.get("tool_call_id") or uuid4().hex
+        tool_args = pending_tool.get("tool_args") or {}
+        if not tool_args:
+            query = state.get("research_topic", "")
+            model_responses_json = state.get("ai_compare_responses_json") or json.dumps(
+                state.get("ai_compare_responses", []), ensure_ascii=False
+            )
+            analysis_json = state.get("ai_compare_fact_check_json") or json.dumps(
+                state.get("ai_compare_fact_check") or {}, ensure_ascii=False
+            )
+            meta_json = state.get("ai_compare_meta_json") or json.dumps(
+                state.get("ai_compare_meta") or {}, ensure_ascii=False
+            )
+            tool_args = {
+                "query": query,
+                "model_responses_json": model_responses_json,
+                "analysis_json": analysis_json,
+                "meta_json": meta_json,
+                "locale": state.get("locale", "en-US"),
+            }
+        try:
+            tool_result = await synthesize_optimal_answer.ainvoke(tool_args)
+        except Exception as exc:
+            tool_result = json.dumps({"error": str(exc)}, ensure_ascii=False)
+        payload = _parse_json_content(str(tool_result))
+        synthesis_payload = None
+        if isinstance(payload, dict):
+            synthesis_payload = payload.get("synthesis") or payload
+        elif payload:
+            synthesis_payload = payload
+        synthesis_json = (
+            json.dumps(synthesis_payload, ensure_ascii=False) if synthesis_payload else None
+        )
+        if isinstance(current_plan, Plan):
+            for step in current_plan.steps:
+                if not step.execution_res and step.step_type == StepType.AI_SYNTH:
+                    step.execution_res = "AI comparison synthesis completed"
+                    break
+        messages = [
+            ToolMessage(
+                content=(
+                    json.dumps(synthesis_payload, ensure_ascii=False)
+                    if synthesis_payload
+                    else str(tool_result)
+                ),
+                tool_call_id=tool_call_id,
+                name="synthesize_optimal_answer",
+            ),
+            AIMessage(
+                content=(
+                    synthesis_payload.get("synthesized_answer")
+                    if isinstance(synthesis_payload, dict)
+                    and synthesis_payload.get("synthesized_answer")
+                    else (
+                        synthesis_payload.get("synthesis")
+                        if isinstance(synthesis_payload, dict)
+                        else ""
+                    )
+                ),
+                name="ai_compare_synth",
+            ),
+        ]
+        return Command(
+            update={
+                **preserve_state_meta_fields(state),
+                "ai_compare_pending_tool": None,
+                "ai_compare_synthesis": synthesis_payload,
+                "ai_compare_synthesis_json": synthesis_json,
+                "messages": messages,
+                "current_plan": current_plan,
+            },
+            goto="ai_compare_team",
+        )
+
+    query = state.get("research_topic", "")
+    model_responses_json = state.get("ai_compare_responses_json") or json.dumps(
+        state.get("ai_compare_responses", []), ensure_ascii=False
+    )
+    analysis_json = state.get("ai_compare_fact_check_json") or json.dumps(
+        state.get("ai_compare_fact_check") or {}, ensure_ascii=False
+    )
+    meta_json = state.get("ai_compare_meta_json") or json.dumps(
+        state.get("ai_compare_meta") or {}, ensure_ascii=False
+    )
+    tool_call_id = uuid4().hex
+    tool_args = {
+        "query": query,
+        "model_responses_json": model_responses_json,
+        "analysis_json": analysis_json,
+        "meta_json": meta_json,
+        "locale": state.get("locale", "en-US"),
+    }
+    return Command(
+        update={
+            **preserve_state_meta_fields(state),
+            "ai_compare_pending_tool": {
+                "step": "ai_compare_synth",
+                "tool_call_id": tool_call_id,
+                "tool_args": tool_args,
+            },
+            "messages": [
+                AIMessage(
+                    content="",
+                    name="ai_compare_synth",
+                    tool_calls=[
+                        {
+                            "id": tool_call_id,
+                            "name": "synthesize_optimal_answer",
+                            "args": tool_args,
+                        }
+                    ],
+                )
+            ],
+            "current_plan": current_plan,
+        },
+        goto="ai_compare_team",
+    )
+
+
+async def ai_compare_reporter_node(
+    state: State, config: RunnableConfig
+) -> Command[Literal["__end__"]]:
+    """Generate final AI comparison report."""
+    configurable = Configuration.from_runnable_config(config)
+    locale = state.get("locale", "en-US")
+    messages = apply_prompt_template("ai_compare_reporter", state, configurable, locale)
+    llm = get_llm_by_type(AGENT_LLM_MAP.get("ai_compare_reporter", "basic"))
+    response = llm.invoke(messages)
+    content = strip_think_tags(get_message_content(response) or "")
+    current_plan = state.get("current_plan")
+    from backend.deer_flow.prompts.planner_model import Plan, StepType
+    if isinstance(current_plan, Plan):
+        for step in current_plan.steps:
+            if not step.execution_res and step.step_type == StepType.AI_REPORT:
+                step.execution_res = "AI comparison report generated"
+                break
+    return Command(
+        update={
+            **preserve_state_meta_fields(state),
+            "messages": [AIMessage(content=content, name="ai_compare_reporter")],
+            "ai_compare_report_complete": True,
+            "current_plan": current_plan,
+        },
+        goto="__end__",
+    )
+
 # ============================================================
 # NEW SEPARATE DEBATE CHAIN NODES
 # ============================================================
@@ -2796,7 +3645,12 @@ async def debate_orchestrator_node(
             debate_flow = get_debate_flow(thread_id=thread_id)
             round_3_responses = list(debate_flow.chain_so_far) if debate_flow.chain_so_far else []
             if round_3_responses:
-                vote_results = await debate_flow.collect_votes(user_query, round_3_responses)
+                allowed_models = [resp.get("model") for resp in round_3_responses if resp.get("model")]
+                vote_results = await debate_flow.collect_votes(
+                    user_query,
+                    round_3_responses,
+                    allowed_models=allowed_models,
+                )
             debate_rounds = list(debate_flow.debate_history)
             if round_3_responses:
                 debate_rounds.append({
@@ -2970,7 +3824,19 @@ async def external_ai_caller_node(
     # Determine model order and index
     model_order = state.get("debate_model_order") or []
     model_index = state.get("debate_model_index", 0)
+    selected_models = state.get("debate_model_ids") or []
+    if selected_models:
+        allowed = set(selected_models)
+        allowed.add("oneseek-local")
+        model_order = [model for model in model_order if model in allowed]
+        if model_index >= len(model_order):
+            model_index = max(len(model_order) - 1, 0)
     pending_model = state.get("debate_pending_model")
+    if pending_model and selected_models:
+        allowed = set(selected_models)
+        allowed.add("oneseek-local")
+        if pending_model.get("model_key") not in allowed:
+            pending_model = None
     
     try:
         tool_calls: list[dict[str, Any]] = []

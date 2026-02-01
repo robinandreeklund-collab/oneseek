@@ -68,6 +68,18 @@ export interface ToolCallResultEvent
     }
   > {}
 
+export interface MetadataEvent {
+  type: "data";
+  data: {
+    tool_actions?: Array<Record<string, unknown>>;
+    steps?: string[];
+    retrieved?: Array<Record<string, unknown>>;
+    source_count?: number;
+    live_update?: boolean;
+    thread_id?: string;
+  };
+}
+
 export interface InterruptEvent
   extends GenericEvent<
     "interrupt",
@@ -89,5 +101,6 @@ export type ChatEvent =
   | ToolCallsEvent
   | ToolCallChunksEvent
   | ToolCallResultEvent
+  | MetadataEvent
   | InterruptEvent
   | CitationsEvent;

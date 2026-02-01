@@ -20,15 +20,11 @@ When asked to compare AI models, follow these steps **in order**, calling one to
    
    NOTE: OneSeek Local is the orchestrating agent conducting this research - it is NOT queried as one of the models to compare.
 
-2. **Fact-Check with Web Search**: Use `web_search` tool with the query to find external sources and verify the information. This provides independent validation of the models' responses.
+2. **Fact-Check**: Use `fact_check_responses` with the query and JSON list of model responses to verify key claims.
 
-3. **Meta-Analysis**: Use `run_meta_analysis` tool to apply critical analysis frameworks:
-   - Counterfactual reasoning (alternative scenarios)
-   - Robustness testing (edge cases)
-   - Consistency checking (contradictions)
-   - Truth-pressure testing (verification needs)
+3. **Meta-Analysis**: Use `run_meta_analysis` with the query, responses JSON, and fact-check JSON to score models across 4 categories.
 
-4. **Synthesize**: Use `synthesize_optimal_answer` tool to combine insights from all models into an optimal answer that:
+4. **Synthesize**: Use `synthesize_optimal_answer` with query + responses + fact-check + meta JSON to combine insights into an optimal answer that:
    - Highlights consensus among models
    - Notes areas of disagreement
    - Includes verified facts from web search
@@ -36,7 +32,7 @@ When asked to compare AI models, follow these steps **in order**, calling one to
 
 **IMPORTANT**: Call the model query tools **one at a time** (not all at once). This allows users to see each model's response as it arrives, providing real-time progress updates.
 
-**CRITICAL**: After calling all the tools listed above (4 model queries + web_search + run_meta_analysis + synthesize_optimal_answer = 7 total tool calls), you MUST provide your final comparison report and STOP. Do NOT call the tools again. Do NOT continue looping. Simply provide the structured report below and finish.
+**CRITICAL**: After calling all the tools listed above (4 model queries + fact_check_responses + run_meta_analysis + synthesize_optimal_answer = 7 total tool calls), you MUST provide your final comparison report and STOP.
 
 # Response Format
 

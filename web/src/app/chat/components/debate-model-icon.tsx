@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
 
 import { cn } from "~/lib/utils";
 
@@ -8,11 +8,31 @@ type ModelIconProps = {
   size?: number;
 };
 
-const MODEL_ICONS: Record<string, string> = {
-  "gpt-3.5-turbo": "/images/ai-logos/openai.svg",
-  "gemini-2.5-flash": "/images/ai-logos/gemini.svg",
-  "deepseek-chat": "/images/ai-logos/deepseek.svg",
-  "grok-4-fast-reasoning": "/images/ai-logos/grok.svg",
+const MODEL_ICON_SOURCES: Record<string, string[]> = {
+  "gpt-3.5-turbo": [
+    "/images/ai-logos/openai.png",
+    "/images/ai-logos/openai.svg",
+    "/images/ai-logos/openai.svg.svg",
+    "/openai.png",
+  ],
+  "gemini-2.5-flash": [
+    "/images/ai-logos/gemini.png",
+    "/images/ai-logos/gemini.svg.png",
+    "/images/ai-logos/gemini.svg",
+    "/gemini.png",
+  ],
+  "deepseek-chat": [
+    "/images/ai-logos/deepseek.png",
+    "/images/ai-logos/deepseek.svg.png",
+    "/images/ai-logos/deepseek.svg",
+    "/deepseek.png",
+  ],
+  "grok-4-fast-reasoning": [
+    "/images/ai-logos/grok.png",
+    "/images/ai-logos/grok.svg.png",
+    "/images/ai-logos/grok.svg",
+    "/grok.png",
+  ],
 };
 
 const MODEL_STYLES: Record<string, { label: string; color: string }> = {
@@ -44,8 +64,14 @@ export function DebateModelIcon({ modelKey, className, size = 20 }: ModelIconPro
     );
   }
 
-  const iconSrc = modelKey ? MODEL_ICONS[modelKey] : undefined;
-  if (iconSrc) {
+  const sources = useMemo(
+    () => (modelKey ? MODEL_ICON_SOURCES[modelKey] ?? [] : []),
+    [modelKey],
+  );
+  const [sourceIndex, setSourceIndex] = useState(0);
+  const [showFallback, setShowFallback] = useState(false);
+  const iconSrc = sources[sourceIndex];
+  if (iconSrc && !showFallback) {
     return (
       <span
         className={cn(
@@ -60,6 +86,13 @@ export function DebateModelIcon({ modelKey, className, size = 20 }: ModelIconPro
           width={size - 4}
           height={size - 4}
           className="h-auto w-auto object-contain"
+          onError={() => {
+            if (sourceIndex < sources.length - 1) {
+              setSourceIndex(sourceIndex + 1);
+            } else {
+              setShowFallback(true);
+            }
+          }}
         />
       </span>
     );
