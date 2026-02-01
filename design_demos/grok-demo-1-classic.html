@@ -3,164 +3,113 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Grok Chat Demo 1 - Classic</title>
+    <title>OneSeek Grok Demo</title>
     <style>
       :root {
         color-scheme: dark;
-        --bg: #0b0b0d;
-        --panel: #141416;
-        --panel-2: #17181b;
-        --panel-3: #101114;
-        --border: #23242a;
-        --text: #e7e7ea;
-        --muted: #9ca3af;
-        --accent: #7dd3fc;
-        --accent-2: #a78bfa;
-        --brand: #60a5fa;
-        --success: #4ade80;
-        --warning: #facc15;
-      }
-
-      [data-theme="light"] {
-        color-scheme: light;
-        --bg: #f6f7fb;
-        --panel: #ffffff;
-        --panel-2: #f0f2f7;
-        --panel-3: #e9ecf4;
-        --border: #d6d9e5;
-        --text: #111827;
-        --muted: #6b7280;
-        --accent: #2563eb;
-        --accent-2: #7c3aed;
-        --brand: #2563eb;
-        --success: #16a34a;
-        --warning: #d97706;
+        --bg: #0b0b0b;
+        --panel: #111111;
+        --panel-2: #151515;
+        --panel-3: #1b1b1b;
+        --border: #242424;
+        --border-2: #2f2f2f;
+        --text: #f2f2f2;
+        --muted: #b7b7b7;
+        --muted-2: #8c8c8c;
+        --accent: #ffffff;
       }
 
       * {
         box-sizing: border-box;
-        margin: 0;
-        padding: 0;
-        font-family: "Inter", "SF Pro Text", system-ui, -apple-system, sans-serif;
       }
 
       body {
-        background: radial-gradient(
-            circle at top,
-            rgba(125, 211, 252, 0.12),
-            transparent 52%
-          ),
-          var(--bg);
+        margin: 0;
+        font-family: "Inter", "SF Pro Text", system-ui, -apple-system, sans-serif;
+        background: var(--bg);
         color: var(--text);
-        min-height: 100vh;
+        height: 100vh;
+        overflow: hidden;
       }
 
-      body[data-theme="light"] {
-        background: radial-gradient(
-            circle at top,
-            rgba(37, 99, 235, 0.12),
-            transparent 52%
-          ),
-          var(--bg);
-      }
-
-      .layout {
-        display: grid;
-        grid-template-columns: 64px 1fr 360px;
-        min-height: 100vh;
+      .app {
+        display: flex;
+        height: 100vh;
       }
 
       .rail {
-        background: var(--panel-3);
+        width: 64px;
+        background: #0a0a0a;
         border-right: 1px solid var(--border);
         display: flex;
         flex-direction: column;
         align-items: center;
-        padding: 20px 0;
-        gap: 18px;
-      }
-
-      .rail-top,
-      .rail-bottom {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
+        padding: 16px 0;
         gap: 14px;
       }
 
-      .rail-top {
-        flex: 1;
+      .rail-logo {
+        width: 32px;
+        height: 32px;
+        display: grid;
+        place-items: center;
+        margin-bottom: 8px;
       }
 
-      .logo-dot {
-        width: 34px;
-        height: 34px;
-        border-radius: 50%;
-        background: linear-gradient(135deg, var(--accent), var(--accent-2));
-        box-shadow: 0 0 18px rgba(125, 211, 252, 0.25);
-      }
-
-      .rail-icon {
+      .rail-btn {
         width: 36px;
         height: 36px;
         border-radius: 12px;
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--muted);
+        display: grid;
+        place-items: center;
+      }
+
+      .rail-btn.active {
         background: var(--panel);
-        border: 1px solid var(--border);
+        border-color: var(--border);
+        color: var(--text);
       }
 
-      .rail-icon.active {
-        border-color: rgba(125, 211, 252, 0.6);
-        box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.3);
+      .rail-spacer {
+        flex: 1;
       }
 
-      .avatar {
-        width: 38px;
-        height: 38px;
+      .rail-avatar {
+        width: 28px;
+        height: 28px;
         border-radius: 50%;
-        background: var(--panel-3);
-        border: 1px solid var(--border);
+        background: linear-gradient(135deg, #7dd3fc, #a78bfa);
+        border: 2px solid #0a0a0a;
       }
 
-      .center {
-        display: flex;
-        flex-direction: column;
-        padding: 20px 36px 120px;
-        gap: 24px;
+      .main {
+        flex: 1;
+        position: relative;
+        height: 100%;
       }
 
       .topbar {
-        height: 48px;
+        position: absolute;
+        top: 16px;
+        right: 20px;
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        color: var(--muted);
-        font-size: 12px;
+        gap: 10px;
+        z-index: 4;
       }
 
-      .topbar-left {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      }
-
-      .logo-text {
-        font-size: 16px;
-        font-weight: 600;
-        color: var(--text);
-        letter-spacing: 0.4px;
-      }
-
-      .status-chip {
+      .topbar .ghost {
         border: 1px solid var(--border);
+        background: var(--panel);
+        color: var(--text);
+        padding: 8px 14px;
         border-radius: 999px;
-        padding: 4px 10px;
-        background: var(--panel-3);
-        font-size: 11px;
-        color: var(--muted);
-      }
-
-      .topbar-actions {
-        display: flex;
+        font-size: 13px;
+        display: inline-flex;
+        align-items: center;
         gap: 8px;
       }
 
@@ -169,2484 +118,624 @@
         height: 32px;
         border-radius: 10px;
         border: 1px solid var(--border);
-        background: var(--panel-3);
+        background: var(--panel);
         display: grid;
         place-items: center;
-      }
-
-      .icon-btn svg {
-        width: 14px;
-        height: 14px;
-        stroke: var(--muted);
-        stroke-width: 1.6;
-        fill: none;
-      }
-
-      .state-switcher {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-      }
-
-      .state-btn {
-        border: 1px solid var(--border);
-        border-radius: 999px;
-        padding: 6px 12px;
-        font-size: 12px;
-        background: var(--panel-3);
-        color: var(--muted);
-        cursor: pointer;
-      }
-
-      .state-btn.active {
-        border-color: rgba(96, 165, 250, 0.6);
         color: var(--text);
       }
 
-      .state {
+      .topbar-landing,
+      .topbar-chat {
         display: none;
-        flex-direction: column;
-        gap: 18px;
-        animation: fadeInUp 0.4s ease;
       }
 
-      .state.is-active {
+      body[data-view="landing"] .topbar-landing {
         display: flex;
+      }
+
+      body[data-view="chat"] .topbar-chat,
+      body[data-view="sidebar"] .topbar-chat {
+        display: flex;
+      }
+
+      .view {
+        display: none;
+        height: 100%;
+        width: 100%;
+      }
+
+      body[data-view="landing"] .view-landing {
+        display: flex;
+      }
+
+      body[data-view="chat"] .view-chat,
+      body[data-view="sidebar"] .view-chat {
+        display: block;
       }
 
       .hero {
+        margin: auto;
+        text-align: center;
         display: flex;
         flex-direction: column;
         align-items: center;
+        gap: 20px;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
         gap: 12px;
-        text-align: center;
-        padding: 10px 0 6px;
-      }
-
-      .hero-mark {
-        width: 56px;
-        height: 56px;
-        border-radius: 18px;
-        background: linear-gradient(
-          140deg,
-          rgba(96, 165, 250, 0.25),
-          rgba(167, 139, 250, 0.25)
-        );
-        border: 1px solid rgba(96, 165, 250, 0.4);
-        display: grid;
-        place-items: center;
-        font-size: 18px;
+        font-size: 34px;
         font-weight: 600;
+        letter-spacing: 0.2px;
       }
 
-      .hero h1 {
-        font-size: 28px;
-        font-weight: 600;
+      .brand-mark {
+        width: 38px;
+        height: 38px;
       }
 
-      .hero p {
+      .prompt {
+        width: min(640px, 78vw);
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 12px 14px 12px 16px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: var(--muted);
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02);
+      }
+
+      .prompt .placeholder {
+        flex: 1;
         color: var(--muted);
         font-size: 14px;
+        text-align: left;
       }
 
-      .input-card {
-        width: min(880px, 100%);
-        margin: 0 auto;
-        background: var(--panel-2);
-        border: 1px solid var(--border);
-        border-radius: 24px;
-        padding: 16px 18px 12px;
-        position: relative;
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        box-shadow: 0 22px 45px rgba(0, 0, 0, 0.35);
-        overflow: hidden;
+      .prompt .mode {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--text);
+        font-size: 13px;
       }
 
-      .input-card.compact {
-        border-radius: 18px;
-        padding: 12px 14px;
-        box-shadow: none;
-      }
-
-      .enhance-overlay {
-        position: absolute;
-        inset: 0;
-        border-radius: 24px;
-        background: linear-gradient(
-          120deg,
-          rgba(59, 130, 246, 0.2),
-          rgba(147, 51, 234, 0.2),
-          rgba(59, 130, 246, 0.2)
-        );
-        opacity: 0;
-        pointer-events: none;
-      }
-
-      .sparkles {
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-      }
-
-      .sparkles span {
-        position: absolute;
-        width: 6px;
-        height: 6px;
+      .prompt .mic {
+        width: 30px;
+        height: 30px;
         border-radius: 50%;
         background: var(--accent);
-        opacity: 0;
-      }
-
-      .input-card.enhancing .enhance-overlay {
-        animation: enhancePulse 1.6s ease;
-      }
-
-      .input-card.enhancing .sparkles span {
-        animation: sparkleFloat 1.6s ease;
-      }
-
-      .sparkles span:nth-child(1) {
-        left: 20%;
-        top: 30%;
-      }
-
-      .sparkles span:nth-child(2) {
-        left: 35%;
-        top: 60%;
-      }
-
-      .sparkles span:nth-child(3) {
-        left: 55%;
-        top: 40%;
-      }
-
-      .sparkles span:nth-child(4) {
-        left: 70%;
-        top: 60%;
-      }
-
-      .sparkles span:nth-child(5) {
-        left: 80%;
-        top: 32%;
-      }
-
-      .feedback-pill {
-        position: absolute;
-        top: 10px;
-        left: 16px;
-        background: var(--panel-3);
-        border: 1px solid rgba(96, 165, 250, 0.4);
-        color: var(--accent);
-        padding: 4px 10px;
-        border-radius: 999px;
-        font-size: 11px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-
-      .feedback-pill span {
-        display: inline-flex;
-        width: 16px;
-        height: 16px;
-        border-radius: 50%;
-        border: 1px solid rgba(125, 211, 252, 0.4);
-        align-items: center;
-        justify-content: center;
-        font-size: 10px;
-        color: var(--muted);
-      }
-
-      .input-area {
-        min-height: 84px;
-        padding: 24px 8px 8px;
-        color: var(--muted);
-        font-size: 14px;
-      }
-
-      .input-actions {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-
-      .action-group {
-        display: flex;
-        gap: 10px;
-        align-items: center;
-      }
-
-      .ghost-btn {
-        border: 1px solid var(--border);
-        background: var(--panel-3);
-        color: var(--muted);
-        padding: 8px 12px;
-        border-radius: 12px;
-        font-size: 12px;
-      }
-
-      .theme-toggle {
-        padding: 6px 10px;
-        border-radius: 999px;
-        font-size: 11px;
-      }
-
-      .round-btn {
-        width: 40px;
-        height: 40px;
-        border-radius: 999px;
-        border: 1px solid rgba(125, 211, 252, 0.4);
-        background: rgba(125, 211, 252, 0.2);
+        color: #000;
         display: grid;
         place-items: center;
-        color: var(--text);
-        font-weight: 600;
-        font-size: 13px;
+        font-weight: 700;
       }
 
-      .tool-row {
+      .pill-row {
         display: flex;
+        gap: 10px;
         flex-wrap: wrap;
-        gap: 8px;
-      }
-
-      .tool-btn {
-        border: 1px solid var(--border);
-        background: var(--panel-3);
-        color: var(--muted);
-        padding: 6px 12px;
-        border-radius: 12px;
-        font-size: 11px;
-      }
-
-      .tool-btn.active {
-        border-color: rgba(96, 165, 250, 0.5);
-        color: var(--accent);
-      }
-
-      .hero-pills {
-        display: flex;
         justify-content: center;
-        gap: 10px;
-        flex-wrap: wrap;
       }
 
-      .hero-pill {
-        background: var(--panel-2);
+      .pill-btn {
         border: 1px solid var(--border);
-        padding: 6px 12px;
+        background: var(--panel);
+        color: var(--text);
+        padding: 8px 14px;
         border-radius: 999px;
-        color: var(--muted);
-        font-size: 12px;
-      }
-
-      .feature-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 12px;
-        width: min(880px, 100%);
-        margin: 0 auto;
-      }
-
-      .feature-card {
-        background: var(--panel-2);
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        padding: 12px;
-        display: flex;
-        flex-direction: column;
+        font-size: 13px;
+        display: inline-flex;
+        align-items: center;
         gap: 8px;
       }
 
-      .feature-card h4 {
+      .chat-area {
+        width: min(760px, 82vw);
+        margin: 0 auto;
+        padding-top: 96px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        position: relative;
+      }
+
+      .message-row {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .assistant-text {
+        font-size: 16px;
+        line-height: 1.55;
+      }
+
+      .meta-row {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--muted-2);
+        font-size: 12px;
+      }
+
+      .meta-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .meta-btn {
+        width: 24px;
+        height: 24px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--panel);
+        display: grid;
+        place-items: center;
+      }
+
+      .suggestion {
+        color: var(--muted);
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .bubble-user {
+        align-self: flex-end;
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        padding: 8px 14px;
+        border-radius: 999px;
         font-size: 13px;
       }
 
-      .feature-card p {
-        font-size: 12px;
-        color: var(--muted);
-        line-height: 1.4;
-      }
-
-      .feature-card button {
-        border: 1px solid var(--border);
-        background: var(--panel-3);
-        color: var(--text);
-        border-radius: 999px;
-        padding: 6px 10px;
-        font-size: 11px;
-        align-self: flex-start;
-      }
-
-      .message-preview {
-        width: min(880px, 100%);
-        margin: 0 auto;
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-      }
-
-      .bubble {
-        max-width: 640px;
-        padding: 12px 14px;
+      .assistant-block {
+        background: transparent;
         border-radius: 18px;
-        border: 1px solid var(--border);
-        background: var(--panel-2);
-        line-height: 1.5;
-        font-size: 14px;
+        border: 1px solid transparent;
+        padding: 0;
       }
 
-      .bubble.user {
-        align-self: flex-end;
-        background: rgba(96, 165, 250, 0.2);
-        border-color: rgba(96, 165, 250, 0.5);
-        border-bottom-right-radius: 6px;
+      .assistant-block h3 {
+        margin: 0 0 10px;
+        font-size: 16px;
       }
 
-      .bubble.assistant {
-        border-bottom-left-radius: 6px;
-      }
-
-      .bubble ul {
-        margin: 8px 0 0;
-        padding-left: 18px;
-      }
-
-      .bubble li + li {
-        margin-top: 4px;
-      }
-
-      .plan-card {
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        background: var(--panel-2);
-        padding: 14px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-      }
-
-      .plan-card h4 {
-        font-size: 14px;
-      }
-
-      .plan-step {
-        border-left: 2px solid rgba(96, 165, 250, 0.4);
-        padding-left: 12px;
-        margin-top: 8px;
-        font-size: 12px;
+      .assistant-block p {
+        margin: 0 0 10px;
         color: var(--muted);
+        line-height: 1.5;
       }
 
-      .step-list {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
+      .code-card {
+        background: #0f0f0f;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px;
         margin-top: 10px;
       }
 
-      .step-item {
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        background: var(--panel-3);
-        padding: 8px 10px;
+      .code-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 12px;
-      }
-
-      .step-info {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-      }
-
-      .step-title {
-        font-size: 12px;
-        color: var(--text);
-        font-weight: 600;
-      }
-
-      .step-desc {
-        font-size: 11px;
-        color: var(--muted);
-      }
-
-      .loader {
-        display: flex;
-        gap: 6px;
-        align-items: center;
-        color: var(--muted);
-        font-size: 12px;
-      }
-
-      .loader span {
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        background: var(--accent);
-        animation: bounce 1s infinite;
-      }
-
-      .loader span:nth-child(2) {
-        animation-delay: 0.2s;
-      }
-
-      .loader span:nth-child(3) {
-        animation-delay: 0.4s;
-      }
-
-      .loader-text {
-        margin-left: 6px;
         font-size: 12px;
         color: var(--muted);
+        margin-bottom: 8px;
       }
 
-      .compare-card {
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        background: var(--panel-2);
-        padding: 14px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-      }
-
-      .compare-row {
-        display: grid;
-        grid-template-columns: 1fr 1fr 1fr;
+      .code-actions {
+        display: inline-flex;
         gap: 8px;
       }
 
-      .compare-item {
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 10px;
-        background: var(--panel-3);
+      pre {
+        margin: 0;
+        font-family: "SFMono-Regular", "Menlo", monospace;
         font-size: 12px;
-        color: var(--muted);
+        color: #f0f0f0;
+        white-space: pre-wrap;
       }
 
-      .compare-item strong {
-        color: var(--text);
-        display: block;
-        margin-bottom: 6px;
-      }
-
-      .flow-card {
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        background: var(--panel-3);
-        padding: 12px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        font-size: 12px;
-        color: var(--muted);
-      }
-
-      .flow-step {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-      }
-
-      .flow-step strong {
-        color: var(--text);
-        font-weight: 600;
-      }
-
-      .model-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 10px;
-      }
-
-      .response-card {
-        border: 1px solid var(--border);
-        border-radius: 14px;
-        background: var(--panel-2);
-        padding: 12px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        font-size: 12px;
-        color: var(--muted);
-      }
-
-      .response-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-      }
-
-      .response-header strong {
-        color: var(--text);
-        font-size: 13px;
-      }
-
-      .response-body {
-        line-height: 1.4;
-      }
-
-      .analysis-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 10px;
-      }
-
-      .analysis-card {
-        border: 1px solid var(--border);
-        border-radius: 14px;
-        background: var(--panel-3);
-        padding: 12px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        font-size: 12px;
-        color: var(--muted);
-      }
-
-      .score-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 11px;
-        color: var(--muted);
-      }
-
-      .score-row span {
-        min-width: 70px;
-        color: var(--text);
-      }
-
-      .score-bar {
-        flex: 1;
-        height: 6px;
-        border-radius: 999px;
-        background: var(--border);
-        overflow: hidden;
-      }
-
-      .score-bar span {
-        display: block;
-        height: 100%;
-        width: 0;
-        background: linear-gradient(90deg, #60a5fa, #a78bfa);
-        animation: scoreFill 2.2s ease forwards;
-      }
-
-      .order-list {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        font-size: 12px;
-        color: var(--muted);
-      }
-
-      .order-item {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        padding: 6px 8px;
-        background: var(--panel-3);
-      }
-
-      .debate-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-        gap: 10px;
-      }
-
-      .debate-card {
-        border: 1px solid var(--border);
-        border-radius: 14px;
-        padding: 10px;
-        background: var(--panel-2);
-        font-size: 12px;
-        color: var(--muted);
-      }
-
-      .debate-card strong {
-        color: var(--text);
-        display: block;
-        margin-bottom: 6px;
-      }
-
-      .vote-bar {
-        height: 6px;
-        border-radius: 999px;
-        background: var(--border);
-        overflow: hidden;
-      }
-
-      .vote-bar span {
-        display: block;
-        height: 100%;
-        background: var(--accent);
-        width: 60%;
-      }
-
-      .logo-grid {
-        width: min(880px, 100%);
-        margin: 0 auto;
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 12px;
-      }
-
-      .logo-card {
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        background: var(--panel-2);
-        padding: 14px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        align-items: center;
-        text-align: center;
-        font-size: 12px;
-        color: var(--muted);
-      }
-
-      .logo-mark {
-        width: 48px;
-        height: 48px;
-        border-radius: 14px;
-        background: var(--panel-3);
-        border: 1px solid var(--border);
-        display: grid;
-        place-items: center;
-      }
-
-      .logo-word {
-        font-size: 14px;
-        color: var(--text);
-        font-weight: 600;
-        letter-spacing: 0.4px;
-      }
-
-      .panel {
-        background: var(--panel);
-        border-left: 1px solid var(--border);
-        padding: 24px 20px;
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-      }
-
-      .panel-state {
-        display: none;
-        flex-direction: column;
-        gap: 14px;
-        animation: fadeInUp 0.4s ease;
-      }
-
-      .panel-state.is-active {
-        display: flex;
-      }
-
-      .panel-tabs {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-      }
-
-      .panel-tab {
-        border: 1px solid var(--border);
-        border-radius: 999px;
-        padding: 6px 12px;
-        font-size: 11px;
-        color: var(--muted);
-        background: var(--panel-3);
-      }
-
-      .panel-tab.active {
-        border-color: rgba(96, 165, 250, 0.5);
-        color: var(--text);
-      }
-
-      .panel-subtabs {
-        display: flex;
-        gap: 8px;
-      }
-
-      .panel-subtab {
-        padding: 4px 10px;
-        border-radius: 10px;
-        font-size: 11px;
-        color: var(--muted);
-        border: 1px solid var(--border);
-        background: var(--panel-3);
-      }
-
-      .panel-subtab.active {
-        color: var(--accent);
-        border-color: rgba(96, 165, 250, 0.4);
-      }
-
-      .panel-card {
-        background: var(--panel-2);
-        border: 1px solid var(--border);
-        border-radius: 14px;
-        padding: 14px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-
-      .panel-card h4 {
-        font-size: 13px;
-      }
-
-      .panel-card p,
-      .panel-card li {
-        font-size: 12px;
-        color: var(--muted);
-        line-height: 1.4;
-      }
-
-      .panel-card ul {
-        padding-left: 16px;
-      }
-
-      .panel-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-      }
-
-      .panel-actions span {
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        padding: 6px 8px;
-        font-size: 10px;
-        background: var(--panel-3);
-        color: var(--muted);
-      }
-
-      .podcast-card {
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        background: var(--panel-2);
-        padding: 12px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        font-size: 12px;
-        color: var(--muted);
-      }
-
-      .podcast-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-      }
-
-      .wave {
-        display: grid;
-        grid-template-columns: repeat(12, 1fr);
-        gap: 4px;
-        height: 32px;
-        align-items: end;
-      }
-
-      .wave span {
-        display: block;
-        width: 100%;
-        height: 30%;
-        background: rgba(125, 211, 252, 0.7);
-        border-radius: 6px;
-        animation: wave 1.4s ease infinite;
-      }
-
-      .wave span:nth-child(2) { animation-delay: 0.1s; height: 60%; }
-      .wave span:nth-child(3) { animation-delay: 0.2s; height: 45%; }
-      .wave span:nth-child(4) { animation-delay: 0.3s; height: 70%; }
-      .wave span:nth-child(5) { animation-delay: 0.4s; height: 35%; }
-      .wave span:nth-child(6) { animation-delay: 0.5s; height: 80%; }
-      .wave span:nth-child(7) { animation-delay: 0.6s; height: 50%; }
-      .wave span:nth-child(8) { animation-delay: 0.7s; height: 65%; }
-      .wave span:nth-child(9) { animation-delay: 0.8s; height: 40%; }
-      .wave span:nth-child(10) { animation-delay: 0.9s; height: 75%; }
-      .wave span:nth-child(11) { animation-delay: 1s; height: 30%; }
-      .wave span:nth-child(12) { animation-delay: 1.1s; height: 55%; }
-
-      .podcast-player {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
-
-      .podcast-time {
-        font-size: 11px;
-        color: var(--muted);
-      }
-
-      .podcast-actions {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-      }
-
-      .text-block {
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        background: var(--panel-3);
-        padding: 12px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        font-size: 12px;
-        color: var(--muted);
-        line-height: 1.5;
-      }
-
-      .text-block h4 {
-        font-size: 13px;
-        color: var(--text);
-      }
-
-      .text-block ul {
-        padding-left: 16px;
-      }
-
-      .search-results {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-
-      .result-item {
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 8px 10px;
-        background: var(--panel-3);
-      }
-
-      .result-title {
-        font-size: 12px;
-        color: var(--text);
-        margin-bottom: 4px;
-        font-weight: 600;
-      }
-
-      .result-snippet {
-        font-size: 11px;
-        color: var(--muted);
-      }
-
-      .debate-transcript {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-
-      .debate-turn {
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 10px;
-        background: var(--panel-3);
-        font-size: 12px;
-        color: var(--muted);
-      }
-
-      .debate-tag {
+      .think-pill {
         display: inline-flex;
         align-items: center;
-        gap: 6px;
-        font-size: 10px;
-        text-transform: uppercase;
-        padding: 3px 8px;
+        gap: 8px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        padding: 6px 12px;
         border-radius: 999px;
-        border: 1px solid rgba(96, 165, 250, 0.5);
-        color: var(--accent);
-        margin-bottom: 6px;
-      }
-
-      .landing-hero {
-        width: min(900px, 100%);
-        margin: 0 auto;
-        text-align: center;
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-      }
-
-      .landing-hero h1 {
-        font-size: 34px;
-        font-weight: 600;
-      }
-
-      .landing-hero p {
         color: var(--muted);
+        font-size: 12px;
+        position: absolute;
+        bottom: 92px;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+
+      .composer {
+        position: absolute;
+        bottom: 28px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: min(760px, 82vw);
+      }
+
+      .composer .prompt {
+        width: 100%;
+      }
+
+      .sidebar {
+        position: absolute;
+        right: 0;
+        top: 0;
+        height: 100%;
+        width: 320px;
+        background: #0d0d0d;
+        border-left: 1px solid var(--border);
+        padding: 18px 16px;
+        transform: translateX(100%);
+        transition: transform 0.3s ease;
+        z-index: 3;
+      }
+
+      .sidebar h4 {
+        margin: 0;
         font-size: 15px;
       }
 
-      .landing-cta {
-        display: flex;
-        justify-content: center;
-        gap: 12px;
-        flex-wrap: wrap;
-      }
-
-      .link-btn {
-        border: 1px solid rgba(96, 165, 250, 0.6);
-        border-radius: 999px;
-        padding: 10px 18px;
-        color: var(--text);
-        background: rgba(96, 165, 250, 0.2);
-        font-size: 13px;
-        text-decoration: none;
-      }
-
-      .link-btn.secondary {
-        border-color: var(--border);
-        background: var(--panel-3);
-        color: var(--muted);
-      }
-
-      .landing-section {
-        width: min(900px, 100%);
-        margin: 0 auto;
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-      }
-
-      .landing-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 12px;
-      }
-
-      .landing-feature {
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        background: var(--panel-2);
-        padding: 14px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        color: var(--muted);
-        font-size: 12px;
-      }
-
-      .landing-feature strong {
-        color: var(--text);
-        font-size: 14px;
-      }
-
-      .panel-highlight {
+      .sidebar-head {
         display: flex;
         align-items: center;
-        gap: 10px;
-        font-size: 12px;
-        color: var(--muted);
-      }
-
-      .panel-highlight strong {
-        color: var(--text);
-      }
-
-      .live-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 10px;
-        letter-spacing: 0.4px;
-        text-transform: uppercase;
-        padding: 4px 8px;
-        border-radius: 999px;
-        border: 1px solid rgba(74, 222, 128, 0.4);
-        color: var(--success);
-        background: rgba(74, 222, 128, 0.08);
-      }
-
-      .live-dot {
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        background: var(--success);
-        box-shadow: 0 0 10px rgba(74, 222, 128, 0.8);
-        animation: pulse 1.4s ease infinite;
-      }
-
-      .progress {
-        width: 100%;
-        height: 8px;
-        border-radius: 999px;
-        background: var(--border);
-        overflow: hidden;
-      }
-
-      .progress-bar {
-        height: 100%;
-        width: var(--progress, 62%);
-        background: linear-gradient(90deg, #60a5fa, #a78bfa, #60a5fa);
-        background-size: 200% 100%;
-        animation: progressGlow 2.6s linear infinite;
-      }
-
-      .timeline {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-      }
-
-      .timeline-item {
-        display: grid;
-        grid-template-columns: 12px 1fr;
-        gap: 10px;
-        font-size: 12px;
-        color: var(--muted);
-      }
-
-      .timeline-dot {
-        width: 10px;
-        height: 10px;
-        margin-top: 3px;
-        border-radius: 50%;
-        background: var(--panel-3);
-        border: 2px solid rgba(96, 165, 250, 0.6);
-        position: relative;
-      }
-
-      .timeline-dot.running::after {
-        content: "";
-        position: absolute;
-        inset: -4px;
-        border-radius: 50%;
-        border: 1px solid rgba(96, 165, 250, 0.3);
-        animation: pulse 1.4s ease infinite;
-      }
-
-      .timeline-title {
-        color: var(--text);
-        font-weight: 600;
-        margin-bottom: 4px;
-      }
-
-      .status-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 2px 8px;
-        border-radius: 999px;
-        font-size: 10px;
-        border: 1px solid var(--border);
-        color: var(--muted);
-        background: var(--panel-3);
-      }
-
-      .status-badge.running {
-        border-color: rgba(96, 165, 250, 0.6);
-        color: var(--accent);
-      }
-
-      .status-badge.done {
-        border-color: rgba(74, 222, 128, 0.6);
-        color: var(--success);
-      }
-
-      .status-badge.waiting {
-        border-color: rgba(250, 204, 21, 0.5);
-        color: var(--warning);
-      }
-
-      .tool-card {
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        background: var(--panel-3);
-        padding: 10px;
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-        font-size: 12px;
-        color: var(--muted);
-      }
-
-      .tool-card.running {
-        border-color: rgba(96, 165, 250, 0.5);
-        box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.15);
-      }
-
-      .tool-card.done {
-        border-color: rgba(74, 222, 128, 0.4);
-      }
-
-      .tool-card strong {
-        color: var(--text);
-      }
-
-      .tool-meta {
-        display: flex;
         justify-content: space-between;
-        align-items: center;
-        font-size: 11px;
+        margin-bottom: 16px;
       }
 
-      .tool-output {
-        background: var(--panel-3);
-        border-radius: 8px;
-        padding: 8px;
-        font-size: 11px;
-        color: var(--muted);
-        border: 1px solid var(--border);
-      }
-
-      .shimmer {
-        position: relative;
-        overflow: hidden;
-      }
-
-      .shimmer::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background: linear-gradient(
-          120deg,
-          transparent,
-          rgba(255, 255, 255, 0.08),
-          transparent
-        );
-        transform: translateX(-100%);
-        animation: shimmer 2.2s ease infinite;
-      }
-
-      .streaming {
-        position: relative;
-        padding-right: 12px;
-      }
-
-      .streaming::after {
-        content: "";
-        position: absolute;
-        right: 0;
-        top: 4px;
-        width: 6px;
-        height: 16px;
-        background: var(--accent);
-        animation: blink 1s steps(2) infinite;
-      }
-
-      .mini-metrics {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 8px;
-      }
-
-      .metric-card {
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 8px;
-        background: var(--panel-3);
-        font-size: 11px;
-        color: var(--muted);
-      }
-
-      .metric-card strong {
-        color: var(--text);
-        display: block;
-        margin-bottom: 4px;
-      }
-
-      .vote-row {
+      .sidebar-item {
         display: flex;
         align-items: center;
-        gap: 8px;
-        font-size: 11px;
-        color: var(--muted);
-      }
-
-      .vote-row span {
-        min-width: 64px;
+        gap: 10px;
         color: var(--text);
+        font-size: 13px;
+        padding: 8px 6px;
+        border-bottom: 1px solid var(--border);
       }
 
-      .vote-row .vote-bar {
-        flex: 1;
+      body[data-view="sidebar"] .sidebar {
+        transform: translateX(0);
       }
 
-      .vote-row .vote-bar span {
-        width: 0;
-        animation: voteFill 2.4s ease forwards;
+      body[data-view="sidebar"] .main {
+        padding-right: 320px;
       }
 
-      @keyframes fadeInUp {
-        from {
-          opacity: 0;
-          transform: translateY(10px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
-      }
-
-      @keyframes bounce {
-        0%,
-        100% {
-          transform: translateY(0);
-          opacity: 0.5;
-        }
-        50% {
-          transform: translateY(-6px);
-          opacity: 1;
-        }
-      }
-
-      @keyframes enhancePulse {
-        0% {
-          opacity: 0;
-        }
-        30% {
-          opacity: 1;
-        }
-        70% {
-          opacity: 1;
-        }
-        100% {
-          opacity: 0;
-        }
-      }
-
-      @keyframes sparkleFloat {
-        0% {
-          opacity: 0;
-          transform: translateY(0) scale(0.6);
-        }
-        40% {
-          opacity: 1;
-        }
-        100% {
-          opacity: 0;
-          transform: translateY(-12px) scale(1);
-        }
-      }
-
-      @keyframes pulse {
-        0% {
-          transform: scale(1);
-          opacity: 0.8;
-        }
-        50% {
-          transform: scale(1.2);
-          opacity: 1;
-        }
-        100% {
-          transform: scale(1);
-          opacity: 0.8;
-        }
-      }
-
-      @keyframes shimmer {
-        0% {
-          transform: translateX(-100%);
-        }
-        100% {
-          transform: translateX(100%);
-        }
-      }
-
-      @keyframes blink {
-        0%,
-        49% {
-          opacity: 1;
-        }
-        50%,
-        100% {
-          opacity: 0;
-        }
-      }
-
-      @keyframes progressMove {
-        0% {
-          width: 35%;
-        }
-        50% {
-          width: 78%;
-        }
-        100% {
-          width: 62%;
-        }
-      }
-
-      @keyframes progressGlow {
-        0% {
-          background-position: 0% 50%;
-        }
-        100% {
-          background-position: 100% 50%;
-        }
-      }
-
-      @keyframes voteFill {
-        from {
-          width: 0;
-        }
-        to {
-          width: var(--vote, 50%);
-        }
-      }
-
-      @keyframes scoreFill {
-        from {
-          width: 0;
-        }
-        to {
-          width: var(--score, 55%);
-        }
-      }
-
-      @keyframes wave {
-        0%,
-        100% {
-          transform: scaleY(0.7);
-          opacity: 0.6;
-        }
-        50% {
-          transform: scaleY(1);
-          opacity: 1;
-        }
+      .note {
+        position: absolute;
+        bottom: 12px;
+        left: 84px;
+        color: var(--muted-2);
+        font-size: 11px;
+        opacity: 0.4;
       }
     </style>
   </head>
-  <body data-state="home" data-theme="dark">
-    <div class="layout">
+  <body data-view="landing">
+    <!-- Byt data-view till "chat" eller "sidebar" för andra vyer -->
+    <div class="app">
       <aside class="rail">
-        <div class="rail-top">
-          <div class="logo-dot"></div>
-          <div class="rail-icon active"></div>
-          <div class="rail-icon"></div>
-          <div class="rail-icon"></div>
-          <div class="rail-icon"></div>
+        <div class="rail-logo">
+          <svg class="brand-mark" viewBox="0 0 64 64" fill="none">
+            <path
+              d="M32 6c9 0 16 7 16 16 0 7-4 13-10 15"
+              stroke="#ffffff"
+              stroke-width="3"
+              stroke-linecap="round"
+            />
+            <path
+              d="M32 58c-9 0-16-7-16-16 0-7 4-13 10-15"
+              stroke="#ffffff"
+              stroke-width="3"
+              stroke-linecap="round"
+            />
+            <path
+              d="M42 12L22 52"
+              stroke="#ffffff"
+              stroke-width="3"
+              stroke-linecap="round"
+            />
+          </svg>
         </div>
-        <div class="rail-bottom">
-          <div class="avatar"></div>
-        </div>
+        <button class="rail-btn active" aria-label="Start">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M12 5a7 7 0 1 0 7 7"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            />
+          </svg>
+        </button>
+        <button class="rail-btn" aria-label="Sök">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <circle cx="11" cy="11" r="6" stroke="currentColor" stroke-width="2" />
+            <path d="M16 16l4 4" stroke="currentColor" stroke-width="2" />
+          </svg>
+        </button>
+        <button class="rail-btn" aria-label="Skapa">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M4 16l6 4 10-10-4-4L4 16z"
+              stroke="currentColor"
+              stroke-width="2"
+            />
+          </svg>
+        </button>
+        <button class="rail-btn" aria-label="Ljud">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M6 12h2m2-4h2m2 8h2m2-12h2"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            />
+          </svg>
+        </button>
+        <button class="rail-btn" aria-label="Historik">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="7" stroke="currentColor" stroke-width="2" />
+            <path d="M12 8v4l3 2" stroke="currentColor" stroke-width="2" />
+          </svg>
+        </button>
+        <button class="rail-btn" aria-label="Bibliotek">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <rect x="5" y="6" width="14" height="12" rx="2" stroke="currentColor" stroke-width="2" />
+          </svg>
+        </button>
+        <div class="rail-spacer"></div>
+        <div class="rail-avatar" aria-hidden="true"></div>
       </aside>
-      <main class="center">
-        <header class="topbar">
-          <div class="topbar-left">
-            <div class="logo-text">OneSeek</div>
-            <div class="status-chip">Automatisk</div>
-            <div class="status-chip">Privat</div>
-          </div>
-          <div class="topbar-actions">
-            <button class="ghost-btn theme-toggle" data-theme-toggle>
-              Ljust läge
-            </button>
-            <div class="icon-btn" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="5"></circle>
-                <path d="M12 2v2M12 20v2M2 12h2M20 12h2"></path>
-              </svg>
-            </div>
-            <div class="icon-btn" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <path
-                  d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"
-                ></path>
-                <path
-                  d="M19.4 15a1.6 1.6 0 0 0 .3 1.7l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.7-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.7.3l-.1.1a2 2 0 0 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.7 1.6 1.6 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.7l-.1-.1a2 2 0 0 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.7.3h0A1.6 1.6 0 0 0 9 4.6V4a2 2 0 0 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.7-.3l.1-.1a2 2 0 0 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.7v0A1.6 1.6 0 0 0 20.4 12H21a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"
-                ></path>
-              </svg>
-            </div>
-            <div class="icon-btn" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="9"></circle>
-                <path d="M12 8v4l3 2"></path>
-              </svg>
-            </div>
-          </div>
-        </header>
 
-        <div class="state-switcher">
-          <button class="state-btn" data-state-target="landing">Startsida</button>
-          <button class="state-btn active" data-state-target="home">Start</button>
-          <button class="state-btn" data-state-target="research">
-            Djup forskning
-          </button>
-          <button class="state-btn" data-state-target="compare">
-            AI-jämförelse
-          </button>
-          <button class="state-btn" data-state-target="debate">Debatt</button>
+      <main class="main">
+        <div class="topbar topbar-landing">
+          <div class="icon-btn" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M12 3a5 5 0 0 1 5 5v4l2 3H5l2-3V8a5 5 0 0 1 5-5z"
+                stroke="currentColor"
+                stroke-width="2"
+              />
+            </svg>
+          </div>
+          <div class="ghost">Privat</div>
         </div>
 
-        <section class="state state-landing">
-          <div class="landing-hero">
-            <div class="hero-mark">OS</div>
-            <h1>OneSeek samlar, jämför och förklarar i realtid.</h1>
-            <p>
-              Djup forskning, AI-jämförelse, debatt och kodflöden i en
-              sammanhängande arbetsyta.
-            </p>
-            <div class="landing-cta">
-              <a class="link-btn" href="/chat">Öppna /chat</a>
-              <button class="link-btn secondary" data-state-target="home">
-                Se chat-demon
+        <div class="topbar topbar-chat">
+          <div class="icon-btn" aria-hidden="true">...</div>
+          <div class="ghost">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M12 5v10m0 0l-4-4m4 4l4-4"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <path d="M5 19h14" stroke="currentColor" stroke-width="2" />
+            </svg>
+            Dela
+          </div>
+          <div class="icon-btn" aria-hidden="true">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <path d="M5 12h14" stroke="currentColor" stroke-width="2" />
+            </svg>
+          </div>
+        </div>
+
+        <section class="view view-landing">
+          <div class="hero">
+            <div class="brand">
+              <svg class="brand-mark" viewBox="0 0 64 64" fill="none">
+                <path
+                  d="M32 6c9 0 16 7 16 16 0 7-4 13-10 15"
+                  stroke="#ffffff"
+                  stroke-width="3"
+                  stroke-linecap="round"
+                />
+                <path
+                  d="M32 58c-9 0-16-7-16-16 0-7 4-13 10-15"
+                  stroke="#ffffff"
+                  stroke-width="3"
+                  stroke-linecap="round"
+                />
+                <path
+                  d="M42 12L22 52"
+                  stroke="#ffffff"
+                  stroke-width="3"
+                  stroke-linecap="round"
+                />
+              </svg>
+              OneSeek
+            </div>
+            <div class="prompt">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M9 12l6-6 3 3-6 6-4 1 1-4z"
+                  stroke="currentColor"
+                  stroke-width="2"
+                />
+              </svg>
+              <div class="placeholder">Hur kan jag hjälpa dig idag?</div>
+              <div class="mode">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 5l4 4-4 4-4-4 4-4z" stroke="currentColor" stroke-width="2" />
+                </svg>
+                Automatiskt
+                <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                  <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="2" />
+                </svg>
+              </div>
+              <div class="mic">|||</div>
+            </div>
+            <div class="pill-row">
+              <button class="pill-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 3v6l4 2" stroke="currentColor" stroke-width="2" />
+                </svg>
+                DeepSearch
+              </button>
+              <button class="pill-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <rect x="4" y="6" width="16" height="12" rx="2" stroke="currentColor" stroke-width="2" />
+                </svg>
+                Skapa bild
+              </button>
+              <button class="pill-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <path d="M5 12h14" stroke="currentColor" stroke-width="2" />
+                </svg>
+                Senaste nytt
+              </button>
+              <button class="pill-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <path d="M6 12h12" stroke="currentColor" stroke-width="2" />
+                  <path d="M9 9h6" stroke="currentColor" stroke-width="2" />
+                  <path d="M9 15h6" stroke="currentColor" stroke-width="2" />
+                </svg>
+                Voice Chat
               </button>
             </div>
           </div>
-          <div class="landing-section">
-            <h3>Kärnfunktioner</h3>
-            <div class="landing-grid">
-              <div class="landing-feature">
-                <strong>Djup forskning</strong>
-                Automatiska planer, källor och rapporter.
-              </div>
-              <div class="landing-feature">
-                <strong>AI-jämförelse</strong>
-                Samma fråga till flera externa modeller + syntes.
-              </div>
-              <div class="landing-feature">
-                <strong>Debatt</strong>
-                Rundbaserad debatt mellan externa AI‑agenter.
-              </div>
-              <div class="landing-feature">
-                <strong>Kodarläge</strong>
-                Tool‑loggar, filer, preview och tester.
-              </div>
-              <div class="landing-feature">
-                <strong>Podcast</strong>
-                Generera ljud av rapport eller debatt.
-              </div>
-              <div class="landing-feature">
-                <strong>Export</strong>
-                PDF, HTML, Word och bild.
-              </div>
-            </div>
-          </div>
-          <div class="landing-section">
-            <h3>Snabb översikt</h3>
-            <div class="landing-grid">
-              <div class="landing-feature">
-                <strong>Live‑sidebar</strong>
-                Följ verktyg, steg och status i realtid.
-              </div>
-              <div class="landing-feature">
-                <strong>RAG‑stöd</strong>
-                Bifoga egna dokument som extra källor.
-              </div>
-              <div class="landing-feature">
-                <strong>Rapportstil</strong>
-                Akademisk, nyhetsstil, socialt, strategiskt.
-              </div>
-            </div>
-          </div>
         </section>
 
-        <section class="state state-home is-active">
-          <div class="hero">
-            <div class="hero-mark">OS</div>
-            <h1>Vad vill du att OneSeek ska veta?</h1>
-            <p>Börja med en fråga, bifoga kontext, eller välj en startfråga.</p>
-          </div>
-
-          <section class="input-card">
-            <div class="enhance-overlay"></div>
-            <div class="sparkles">
-              <span></span>
-              <span></span>
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-            <div class="feedback-pill">
-              Feedback: Ändra plan <span>x</span>
-            </div>
-            <div class="input-area">
-              Ställ en fråga, släpp en fil, eller skriv / för kommandon.
-            </div>
-            <div class="input-actions">
-              <div class="action-group">
-                <button class="ghost-btn enhance-btn">Förbättra text</button>
-                <button class="ghost-btn">Bifoga</button>
+        <section class="view view-chat">
+          <div class="chat-area">
+            <div class="message-row">
+              <div class="assistant-text">Hej! 😄 Vad lägger du på idag?</div>
+              <div class="meta-row">
+                <div class="meta-actions">
+                  <div class="meta-btn" aria-hidden="true">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                      <path d="M4 12a8 8 0 1 0 4-7" stroke="currentColor" stroke-width="2" />
+                      <path d="M4 5v5h5" stroke="currentColor" stroke-width="2" />
+                    </svg>
+                  </div>
+                  <div class="meta-btn" aria-hidden="true">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                      <path d="M5 9h4l5-4v14l-5-4H5z" stroke="currentColor" stroke-width="2" />
+                    </svg>
+                  </div>
+                  <div class="meta-btn" aria-hidden="true">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                      <rect x="7" y="7" width="10" height="10" stroke="currentColor" stroke-width="2" />
+                      <rect x="4" y="4" width="10" height="10" stroke="currentColor" stroke-width="2" />
+                    </svg>
+                  </div>
+                  <div class="meta-btn" aria-hidden="true">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                      <path d="M4 12h16" stroke="currentColor" stroke-width="2" />
+                      <path d="M12 4v16" stroke="currentColor" stroke-width="2" />
+                    </svg>
+                  </div>
+                </div>
+                <span>733ms · Snabb</span>
               </div>
-              <div class="action-group">
-                <button class="round-btn">Skicka</button>
+              <div class="suggestion">
+                <span>↳</span> Berätta om svenska traditioner
               </div>
             </div>
-            <div class="tool-row">
-              <button class="tool-btn">Lägen (3)</button>
-              <button class="tool-btn">Trendande frågor</button>
-              <button class="tool-btn active">Rapportstil: Akademisk</button>
-            </div>
-          </section>
 
-          <div class="hero-pills">
-            <div class="hero-pill">DeepSearch</div>
-            <div class="hero-pill">Skapa bild</div>
-            <div class="hero-pill">Senaste nytt</div>
-            <div class="hero-pill">Röstanalys</div>
+            <div class="bubble-user">hej</div>
+
+            <div class="assistant-block">
+              <p>
+                Javisst! Här kommer några små exempel direkt i chatten – olika
+                svårighetsgrader så du kan välja vad som känns kul just nu 😄
+              </p>
+              <h3>1. Super enkel – klassisk “Hej världen” med lite twist</h3>
+              <div class="code-card">
+                <div class="code-header">
+                  <span>Python</span>
+                  <div class="code-actions">
+                    <span>▶</span>
+                    <span>Kopiera</span>
+                  </div>
+                </div>
+                <pre>namn = input("Vad heter du? ")
+print(f"Hej {namn}! Hoppas du har en grym dag ☀️")</pre>
+              </div>
+              <h3>2. Gissningslek (1–100)</h3>
+              <div class="code-card">
+                <div class="code-header">
+                  <span>Python</span>
+                  <div class="code-actions">
+                    <span>▶</span>
+                    <span>Kopiera</span>
+                  </div>
+                </div>
+                <pre>import random
+
+hemligt = random.randint(1, 100)
+gissningar = 0
+
+while True:
+    gissning = int(input("Gissa ett tal mellan 1-100: "))
+    gissningar += 1
+    if gissning == hemligt:
+        print(f"Rätt! {gissningar} försök.")
+        break
+    elif gissning < hemligt:
+        print("För lågt!")
+    else:
+        print("För högt!")</pre>
+              </div>
+            </div>
           </div>
 
-          <div class="feature-grid">
-            <div class="feature-card">
-              <h4>Djup forskning</h4>
-              <p>Planera, kör och exportera rapporter med källor.</p>
-              <button>Öppna forskning</button>
-            </div>
-            <div class="feature-card">
-              <h4>Kodarläge</h4>
-              <p>Följ verktyg, förhandsvisning och filer.</p>
-              <button>Öppna coder</button>
-            </div>
-            <div class="feature-card">
-              <h4>Debattläge</h4>
-              <p>Jämför modeller, rundor och omröstning.</p>
-              <button>Öppna debatt</button>
-            </div>
-            <div class="feature-card">
-              <h4>Podcast</h4>
-              <p>Generera ljudsammanfattningar av rapporter.</p>
-              <button>Skapa audio</button>
-            </div>
+          <div class="think-pill">
+            <span>💡</span> Tänk hårdare
           </div>
-
-          <div class="logo-grid">
-            <div class="logo-card">
-              <div class="logo-mark">
-                <svg viewBox="0 0 48 48">
-                  <circle
-                    cx="24"
-                    cy="24"
-                    r="10"
-                    stroke="url(#grad1)"
-                    stroke-width="2"
-                    fill="none"
-                  />
-                  <path
-                    d="M12 28c4 6 18 6 24 0"
-                    stroke="url(#grad1)"
-                    stroke-width="2"
-                    fill="none"
-                  />
-                  <defs>
-                    <linearGradient id="grad1" x1="0" x2="1">
-                      <stop offset="0%" stop-color="#7dd3fc" />
-                      <stop offset="100%" stop-color="#a78bfa" />
-                    </linearGradient>
-                  </defs>
+          <div class="composer">
+            <div class="prompt">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M9 12l6-6 3 3-6 6-4 1 1-4z"
+                  stroke="currentColor"
+                  stroke-width="2"
+                />
+              </svg>
+              <div class="placeholder">Hur kan OneSeek hjälpa?</div>
+              <div class="mode">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 5l4 4-4 4-4-4 4-4z" stroke="currentColor" stroke-width="2" />
+                </svg>
+                Automatiskt
+                <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                  <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="2" />
                 </svg>
               </div>
-              <div class="logo-word">OneSeek Orbit</div>
-              Minimal cirkel + bana.
-            </div>
-            <div class="logo-card">
-              <div class="logo-mark">
-                <svg viewBox="0 0 48 48">
-                  <path
-                    d="M24 8l10 10-10 22-10-22z"
-                    stroke="#7dd3fc"
-                    stroke-width="2"
-                    fill="none"
-                  />
-                </svg>
-              </div>
-              <div class="logo-word">OneSeek Compass</div>
-              Riktning, fokus, precision.
-            </div>
-            <div class="logo-card">
-              <div class="logo-mark">
-                <svg viewBox="0 0 48 48">
-                  <path
-                    d="M16 24a8 8 0 0 1 16 0"
-                    stroke="#a78bfa"
-                    stroke-width="2"
-                    fill="none"
-                  />
-                  <path
-                    d="M12 24a12 12 0 0 1 24 0"
-                    stroke="#7dd3fc"
-                    stroke-width="2"
-                    fill="none"
-                  />
-                </svg>
-              </div>
-              <div class="logo-word">OneSeek Signal</div>
-              Våg + tydlig signal.
-            </div>
-            <div class="logo-card">
-              <div class="logo-mark">
-                <svg viewBox="0 0 48 48">
-                  <path
-                    d="M10 34l14-20 14 20z"
-                    stroke="#7dd3fc"
-                    stroke-width="2"
-                    fill="none"
-                  />
-                  <path
-                    d="M24 14v20"
-                    stroke="#a78bfa"
-                    stroke-width="2"
-                  />
-                </svg>
-              </div>
-              <div class="logo-word">OneSeek Prism</div>
-              Klar riktning och djup.
-            </div>
-          </div>
-        </section>
-
-        <section class="state state-research">
-          <div class="message-preview">
-            <div class="bubble user">
-              Kan du göra en marknadsanalys för 2025 och samla källor?
-            </div>
-            <div class="bubble assistant">
-              Djup forskning pågår. Live‑detaljer finns i sidopanelen.
-            </div>
-            <div class="bubble assistant">
-              <strong>Simulerat utdrag ur analys</strong>
-              <ul>
-                <li>Störst tillväxt i enterprise‑segmentet (support/CRM).</li>
-                <li>Ökade krav på källor och faktakontroll.</li>
-                <li>AI‑budgetar flyttas från POC till drift.</li>
-              </ul>
-            </div>
-            <div class="bubble assistant">
-              <strong>Simulerad webbsökning</strong>
-              <ul>
-                <li>McKinsey: State of AI 2025</li>
-                <li>Gartner Q4 Trend Report</li>
-                <li>OECD AI Adoption Index</li>
-              </ul>
-            </div>
-          </div>
-          <div class="input-card compact">
-            <div class="enhance-overlay"></div>
-            <div class="sparkles">
-              <span></span>
-              <span></span>
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-            <div class="input-area">Följ upp forskningen med fler krav.</div>
-            <div class="input-actions">
-              <div class="action-group">
-                <button class="ghost-btn enhance-btn">Förbättra text</button>
-                <button class="ghost-btn">Bifoga</button>
-              </div>
-              <div class="action-group">
-                <button class="round-btn">Skicka</button>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="state state-compare">
-          <div class="message-preview">
-            <div class="bubble user">
-              Jämför Grok, Gemini och DeepSeek för kundsupport.
-            </div>
-            <div class="bubble assistant">
-              Jag skickar samma fråga till externa modeller och samlar deras
-              svar innan faktakoll och syntes. Live‑detaljer i sidopanelen.
-            </div>
-            <div class="bubble assistant">
-              <strong>Simulerad jämförelse (utdrag)</strong>
-              <ul>
-                <li><strong>Grok‑4:</strong> Stark struktur, låg latens.</li>
-                <li><strong>Gemini:</strong> Multimodala flöden.</li>
-                <li><strong>GPT‑3.5:</strong> Lågt pris, lägre precision.</li>
-                <li><strong>DeepSeek:</strong> Stabil QA, god kostnadsprofil.</li>
-              </ul>
-            </div>
-          </div>
-          <div class="input-card compact">
-            <div class="enhance-overlay"></div>
-            <div class="sparkles">
-              <span></span>
-              <span></span>
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-            <div class="input-area">
-              Lägg till krav för SLA, språk eller säkerhet.
-            </div>
-            <div class="input-actions">
-              <div class="action-group">
-                <button class="ghost-btn enhance-btn">Förbättra text</button>
-                <button class="ghost-btn">Bifoga</button>
-              </div>
-              <div class="action-group">
-                <button class="round-btn">Skicka</button>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="state state-debate">
-          <div class="message-preview">
-            <div class="bubble user">
-              Kör en debatt om bästa LLM för supportteamet.
-            </div>
-            <div class="bubble assistant">
-              Debatten är igång. Externa modeller svarar i rundor, OneSeek
-              analyserar mellan rundorna. Live‑detaljer i sidopanelen.
-            </div>
-            <div class="bubble assistant">
-              <strong>Simulerad debatt (utdrag)</strong>
-              <ul>
-                <li><strong>Grok‑4:</strong> Fokus på snabbhet och SLA.</li>
-                <li><strong>Gemini:</strong> Multimodalitet och verktyg.</li>
-                <li><strong>GPT‑3.5:</strong> Kostnadseffektivt.</li>
-                <li><strong>DeepSeek:</strong> Stabil QA och säkerhet.</li>
-              </ul>
-            </div>
-          </div>
-          <div class="input-card compact">
-            <div class="enhance-overlay"></div>
-            <div class="sparkles">
-              <span></span>
-              <span></span>
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-            <div class="input-area">
-              Be om fler rundor eller specifika kriterier.
-            </div>
-            <div class="input-actions">
-              <div class="action-group">
-                <button class="ghost-btn enhance-btn">Förbättra text</button>
-                <button class="ghost-btn">Bifoga</button>
-              </div>
-              <div class="action-group">
-                <button class="round-btn">Skicka</button>
-              </div>
+              <div class="mic">|||</div>
             </div>
           </div>
         </section>
       </main>
 
-      <aside class="panel">
-        <div class="panel-state panel-landing">
-          <div class="panel-card">
-            <h4>Kom igång</h4>
-            <div class="panel-actions">
-              <span>Djup forskning</span>
-              <span>AI-jämförelse</span>
-              <span>Debatt</span>
-            </div>
-            <div class="panel-highlight">
-              <strong>Snabbstart:</strong> Öppna chatten och testa.
-            </div>
-            <a class="link-btn" href="/chat">Gå till /chat</a>
-          </div>
-          <div class="panel-card">
-            <h4>Kärnfunktioner</h4>
-            <ul>
-              <li>Live‑sidebar med tool‑loggar</li>
-              <li>RAG + egna källor</li>
-              <li>Rapportexport (PDF/HTML/Word)</li>
-              <li>Podcast från rapport/debatt</li>
-            </ul>
-          </div>
+      <aside class="sidebar">
+        <div class="sidebar-head">
+          <h4>Tankar</h4>
+          <div class="icon-btn" aria-hidden="true">✕</div>
         </div>
-        <div class="panel-state panel-home is-active">
-          <div class="panel-card">
-            <h4>Snabblänkar</h4>
-            <div class="panel-actions">
-              <span>Ny chat</span>
-              <span>Senaste trådar</span>
-              <span>Genvägar</span>
-            </div>
-          </div>
-          <div class="panel-card">
-            <h4>Tips</h4>
-            <p>Tryck "/" för kommandon eller dra in en fil.</p>
-          </div>
-        </div>
-
-        <div class="panel-state panel-research">
-          <div class="panel-tabs">
-            <div class="panel-tab active">Forskning</div>
-            <div class="panel-tab">Kod</div>
-            <div class="panel-tab">Debatt</div>
-          </div>
-          <div class="panel-subtabs">
-            <div class="panel-subtab active">Rapport</div>
-            <div class="panel-subtab">Aktiviteter</div>
-          </div>
-          <div class="panel-card">
-            <div class="panel-highlight">
-              <strong>Djup forskning pågår</strong>
-              <div class="live-pill"><span class="live-dot"></span>Live</div>
-            </div>
-            <div class="progress">
-              <div class="progress-bar" data-research-progress></div>
-            </div>
-            <div class="panel-highlight" data-research-status-text>
-              Status: Steg 2 (Analysis) pågår
-            </div>
-          </div>
-          <div class="panel-card">
-            <h4>Plan & routing</h4>
-            <div class="flow-card">
-              <div class="flow-step">
-                <strong>Coordinator → Planner</strong>
-                <span class="status-badge done">Klar</span>
-              </div>
-              <div class="flow-step">
-                <strong>Background investigation</strong>
-                <span class="status-badge done">Klar</span>
-              </div>
-              <div class="flow-step">
-                <strong>Human feedback</strong>
-                <span class="status-badge done">Godkänd</span>
-              </div>
-              <div class="flow-step">
-                <strong>Research team (loop)</strong>
-                <span class="status-badge running" data-research-loop>Steg 2/4</span>
-              </div>
-              <div class="flow-step">
-                <strong>Reporter</strong>
-                <span class="status-badge waiting">Väntar</span>
-              </div>
-            </div>
-          </div>
-          <div class="panel-card">
-            <h4>Plansteg (status)</h4>
-            <div class="step-list">
-              <div class="step-item" data-research-step="1">
-                <div class="step-info">
-                  <div class="step-title">1. Research</div>
-                  <div class="step-desc">web_search + crawl + RAG</div>
-                </div>
-                <span class="status-badge done" data-research-step-status="1">Klar</span>
-              </div>
-              <div class="step-item" data-research-step="2">
-                <div class="step-info">
-                  <div class="step-title">2. Analysis</div>
-                  <div class="step-desc">Tolkning och syntes</div>
-                </div>
-                <span class="status-badge running" data-research-step-status="2">Pågår</span>
-              </div>
-              <div class="step-item" data-research-step="3">
-                <div class="step-info">
-                  <div class="step-title">3. Processing</div>
-                  <div class="step-desc">Tabeller + bearbetning</div>
-                </div>
-                <span class="status-badge waiting" data-research-step-status="3">Väntar</span>
-              </div>
-              <div class="step-item" data-research-step="4">
-                <div class="step-info">
-                  <div class="step-title">4. Testing</div>
-                  <div class="step-desc">Validera resultat</div>
-                </div>
-                <span class="status-badge waiting" data-research-step-status="4">Väntar</span>
-              </div>
-            </div>
-          </div>
-          <div class="panel-card">
-            <h4>Tool-loggar (live)</h4>
-            <div class="tool-card done">
-              <div class="tool-meta">
-                <strong>web_search</strong>
-                <span class="status-badge done">Klar</span>
-              </div>
-              <div class="tool-output">8 källor hittade</div>
-            </div>
-            <div class="tool-card done">
-              <div class="tool-meta">
-                <strong>crawl_tool</strong>
-                <span class="status-badge done">Klar</span>
-              </div>
-              <div class="tool-output">3 sidor bearbetade</div>
-            </div>
-            <div class="tool-card done">
-              <div class="tool-meta">
-                <strong>retriever_tool (RAG)</strong>
-                <span class="status-badge done">Klar</span>
-              </div>
-              <div class="tool-output">2 interna dokument</div>
-            </div>
-            <div class="tool-card running">
-              <div class="tool-meta">
-                <strong data-research-active-title>analyst</strong>
-                <span class="status-badge running" data-research-active-status>Pågår</span>
-              </div>
-              <div class="tool-output streaming" data-research-active-desc>
-                Skapar trendanalys...
-              </div>
-            </div>
-          </div>
-          <div class="panel-card shimmer">
-            <h4>Rapportutkast</h4>
-            <div class="tool-output streaming">
-              Skriver slutsats och rekommendation...
-            </div>
-            <div class="panel-actions">
-              <span>Podcast</span>
-              <span>Redigera</span>
-              <span>Kopiera</span>
-              <span>Ladda ner PDF</span>
-              <span>Ladda ner HTML</span>
-            </div>
-          </div>
-          <div class="podcast-card">
-            <div class="podcast-header">
-              <strong>Podcast från rapport</strong>
-              <span class="status-badge running">Genererar</span>
-            </div>
-            <div class="wave">
-              <span></span><span></span><span></span><span></span><span></span><span></span>
-              <span></span><span></span><span></span><span></span><span></span><span></span>
-            </div>
-            <div class="podcast-player">
-              <button class="ghost-btn">▶</button>
-              <div class="progress">
-                <div class="progress-bar" style="--progress: 42%"></div>
-              </div>
-              <div class="podcast-time">04:02</div>
-            </div>
-            <div class="podcast-actions">
-              <button class="ghost-btn">Ladda ner</button>
-              <button class="ghost-btn">Dela</button>
-            </div>
-          </div>
-          <div class="panel-card">
-            <h4>Källor (live)</h4>
-            <ul>
-              <li>McKinsey AI Report 2025</li>
-              <li>Gartner Market Trends Q4</li>
-              <li>OECD AI Adoption</li>
-            </ul>
-          </div>
-          <div class="panel-card">
-            <h4>Filer</h4>
-            <p>research-report.md</p>
-            <p>källor.json</p>
-            <p>workspace-snapshot.zip</p>
-          </div>
-        </div>
-
-        <div class="panel-state panel-compare">
-          <div class="panel-card">
-            <div class="panel-highlight">
-              <strong>AI-jämförelse pågår</strong>
-              <div class="live-pill"><span class="live-dot"></span>Live</div>
-            </div>
-            <div class="progress">
-              <div class="progress-bar" data-compare-progress></div>
-            </div>
-            <div class="flow-card">
-              <div class="flow-step">
-                <strong>Fråga → externa modeller</strong>
-                <span class="status-badge done">4/4 klara</span>
-              </div>
-              <div class="flow-step">
-                <strong>Modellsvar</strong>
-                <span class="status-badge running" data-compare-responses>3/4</span>
-              </div>
-              <div class="flow-step">
-                <strong>Faktakoll + källor</strong>
-                <span class="status-badge running" data-compare-fact>Pågår</span>
-              </div>
-              <div class="flow-step">
-                <strong>Meta-analys (4 agenter)</strong>
-                <span class="status-badge waiting" data-compare-meta>Kö</span>
-              </div>
-              <div class="flow-step">
-                <strong>Syntes (OneSeek Local)</strong>
-                <span class="status-badge waiting" data-compare-synth>Väntar</span>
-              </div>
-            </div>
-          </div>
-          <div class="panel-card">
-            <h4>Externa modellsvar</h4>
-            <div class="tool-card done">
-              <div class="tool-meta">
-                <strong>Grok-4 (xAI)</strong>
-                <span class="status-badge done" data-compare-model="grok">Klar</span>
-              </div>
-              <div class="tool-output">Svar mottaget (1/4)</div>
-            </div>
-            <div class="tool-card done">
-              <div class="tool-meta">
-                <strong>Gemini 2.5 Flash</strong>
-                <span class="status-badge done" data-compare-model="gemini">Klar</span>
-              </div>
-              <div class="tool-output">Svar mottaget (2/4)</div>
-            </div>
-            <div class="tool-card running">
-              <div class="tool-meta">
-                <strong>GPT-3.5 (OpenAI)</strong>
-                <span class="status-badge running" data-compare-model="gpt">Skriver</span>
-              </div>
-              <div class="tool-output streaming">Tar fram kort svar...</div>
-            </div>
-            <div class="tool-card done">
-              <div class="tool-meta">
-                <strong>DeepSeek Chat</strong>
-                <span class="status-badge done" data-compare-model="deepseek">Klar</span>
-              </div>
-              <div class="tool-output">Svar mottaget (3/4)</div>
-            </div>
-          </div>
-          <div class="panel-card">
-            <h4>Faktakoll</h4>
-            <div class="tool-card running">
-              <div class="tool-meta">
-                <strong>web_search</strong>
-                <span class="status-badge running" data-compare-fact-status>Kör</span>
-              </div>
-              <div class="tool-output">3 källor verifierade</div>
-            </div>
-            <div class="tool-card">
-              <div class="tool-meta">
-                <strong>RAG</strong>
-                <span class="status-badge done">Klar</span>
-              </div>
-              <div class="tool-output">1 intern källa matchad</div>
-            </div>
-          </div>
-          <div class="panel-card">
-            <h4>Meta-analys (4 agenter)</h4>
-            <div class="panel-actions">
-              <span>Kognitiva egenskaper</span>
-              <span>Integritet</span>
-              <span>Stabilitet</span>
-              <span>Adaptivitet</span>
-            </div>
-            <div class="tool-output streaming">
-              OneSeek Local kör scoring för Grok-4 och Gemini...
-            </div>
-          </div>
-          <div class="panel-card shimmer">
-            <h4>Syntes (OneSeek Local)</h4>
-            <div class="tool-output streaming">
-              Startar efter meta-analysen, bygger optimalt svar.
-            </div>
-          </div>
-        </div>
-
-        <div class="panel-state panel-debate">
-          <div class="panel-card">
-            <div class="panel-highlight">
-              <strong data-debate-round-label>Debatt pågår - Runda 2 av 3</strong>
-              <div class="live-pill"><span class="live-dot"></span>Live</div>
-            </div>
-            <div class="progress">
-              <div class="progress-bar" data-debate-progress></div>
-            </div>
-            <div class="flow-card">
-              <div class="flow-step">
-                <strong>start_debate_round</strong>
-                <span class="status-badge done">Klar</span>
-              </div>
-              <div class="flow-step">
-                <strong>query_model_in_round</strong>
-                <span class="status-badge running" data-debate-responses>2/4 svar</span>
-              </div>
-              <div class="flow-step">
-                <strong>OneSeek intern analys</strong>
-                <span class="status-badge waiting" data-debate-analysis="internal">Väntar</span>
-              </div>
-              <div class="flow-step">
-                <strong>fact_checker</strong>
-                <span class="status-badge waiting" data-debate-analysis="fact">Väntar</span>
-              </div>
-              <div class="flow-step">
-                <strong>synthesizer + moderator</strong>
-                <span class="status-badge waiting" data-debate-analysis="synth">Väntar</span>
-              </div>
-            </div>
-          </div>
-          <div class="panel-card">
-            <h4>Turordning & svar</h4>
-            <div class="order-list">
-              <div class="order-item">
-                <span>1. Grok-4 (xAI)</span>
-                <span class="status-badge done" data-debate-order="1">Svar klart</span>
-              </div>
-              <div class="order-item">
-                <span>2. Gemini 2.5 Flash</span>
-                <span class="status-badge running" data-debate-order="2">Skriver</span>
-              </div>
-              <div class="order-item">
-                <span>3. GPT-3.5 (OpenAI)</span>
-                <span class="status-badge waiting" data-debate-order="3">Väntar</span>
-              </div>
-              <div class="order-item">
-                <span>4. DeepSeek Chat</span>
-                <span class="status-badge waiting" data-debate-order="4">Väntar</span>
-              </div>
-            </div>
-          </div>
-          <div class="panel-card">
-            <h4>Analyssteg</h4>
-            <div class="tool-card">
-              <div class="tool-meta">
-                <strong>OneSeek intern analys</strong>
-                <span class="status-badge waiting" data-debate-analysis="internal">Väntar</span>
-              </div>
-              <div class="tool-output">
-                Körs efter runda 2, ej delat med externa modeller.
-              </div>
-            </div>
-            <div class="tool-card">
-              <div class="tool-meta">
-                <strong>fact_checker</strong>
-                <span class="status-badge waiting" data-debate-analysis="fact">Väntar</span>
-              </div>
-              <div class="tool-output">Validerar claims + källor.</div>
-            </div>
-            <div class="tool-card shimmer">
-              <div class="tool-meta">
-                <strong>moderator</strong>
-                <span class="status-badge waiting" data-debate-analysis="moderator">Köad</span>
-              </div>
-              <div class="tool-output streaming">
-                Förbereder runda 3 och sammanfattning.
-              </div>
-            </div>
-          </div>
-          <div class="podcast-card">
-            <div class="podcast-header">
-              <strong>Podcast från debatt</strong>
-              <span class="status-badge waiting">Väntar</span>
-            </div>
-            <div class="wave">
-              <span></span><span></span><span></span><span></span><span></span><span></span>
-              <span></span><span></span><span></span><span></span><span></span><span></span>
-            </div>
-            <div class="podcast-player">
-              <button class="ghost-btn">▶</button>
-              <div class="progress">
-                <div class="progress-bar" style="--progress: 12%"></div>
-              </div>
-              <div class="podcast-time">00:48</div>
-            </div>
-            <div class="podcast-actions">
-              <button class="ghost-btn">Skapa podcast</button>
-              <button class="ghost-btn">Ladda ner</button>
-            </div>
-          </div>
-          <div class="panel-card">
-            <h4>Omröstning</h4>
-            <p>Aktiveras efter runda 3.</p>
-          </div>
+        <div class="sidebar-item">
+          <span>⚡</span> Kör python-kod
         </div>
       </aside>
     </div>
-
-    <script>
-      const stateButtons = document.querySelectorAll("[data-state-target]");
-      const states = {
-        landing: document.querySelector(".state-landing"),
-        home: document.querySelector(".state-home"),
-        research: document.querySelector(".state-research"),
-        compare: document.querySelector(".state-compare"),
-        debate: document.querySelector(".state-debate"),
-      };
-
-      const panels = {
-        landing: document.querySelector(".panel-landing"),
-        home: document.querySelector(".panel-home"),
-        research: document.querySelector(".panel-research"),
-        compare: document.querySelector(".panel-compare"),
-        debate: document.querySelector(".panel-debate"),
-      };
-
-      let currentState = document.body.getAttribute("data-state") || "home";
-
-      const setState = (state) => {
-        currentState = state;
-        document.body.setAttribute("data-state", state);
-        Object.values(states).forEach((section) =>
-          section.classList.remove("is-active"),
-        );
-        Object.values(panels).forEach((panel) =>
-          panel.classList.remove("is-active"),
-        );
-        states[state]?.classList.add("is-active");
-        panels[state]?.classList.add("is-active");
-        stateButtons.forEach((btn) =>
-          btn.classList.toggle("active", btn.dataset.stateTarget === state),
-        );
-      };
-
-      const themeToggle = document.querySelector("[data-theme-toggle]");
-      const applyTheme = (theme) => {
-        document.body.setAttribute("data-theme", theme);
-        localStorage.setItem("demo-theme", theme);
-        if (themeToggle) {
-          themeToggle.textContent = theme === "light" ? "Mörkt läge" : "Ljust läge";
-        }
-      };
-
-      const storedTheme = localStorage.getItem("demo-theme");
-      applyTheme(storedTheme || "dark");
-
-      if (themeToggle) {
-        themeToggle.addEventListener("click", () => {
-          const current = document.body.getAttribute("data-theme") || "dark";
-          applyTheme(current === "light" ? "dark" : "light");
-        });
-      }
-
-      const setBadge = (el, status, label) => {
-        if (!el) return;
-        el.classList.remove("done", "running", "waiting");
-        el.classList.add(status);
-        if (label) {
-          el.textContent = label;
-        }
-      };
-
-      const researchSteps = [
-        {
-          name: "Research",
-          agent: "researcher",
-          desc: "Samlar källor via web_search + crawl",
-        },
-        {
-          name: "Analysis",
-          agent: "analyst",
-          desc: "Analyserar trender, risker och sammanfattar insikter",
-        },
-        {
-          name: "Processing",
-          agent: "coder",
-          desc: "Bearbetar data och skapar tabeller",
-        },
-        {
-          name: "Testing",
-          agent: "tester",
-          desc: "Validerar beräkningar och kontrollerar resultat",
-        },
-      ];
-      const researchSources = [3, 5, 7, 8];
-      let researchIndex = 2;
-
-      const updateResearch = (index) => {
-        const active = researchSteps[index - 1];
-        document.querySelectorAll("[data-research-step]").forEach((item) => {
-          const stepIndex = Number(item.dataset.researchStep);
-          const badge = item.querySelector(".status-badge");
-          if (stepIndex < index) setBadge(badge, "done", "Klar");
-          else if (stepIndex === index) setBadge(badge, "running", "Pågår");
-          else setBadge(badge, "waiting", "Väntar");
-        });
-        document.querySelectorAll("[data-research-loop]").forEach((el) =>
-          setBadge(el, "running", `Steg ${index} av ${researchSteps.length}`),
-        );
-        document.querySelectorAll("[data-research-active-title]").forEach((el) => {
-          el.textContent = `Aktivt steg: ${active.name.toUpperCase()} (${active.agent})`;
-        });
-        document.querySelectorAll("[data-research-active-desc]").forEach((el) => {
-          el.textContent = `${active.desc}...`;
-        });
-        document.querySelectorAll("[data-research-active-status]").forEach((el) => {
-          setBadge(el, "running", "Pågår");
-        });
-        document.querySelectorAll("[data-research-loader]").forEach((el) => {
-          el.textContent = `Research team kör steg ${index} av ${researchSteps.length}...`;
-        });
-        document.querySelectorAll("[data-research-status-text]").forEach((el) => {
-          el.textContent = `Status: Steg ${index} (${active.name}) pågår`;
-        });
-        document.querySelectorAll("[data-research-progress]").forEach((el) => {
-          const progress = Math.round((index / researchSteps.length) * 100);
-          el.style.setProperty("--progress", `${progress}%`);
-        });
-        document.querySelectorAll("[data-research-sources]").forEach((el) => {
-          el.textContent = `${researchSources[index - 1]}/8`;
-        });
-      };
-
-      const comparePhases = [
-        {
-          responses: 0,
-          models: { grok: "running", gemini: "running", gpt: "running", deepseek: "running" },
-          fact: "waiting",
-          meta: "waiting",
-          synth: "waiting",
-          progress: 20,
-        },
-        {
-          responses: 3,
-          models: { grok: "done", gemini: "done", gpt: "running", deepseek: "done" },
-          fact: "waiting",
-          meta: "waiting",
-          synth: "waiting",
-          progress: 40,
-        },
-        {
-          responses: 4,
-          models: { grok: "done", gemini: "done", gpt: "done", deepseek: "done" },
-          fact: "running",
-          meta: "waiting",
-          synth: "waiting",
-          progress: 60,
-        },
-        {
-          responses: 4,
-          models: { grok: "done", gemini: "done", gpt: "done", deepseek: "done" },
-          fact: "done",
-          meta: "running",
-          synth: "waiting",
-          progress: 80,
-        },
-        {
-          responses: 4,
-          models: { grok: "done", gemini: "done", gpt: "done", deepseek: "done" },
-          fact: "done",
-          meta: "done",
-          synth: "running",
-          progress: 92,
-        },
-      ];
-      let comparePhase = 1;
-
-      const updateCompare = (phaseIndex) => {
-        const phase = comparePhases[phaseIndex];
-        const responseLabel = (status) =>
-          status === "done" ? "Svar klart" : status === "running" ? "Skriver" : "Väntar";
-        const statusLabel = (status) =>
-          status === "done" ? "Klar" : status === "running" ? "Pågår" : "Väntar";
-        document.querySelectorAll("[data-compare-responses]").forEach((el) => {
-          const status = phase.responses === 4 ? "done" : phase.responses === 0 ? "waiting" : "running";
-          setBadge(el, status, `${phase.responses}/4`);
-        });
-        document.querySelectorAll("[data-compare-fact]").forEach((el) =>
-          setBadge(el, phase.fact, statusLabel(phase.fact)),
-        );
-        document.querySelectorAll("[data-compare-meta]").forEach((el) =>
-          setBadge(el, phase.meta, phase.meta === "running" ? "Kör" : statusLabel(phase.meta)),
-        );
-        document.querySelectorAll("[data-compare-synth]").forEach((el) =>
-          setBadge(el, phase.synth, statusLabel(phase.synth)),
-        );
-        document.querySelectorAll("[data-compare-model]").forEach((el) => {
-          const key = el.dataset.compareModel;
-          if (!key) return;
-          const status = phase.models[key];
-          if (status) setBadge(el, status, responseLabel(status));
-        });
-        document.querySelectorAll("[data-compare-fact-status]").forEach((el) =>
-          setBadge(el, phase.fact, phase.fact === "running" ? "Kör" : statusLabel(phase.fact)),
-        );
-        document.querySelectorAll("[data-compare-meta-status]").forEach((el) =>
-          setBadge(el, phase.meta, phase.meta === "running" ? "Kör" : statusLabel(phase.meta)),
-        );
-        document.querySelectorAll("[data-compare-synth-status]").forEach((el) =>
-          setBadge(el, phase.synth, statusLabel(phase.synth)),
-        );
-        document.querySelectorAll("[data-compare-progress]").forEach((el) => {
-          el.style.setProperty("--progress", `${phase.progress}%`);
-        });
-      };
-
-      const debatePhases = [
-        {
-          responses: 1,
-          analysis: { internal: "waiting", fact: "waiting", synth: "waiting", moderator: "waiting" },
-        },
-        {
-          responses: 2,
-          analysis: { internal: "waiting", fact: "waiting", synth: "waiting", moderator: "waiting" },
-        },
-        {
-          responses: 4,
-          analysis: { internal: "running", fact: "waiting", synth: "waiting", moderator: "waiting" },
-        },
-        {
-          responses: 4,
-          analysis: { internal: "done", fact: "running", synth: "running", moderator: "running" },
-        },
-      ];
-      let debateRound = 2;
-      let debatePhase = 1;
-
-      const updateDebate = (round, phaseIndex) => {
-        const phase = debatePhases[phaseIndex];
-        document.querySelectorAll("[data-debate-round-label]").forEach((el) => {
-          el.textContent = `Debatt pågår - Runda ${round} av 3`;
-        });
-        document.querySelectorAll("[data-debate-responses]").forEach((el) => {
-          const status = phase.responses === 4 ? "done" : "running";
-          setBadge(el, status, `${phase.responses}/4 svar`);
-        });
-        document.querySelectorAll("[data-debate-analysis]").forEach((el) => {
-          const key = el.dataset.debateAnalysis;
-          const status = phase.analysis[key] || "waiting";
-          const label = status === "running" ? "Pågår" : status === "done" ? "Klar" : "Väntar";
-          setBadge(el, status, label);
-        });
-        document.querySelectorAll("[data-debate-order]").forEach((el) => {
-          const order = Number(el.dataset.debateOrder);
-          if (order <= phase.responses) {
-            setBadge(el, "done", "Svar klart");
-          } else if (order === phase.responses + 1 && phase.responses < 4) {
-            setBadge(el, "running", "Skriver");
-          } else {
-            setBadge(el, "waiting", "Väntar");
-          }
-        });
-        document.querySelectorAll("[data-debate-progress]").forEach((el) => {
-          const progress = Math.round(
-            ((round - 1) * debatePhases.length + phaseIndex + 1) /
-              (3 * debatePhases.length) *
-              100,
-          );
-          el.style.setProperty("--progress", `${progress}%`);
-        });
-      };
-
-      updateResearch(researchIndex);
-      updateCompare(comparePhase);
-      updateDebate(debateRound, debatePhase);
-
-      stateButtons.forEach((btn) => {
-        btn.addEventListener("click", () => {
-          setState(btn.dataset.stateTarget);
-        });
-      });
-
-      document.querySelectorAll(".enhance-btn").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const card = btn.closest(".input-card");
-          if (!card) return;
-          card.classList.add("enhancing");
-          setTimeout(() => card.classList.remove("enhancing"), 1600);
-        });
-      });
-
-      const tick = () => {
-        if (currentState === "research") {
-          researchIndex = researchIndex % researchSteps.length + 1;
-          updateResearch(researchIndex);
-        }
-        if (currentState === "compare") {
-          comparePhase = (comparePhase + 1) % comparePhases.length;
-          updateCompare(comparePhase);
-        }
-        if (currentState === "debate") {
-          debatePhase = (debatePhase + 1) % debatePhases.length;
-          if (debatePhase === 0) {
-            debateRound = debateRound % 3 + 1;
-          }
-          updateDebate(debateRound, debatePhase);
-        }
-      };
-
-      setInterval(tick, 3200);
-    </script>
+    <div class="note">Demo · ändra data-view för vyer</div>
   </body>
 </html>
