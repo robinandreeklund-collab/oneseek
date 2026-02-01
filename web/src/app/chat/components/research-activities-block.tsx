@@ -109,6 +109,7 @@ const ActivityMessage = React.memo(({ messageId }: { messageId: string }) => {
     const locale = useLocale();
     const isSwedish = locale.startsWith("sv");
     const agentLabelMap: Record<string, string> = {
+      ai_compare_query: isSwedish ? "Modellerna svarar" : "Model responses",
       ai_compare_fact_check: isSwedish ? "Faktakoll" : "Fact check",
       ai_compare_meta: isSwedish ? "Meta-analys" : "Meta analysis",
       ai_compare_synth: isSwedish ? "Syntes" : "Synthesis",
