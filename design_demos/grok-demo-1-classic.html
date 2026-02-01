@@ -555,6 +555,130 @@
         margin-bottom: 6px;
       }
 
+      .flow-card {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: #0f1013;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .flow-step {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .flow-step strong {
+        color: var(--text);
+        font-weight: 600;
+      }
+
+      .model-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px;
+      }
+
+      .response-card {
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: #101114;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .response-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .response-header strong {
+        color: var(--text);
+        font-size: 13px;
+      }
+
+      .response-body {
+        line-height: 1.4;
+      }
+
+      .analysis-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px;
+      }
+
+      .analysis-card {
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: #0f1013;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .score-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      .score-row span {
+        min-width: 70px;
+        color: var(--text);
+      }
+
+      .score-bar {
+        flex: 1;
+        height: 6px;
+        border-radius: 999px;
+        background: #1b1c21;
+        overflow: hidden;
+      }
+
+      .score-bar span {
+        display: block;
+        height: 100%;
+        width: 0;
+        background: linear-gradient(90deg, #60a5fa, #a78bfa);
+        animation: scoreFill 2.2s ease forwards;
+      }
+
+      .order-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .order-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 6px 8px;
+        background: #0f1013;
+      }
+
       .debate-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -1070,6 +1194,15 @@
           width: var(--vote, 50%);
         }
       }
+
+      @keyframes scoreFill {
+        from {
+          width: 0;
+        }
+        to {
+          width: var(--score, 55%);
+        }
+      }
     </style>
   </head>
   <body data-state="home">
@@ -1394,8 +1527,8 @@
               Jämför Grok, Gemini och DeepSeek för kundsupport.
             </div>
             <div class="bubble assistant">
-              Här är en snabb AI-jämförelse med fokus på styrkor, kostnad och
-              latens.
+              Jag skickar samma fråga till externa modeller och samlar deras
+              svar innan faktakoll och syntes.
             </div>
             <div class="compare-card">
               <div class="panel-highlight">
@@ -1405,54 +1538,122 @@
               <div class="progress">
                 <div class="progress-bar"></div>
               </div>
-              <div class="mini-metrics">
-                <div class="metric-card">
-                  <strong>Grok-4</strong>
-                  <span class="status-badge running">Analyserar</span>
-                  <div>Latens: 280 ms</div>
-                  <div>Kvalitet: 8.7</div>
+              <div class="flow-card">
+                <div class="flow-step">
+                  <strong>1. Fråga skickad till externa modeller</strong>
+                  <span class="status-badge done">4/4 klara</span>
                 </div>
-                <div class="metric-card">
-                  <strong>Gemini</strong>
-                  <span class="status-badge done">Klar</span>
-                  <div>Latens: 320 ms</div>
-                  <div>Kvalitet: 8.3</div>
+                <div class="flow-step">
+                  <strong>2. Modellsvar mottagna</strong>
+                  <span class="status-badge running">3/4</span>
                 </div>
-                <div class="metric-card">
-                  <strong>DeepSeek</strong>
-                  <span class="status-badge done">Klar</span>
-                  <div>Latens: 260 ms</div>
-                  <div>Kvalitet: 7.8</div>
+                <div class="flow-step">
+                  <strong>3. Faktakoll + källor</strong>
+                  <span class="status-badge running">Pågår</span>
                 </div>
-                <div class="metric-card">
-                  <strong>Slutscore</strong>
-                  <div class="tool-output streaming">
-                    Viktning och ranking beräknas...
-                  </div>
+                <div class="flow-step">
+                  <strong>4. Meta-analys (4 agenter)</strong>
+                  <span class="status-badge waiting">Startar</span>
                 </div>
-              </div>
-              <div class="compare-row">
-                <div class="compare-item">
-                  <strong>Service</strong>
-                  24/7, svensk support, SLA 99.9%
-                </div>
-                <div class="compare-item">
-                  <strong>Kostnad</strong>
-                  18-24% skillnad beroende på volym
-                </div>
-                <div class="compare-item">
-                  <strong>Säkerhet</strong>
-                  RAG, redaction, policy-kontroller
+                <div class="flow-step">
+                  <strong>5. Syntes (OneSeek Local)</strong>
+                  <span class="status-badge waiting">Väntar</span>
                 </div>
               </div>
             </div>
-            <div class="tool-card shimmer">
+            <div class="model-grid">
+              <div class="response-card">
+                <div class="response-header">
+                  <strong>Grok-4 Fast Reasoning (xAI)</strong>
+                  <span class="status-badge done">Svar klart</span>
+                </div>
+                <div class="response-body">
+                  Rekommenderar Grok-4 för snabbhet och tydliga sammanfattningar
+                  vid hög volym.
+                </div>
+              </div>
+              <div class="response-card">
+                <div class="response-header">
+                  <strong>Gemini 2.5 Flash (Google)</strong>
+                  <span class="status-badge done">Svar klart</span>
+                </div>
+                <div class="response-body">
+                  Lyfter multimodala flöden och verktygsstöd för supportteam.
+                </div>
+              </div>
+              <div class="response-card">
+                <div class="response-header">
+                  <strong>GPT-3.5 (OpenAI)</strong>
+                  <span class="status-badge running">Skriver</span>
+                </div>
+                <div class="response-body streaming">
+                  Bygger ett kort svar med fokus på kostnad och enkelhet...
+                </div>
+              </div>
+              <div class="response-card">
+                <div class="response-header">
+                  <strong>DeepSeek Chat</strong>
+                  <span class="status-badge done">Svar klart</span>
+                </div>
+                <div class="response-body">
+                  Betonar pris och stabil QA med god latens.
+                </div>
+              </div>
+            </div>
+            <div class="analysis-grid">
+              <div class="analysis-card">
+                <div class="response-header">
+                  <strong>Faktakoll + källor</strong>
+                  <span class="status-badge running">Pågår</span>
+                </div>
+                <div class="response-body">
+                  Web search + RAG validerar claims från modellerna.
+                </div>
+                <div class="tool-output">Källor: 3 web, 1 RAG</div>
+              </div>
+              <div class="analysis-card">
+                <div class="response-header">
+                  <strong>Meta-analys: Kognitiva egenskaper</strong>
+                  <span class="status-badge running">Kör</span>
+                </div>
+                <div class="response-body">OneSeek Local poängsätter modeller.</div>
+                <div class="score-row">
+                  <span>Grok-4</span>
+                  <div class="score-bar"><span style="--score: 78%"></span></div>
+                  7.8
+                </div>
+                <div class="score-row">
+                  <span>Gemini</span>
+                  <div class="score-bar"><span style="--score: 73%"></span></div>
+                  7.3
+                </div>
+              </div>
+              <div class="analysis-card">
+                <div class="response-header">
+                  <strong>Meta-analys: Integritet & objektivitet</strong>
+                  <span class="status-badge waiting">Väntar</span>
+                </div>
+                <div class="response-body">
+                  Väntar på slutförd faktakoll för att sätta poäng.
+                </div>
+              </div>
+              <div class="analysis-card shimmer">
+                <div class="response-header">
+                  <strong>Meta-analys: Stabilitet & emotionell profil</strong>
+                  <span class="status-badge waiting">Köad</span>
+                </div>
+                <div class="response-body streaming">
+                  OneSeek Local förbereder scoring...
+                </div>
+              </div>
+            </div>
+            <div class="tool-card shimmer running">
               <div class="tool-meta">
-                <strong>AI-jämförelse</strong>
-                <span class="status-badge running">Sammanställer</span>
+                <strong>Syntes (OneSeek Local)</strong>
+                <span class="status-badge waiting">Väntar</span>
               </div>
               <div class="tool-output streaming">
-                Summerar styrkor, risker och rekommendation...
+                Syntes startar när meta-analysen är klar...
               </div>
             </div>
           </div>
@@ -1486,80 +1687,146 @@
               Kör en debatt om bästa LLM för supportteamet.
             </div>
             <div class="bubble assistant">
-              Debatten är igång. Här är rundorna och en preliminär röstning.
+              Debatten är igång. Externa modeller svarar i rundor, OneSeek
+              analyserar mellan rundorna.
             </div>
             <div class="plan-card">
               <div class="panel-highlight">
-                <strong>Debatt pågår</strong>
+                <strong>Debatt pågår - Runda 2 av 3</strong>
                 <div class="live-pill"><span class="live-dot"></span>Live</div>
               </div>
               <div class="progress">
                 <div class="progress-bar"></div>
               </div>
-              <div class="plan-step">
-                Runda 1: Argument per modell, 90 sek vardera.
+              <div class="flow-card">
+                <div class="flow-step">
+                  <strong>1. start_debate_round</strong>
+                  <span class="status-badge done">Runda 2 startad</span>
+                </div>
+                <div class="flow-step">
+                  <strong>2. query_model_in_round</strong>
+                  <span class="status-badge running">2/4 svar</span>
+                </div>
+                <div class="flow-step">
+                  <strong>3. OneSeek intern analys</strong>
+                  <span class="status-badge waiting">Väntar</span>
+                </div>
+                <div class="flow-step">
+                  <strong>4. fact_checker</strong>
+                  <span class="status-badge waiting">Väntar</span>
+                </div>
+                <div class="flow-step">
+                  <strong>5. synthesizer + moderator</strong>
+                  <span class="status-badge waiting">Väntar</span>
+                </div>
               </div>
-              <div class="plan-step">
-                Runda 2: Replik + motfragor, 60 sek vardera.
+              <div class="order-list">
+                <div class="order-item">
+                  <span>1. Grok-4 Fast Reasoning (xAI)</span>
+                  <span class="status-badge done">Svar klart</span>
+                </div>
+                <div class="order-item">
+                  <span>2. Gemini 2.5 Flash (Google)</span>
+                  <span class="status-badge running">Skriver</span>
+                </div>
+                <div class="order-item">
+                  <span>3. GPT-3.5 (OpenAI)</span>
+                  <span class="status-badge waiting">Väntar</span>
+                </div>
+                <div class="order-item">
+                  <span>4. DeepSeek Chat</span>
+                  <span class="status-badge waiting">Väntar</span>
+                </div>
+              </div>
+            </div>
+            <div class="model-grid">
+              <div class="response-card">
+                <div class="response-header">
+                  <strong>Grok-4 Fast Reasoning (xAI)</strong>
+                  <span class="status-badge done">Svar klart</span>
+                </div>
+                <div class="response-body">
+                  Svarar med fokus på snabbhet, tydlig struktur och SLA.
+                </div>
+              </div>
+              <div class="response-card">
+                <div class="response-header">
+                  <strong>Gemini 2.5 Flash (Google)</strong>
+                  <span class="status-badge running">Skriver</span>
+                </div>
+                <div class="response-body streaming">
+                  Bygger replik baserad på runda 1 + tidigare chain...
+                </div>
+              </div>
+              <div class="response-card">
+                <div class="response-header">
+                  <strong>GPT-3.5 (OpenAI)</strong>
+                  <span class="status-badge waiting">Väntar</span>
+                </div>
+                <div class="response-body">
+                  Väntar på turordning i runda 2.
+                </div>
+              </div>
+              <div class="response-card">
+                <div class="response-header">
+                  <strong>DeepSeek Chat</strong>
+                  <span class="status-badge waiting">Väntar</span>
+                </div>
+                <div class="response-body">
+                  Kommer svara efter GPT-3.5 i samma runda.
+                </div>
+              </div>
+            </div>
+            <div class="analysis-grid">
+              <div class="analysis-card">
+                <div class="response-header">
+                  <strong>OneSeek intern analys</strong>
+                  <span class="status-badge waiting">Väntar</span>
+                </div>
+                <div class="response-body">
+                  Körs efter att runda 2 är klar (faktakoll + motargument).
+                </div>
+              </div>
+              <div class="analysis-card">
+                <div class="response-header">
+                  <strong>fact_checker</strong>
+                  <span class="status-badge waiting">Väntar</span>
+                </div>
+                <div class="response-body">
+                  Validerar påståenden mot externa källor.
+                </div>
+              </div>
+              <div class="analysis-card">
+                <div class="response-header">
+                  <strong>synthesizer</strong>
+                  <span class="status-badge waiting">Väntar</span>
+                </div>
+                <div class="response-body">
+                  Bygger sammanfattning av rundans svar.
+                </div>
+              </div>
+              <div class="analysis-card shimmer">
+                <div class="response-header">
+                  <strong>moderator</strong>
+                  <span class="status-badge waiting">Väntar</span>
+                </div>
+                <div class="response-body streaming">
+                  Förbereder runda 3 och sammanfattning.
+                </div>
               </div>
             </div>
             <div class="debate-grid">
               <div class="debate-card">
-                <strong>Runda 1 - Grok-4</strong>
-                Fokus på snabbhet och tydlig rapportering.
-                <div class="status-badge running">Talar</div>
+                <strong>Röstning (efter runda 3)</strong>
+                Väntar på sista rundan för att samla röster.
               </div>
               <div class="debate-card">
-                <strong>Runda 1 - Gemini</strong>
-                Multimodalitet och verktygsintegrering.
-                <div class="status-badge waiting">Väntar</div>
+                <strong>Runda 1 klar</strong>
+                4 svar mottagna, syntes och moderator klar.
               </div>
               <div class="debate-card">
-                <strong>Runda 1 - DeepSeek</strong>
-                Kostnadseffektivitet och robusthet.
-                <div class="status-badge waiting">Väntar</div>
-              </div>
-              <div class="debate-card">
-                <strong>Röstning</strong>
-                Grok-4 leder just nu.
-                <div class="vote-row">
-                  <span>Grok-4</span>
-                  <div class="vote-bar"><span style="--vote: 60%"></span></div>
-                  61%
-                </div>
-                <div class="vote-row">
-                  <span>Gemini</span>
-                  <div class="vote-bar"><span style="--vote: 24%"></span></div>
-                  24%
-                </div>
-                <div class="vote-row">
-                  <span>DeepSeek</span>
-                  <div class="vote-bar"><span style="--vote: 15%"></span></div>
-                  15%
-                </div>
-              </div>
-            </div>
-            <div class="timeline">
-              <div class="timeline-item">
-                <div class="timeline-dot running"></div>
-                <div>
-                  <div class="timeline-title">Runda 1 pågår</div>
-                  Grok-4 talar, Gemini och DeepSeek pa tur.
-                </div>
-              </div>
-              <div class="timeline-item">
-                <div class="timeline-dot"></div>
-                <div>
-                  <div class="timeline-title">Runda 2 startar</div>
-                  Repliker med fokus pa risker och robusthet.
-                </div>
-              </div>
-              <div class="timeline-item">
-                <div class="timeline-dot"></div>
-                <div>
-                  <div class="timeline-title">Omröstning</div>
-                  Slutlig rankning med motiveringar.
-                </div>
+                <strong>Runda 2 pågår</strong>
+                2/4 svar klara, analys väntar.
               </div>
             </div>
           </div>
@@ -1606,8 +1873,8 @@
 
         <div class="panel-state panel-research">
           <div class="panel-tabs">
-            <div class="panel-tab active">Research</div>
-            <div class="panel-tab">Coder</div>
+            <div class="panel-tab active">Forskning</div>
+            <div class="panel-tab">Kod</div>
             <div class="panel-tab">Debatt</div>
           </div>
           <div class="panel-subtabs">
@@ -1692,103 +1959,181 @@
             <div class="progress">
               <div class="progress-bar"></div>
             </div>
-            <div class="panel-actions">
-              <span>Kostnad</span>
-              <span>Latens</span>
-              <span>Kvalitet</span>
-              <span>Säkerhet</span>
-              <span>Support</span>
+            <div class="flow-card">
+              <div class="flow-step">
+                <strong>Fråga → externa modeller</strong>
+                <span class="status-badge done">4/4 klara</span>
+              </div>
+              <div class="flow-step">
+                <strong>Modellsvar</strong>
+                <span class="status-badge running">3/4</span>
+              </div>
+              <div class="flow-step">
+                <strong>Faktakoll + källor</strong>
+                <span class="status-badge running">Pågår</span>
+              </div>
+              <div class="flow-step">
+                <strong>Meta-analys (4 agenter)</strong>
+                <span class="status-badge waiting">Kö</span>
+              </div>
+              <div class="flow-step">
+                <strong>Syntes (OneSeek Local)</strong>
+                <span class="status-badge waiting">Väntar</span>
+              </div>
             </div>
           </div>
           <div class="panel-card">
-            <h4>Scorecard (live)</h4>
-            <div class="mini-metrics">
-              <div class="metric-card">
-                <strong>Grok-4</strong>
-                Score: 8.7
+            <h4>Externa modellsvar</h4>
+            <div class="tool-card done">
+              <div class="tool-meta">
+                <strong>Grok-4 (xAI)</strong>
+                <span class="status-badge done">Klar</span>
               </div>
-              <div class="metric-card">
-                <strong>Gemini</strong>
-                Score: 8.2
+              <div class="tool-output">Svar mottaget (1/4)</div>
+            </div>
+            <div class="tool-card done">
+              <div class="tool-meta">
+                <strong>Gemini 2.5 Flash</strong>
+                <span class="status-badge done">Klar</span>
               </div>
-              <div class="metric-card">
-                <strong>DeepSeek</strong>
-                Score: 7.9
+              <div class="tool-output">Svar mottaget (2/4)</div>
+            </div>
+            <div class="tool-card running">
+              <div class="tool-meta">
+                <strong>GPT-3.5 (OpenAI)</strong>
+                <span class="status-badge running">Skriver</span>
               </div>
-              <div class="metric-card">
-                <strong>Viktning</strong>
-                Kostnad 20%, kvalitet 40%, latens 20%, säkerhet 20%
+              <div class="tool-output streaming">Tar fram kort svar...</div>
+            </div>
+            <div class="tool-card done">
+              <div class="tool-meta">
+                <strong>DeepSeek Chat</strong>
+                <span class="status-badge done">Klar</span>
               </div>
+              <div class="tool-output">Svar mottaget (3/4)</div>
+            </div>
+          </div>
+          <div class="panel-card">
+            <h4>Faktakoll</h4>
+            <div class="tool-card running">
+              <div class="tool-meta">
+                <strong>web_search</strong>
+                <span class="status-badge running">Kör</span>
+              </div>
+              <div class="tool-output">3 källor verifierade</div>
+            </div>
+            <div class="tool-card">
+              <div class="tool-meta">
+                <strong>RAG</strong>
+                <span class="status-badge done">Klar</span>
+              </div>
+              <div class="tool-output">1 intern källa matchad</div>
+            </div>
+          </div>
+          <div class="panel-card">
+            <h4>Meta-analys (4 agenter)</h4>
+            <div class="panel-actions">
+              <span>Kognitiva egenskaper</span>
+              <span>Integritet</span>
+              <span>Stabilitet</span>
+              <span>Adaptivitet</span>
+            </div>
+            <div class="tool-output streaming">
+              OneSeek Local kör scoring för Grok-4 och Gemini...
             </div>
           </div>
           <div class="panel-card shimmer">
-            <h4>Rekommendation (utkast)</h4>
+            <h4>Syntes (OneSeek Local)</h4>
             <div class="tool-output streaming">
-              Grok-4 som primar, Gemini som multimodal fallback...
+              Startar efter meta-analysen, bygger optimalt svar.
             </div>
-          </div>
-          <div class="panel-card">
-            <h4>Datakällor</h4>
-            <ul>
-              <li>Benchmark Q4 2025</li>
-              <li>Support KPI-rapport</li>
-              <li>Prislista leverantor</li>
-            </ul>
           </div>
         </div>
 
         <div class="panel-state panel-debate">
           <div class="panel-card">
             <div class="panel-highlight">
-              <strong>Debatt pågår</strong>
+              <strong>Debatt pågår - Runda 2 av 3</strong>
               <div class="live-pill"><span class="live-dot"></span>Live</div>
             </div>
             <div class="progress">
               <div class="progress-bar"></div>
             </div>
-            <p>Runda 1 pågår, runda 2 förbereds.</p>
-          </div>
-          <div class="panel-card">
-            <h4>Modellstatus</h4>
-            <div class="tool-card running">
-              <div class="tool-meta">
-                <strong>Grok-4</strong>
-                <span class="status-badge running">Talar</span>
+            <div class="flow-card">
+              <div class="flow-step">
+                <strong>start_debate_round</strong>
+                <span class="status-badge done">Klar</span>
               </div>
-              <div class="tool-output">Argumenterar för snabbhet.</div>
-            </div>
-            <div class="tool-card">
-              <div class="tool-meta">
-                <strong>Gemini</strong>
+              <div class="flow-step">
+                <strong>query_model_in_round</strong>
+                <span class="status-badge running">2/4 svar</span>
+              </div>
+              <div class="flow-step">
+                <strong>OneSeek intern analys</strong>
                 <span class="status-badge waiting">Väntar</span>
               </div>
-              <div class="tool-output">Forbereder repliker.</div>
-            </div>
-            <div class="tool-card">
-              <div class="tool-meta">
-                <strong>DeepSeek</strong>
+              <div class="flow-step">
+                <strong>fact_checker</strong>
                 <span class="status-badge waiting">Väntar</span>
               </div>
-              <div class="tool-output">Inväntar motfråga.</div>
+              <div class="flow-step">
+                <strong>synthesizer + moderator</strong>
+                <span class="status-badge waiting">Väntar</span>
+              </div>
             </div>
           </div>
           <div class="panel-card">
-            <h4>Omröstning (live)</h4>
-            <div class="vote-row">
-              <span>Grok-4</span>
-              <div class="vote-bar"><span style="--vote: 60%"></span></div>
-              61%
+            <h4>Turordning & svar</h4>
+            <div class="order-list">
+              <div class="order-item">
+                <span>1. Grok-4 (xAI)</span>
+                <span class="status-badge done">Svar klart</span>
+              </div>
+              <div class="order-item">
+                <span>2. Gemini 2.5 Flash</span>
+                <span class="status-badge running">Skriver</span>
+              </div>
+              <div class="order-item">
+                <span>3. GPT-3.5 (OpenAI)</span>
+                <span class="status-badge waiting">Väntar</span>
+              </div>
+              <div class="order-item">
+                <span>4. DeepSeek Chat</span>
+                <span class="status-badge waiting">Väntar</span>
+              </div>
             </div>
-            <div class="vote-row">
-              <span>Gemini</span>
-              <div class="vote-bar"><span style="--vote: 24%"></span></div>
-              24%
+          </div>
+          <div class="panel-card">
+            <h4>Analyssteg</h4>
+            <div class="tool-card">
+              <div class="tool-meta">
+                <strong>OneSeek intern analys</strong>
+                <span class="status-badge waiting">Väntar</span>
+              </div>
+              <div class="tool-output">
+                Körs efter runda 2, ej delat med externa modeller.
+              </div>
             </div>
-            <div class="vote-row">
-              <span>DeepSeek</span>
-              <div class="vote-bar"><span style="--vote: 15%"></span></div>
-              15%
+            <div class="tool-card">
+              <div class="tool-meta">
+                <strong>fact_checker</strong>
+                <span class="status-badge waiting">Väntar</span>
+              </div>
+              <div class="tool-output">Validerar claims + källor.</div>
             </div>
+            <div class="tool-card shimmer">
+              <div class="tool-meta">
+                <strong>moderator</strong>
+                <span class="status-badge waiting">Köad</span>
+              </div>
+              <div class="tool-output streaming">
+                Förbereder runda 3 och sammanfattning.
+              </div>
+            </div>
+          </div>
+          <div class="panel-card">
+            <h4>Omröstning</h4>
+            <p>Aktiveras efter runda 3.</p>
           </div>
         </div>
       </aside>
