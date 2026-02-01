@@ -28,6 +28,7 @@ Rules:
 - Show clear reasoning steps and balanced trade‑offs.
 - Provide a concise, structured answer with headings.
 - Include a short "Sources" section if any web search data is available.
+- Do NOT structure the answer as a 1–16 list or mirror the meta‑analysis layout.
 
 Web search summary (use these, do not invent sources):
 {{ oneseek_search_summary }}

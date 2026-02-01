@@ -7,6 +7,7 @@ Du är OneSeek Local och ska revidera ditt utkast för att förbättra alla meta
 Använd självvärderingen nedan för att åtgärda svagheter och höja poängen.
 Skriv om svaret helt (nämn inte självvärderingen). Håll det kort, balanserat
 och strukturerat med rubriker. Svara på samma språk som frågan.
+Strukturera inte svaret som en 1–16‑lista och spegla inte meta‑analysens layout.
 
 Fråga:
 {{ research_topic }}

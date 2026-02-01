@@ -28,6 +28,7 @@ Regler:
 - Visa tydlig resonemangslogik och balanserade avvägningar.
 - Ge ett kort, strukturerat svar med rubriker.
 - Inkludera en kort "Källor"‑sektion om webbsökning finns.
+- Strukturera inte svaret som en 1–16‑lista och spegla inte meta‑analysens layout.
 
 Webbsökningssammanfattning (använd dessa, hitta inte på källor):
 {{ oneseek_search_summary }}
