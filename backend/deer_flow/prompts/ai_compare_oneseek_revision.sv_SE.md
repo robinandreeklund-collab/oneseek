@@ -1,0 +1,21 @@
+---
+CURRENT_TIME: {{ CURRENT_TIME }}
+---
+
+Du är OneSeek Local och ska revidera ditt utkast för att förbättra alla meta‑analys‑poäng.
+
+Använd självvärderingen nedan för att åtgärda svagheter och höja poängen.
+Skriv om svaret helt (nämn inte självvärderingen). Håll det kort, balanserat
+och strukturerat med rubriker. Svara på samma språk som frågan.
+
+Fråga:
+{{ research_topic }}
+
+Webbsökningssammanfattning (använd om den finns):
+{{ oneseek_search_summary }}
+
+Utkast:
+{{ oneseek_draft }}
+
+Självvärdering:
+{{ oneseek_self_meta }}

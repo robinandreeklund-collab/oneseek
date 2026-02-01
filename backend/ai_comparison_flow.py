@@ -24,6 +24,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 
 from backend.deer_flow.config import SELECTED_SEARCH_ENGINE
+from backend.deer_flow.prompts import apply_prompt_template
 from backend.deer_flow.tools import get_web_search_tool, get_retriever_tool, crawl_tool
 from backend.deer_flow.llms.llm import get_llm_by_type
 
@@ -154,6 +155,7 @@ _SYNTH_CACHE = _TTLCache(_SYNTH_CACHE_TTL, _SYNTH_CACHE_MAX)
 _REQUEST_TIMEOUT_S = float(os.getenv("AI_COMPARE_REQUEST_TIMEOUT_S", "60"))
 _MAX_RETRIES = int(os.getenv("AI_COMPARE_MAX_RETRIES", "2"))
 _BACKOFF_BASE_S = float(os.getenv("AI_COMPARE_BACKOFF_BASE_S", "1.0"))
+_ONESEEK_SELF_META_ENABLED = os.getenv("ONESEEK_SELF_META_ENABLED", "true").lower() in ("true", "1", "yes")
 
 
 class AIComparisonFlow:
@@ -297,6 +299,36 @@ class AIComparisonFlow:
                 lines.append(f"- {title}: {snippet}")
         return "\n".join(lines)
 
+    def _infer_locale(self, query: str) -> str:
+        lowered = (query or "").lower()
+        if any(ch in lowered for ch in ("å", "ä", "ö")):
+            return "sv-SE"
+        return "en-US"
+
+    def _render_oneseek_prompt(
+        self,
+        prompt_name: str,
+        query: str,
+        search_summary: str,
+        draft: str = "",
+        self_meta: str = "",
+        locale: str = "en-US",
+    ) -> str:
+        try:
+            state = {
+                "messages": [],
+                "research_topic": query,
+                "oneseek_search_summary": search_summary,
+                "oneseek_draft": draft,
+                "oneseek_self_meta": self_meta,
+            }
+            messages = apply_prompt_template(prompt_name, state, None, locale)
+            if messages and isinstance(messages[0], dict):
+                return str(messages[0].get("content") or "")
+        except Exception as exc:
+            logger.warning(f"Failed to render {prompt_name} prompt: {exc}")
+        return ""
+
     def _build_oneseek_system_prompt(self, query: str, search_summary: str) -> str:
         return f"""You are OneSeek Local. Answer the user question with maximum quality.
 
@@ -360,6 +392,7 @@ User question:
                 messages = [HumanMessage(content=query)]
                 if model_key == "oneseek-local":
                     search_summary = ""
+                    locale = self._infer_locale(query)
                     if self.search_tool:
                         search_cache_key = _build_cache_key(
                             "search",
@@ -382,20 +415,76 @@ User question:
                                 search_summary = self._format_search_results(search_results)
                             except Exception as search_exc:
                                 logger.warning(f"OneSeek web search failed: {search_exc}")
-                    system_prompt = self._build_oneseek_system_prompt(query, search_summary)
-                    messages = [
-                        SystemMessage(content=system_prompt),
-                        HumanMessage(content=query),
-                    ]
+                    system_prompt = self._render_oneseek_prompt(
+                        "ai_compare_oneseek_system",
+                        query,
+                        search_summary,
+                        locale=locale,
+                    )
+                    if not system_prompt:
+                        system_prompt = self._build_oneseek_system_prompt(query, search_summary)
+                    messages = [SystemMessage(content=system_prompt), HumanMessage(content=query)]
                 response = await asyncio.wait_for(
                     model.ainvoke(messages),
                     timeout=_REQUEST_TIMEOUT_S if _REQUEST_TIMEOUT_S > 0 else None,
                 )
+                response_text = response.content if hasattr(response, "content") else str(response)
+                if model_key == "oneseek-local" and _ONESEEK_SELF_META_ENABLED:
+                    self_meta_prompt = self._render_oneseek_prompt(
+                        "ai_compare_oneseek_self_meta",
+                        query,
+                        search_summary,
+                        draft=response_text,
+                        locale=locale,
+                    )
+                    self_meta_text = ""
+                    if self_meta_prompt:
+                        try:
+                            meta_response = await asyncio.wait_for(
+                                model.ainvoke(
+                                    [
+                                        SystemMessage(content=self_meta_prompt),
+                                        HumanMessage(content=response_text),
+                                    ]
+                                ),
+                                timeout=_REQUEST_TIMEOUT_S if _REQUEST_TIMEOUT_S > 0 else None,
+                            )
+                            self_meta_text = (
+                                meta_response.content
+                                if hasattr(meta_response, "content")
+                                else str(meta_response)
+                            )
+                        except Exception as meta_exc:
+                            logger.warning(f"OneSeek self-meta failed: {meta_exc}")
+                    revision_prompt = self._render_oneseek_prompt(
+                        "ai_compare_oneseek_revision",
+                        query,
+                        search_summary,
+                        draft=response_text,
+                        self_meta=self_meta_text,
+                        locale=locale,
+                    )
+                    if revision_prompt:
+                        try:
+                            revised = await asyncio.wait_for(
+                                model.ainvoke(
+                                    [
+                                        SystemMessage(content=revision_prompt),
+                                        HumanMessage(content=response_text),
+                                    ]
+                                ),
+                                timeout=_REQUEST_TIMEOUT_S if _REQUEST_TIMEOUT_S > 0 else None,
+                            )
+                            response_text = (
+                                revised.content if hasattr(revised, "content") else str(revised)
+                            )
+                        except Exception as revise_exc:
+                            logger.warning(f"OneSeek revision failed: {revise_exc}")
 
                 payload = {
                     "model": model_key,
                     "display_name": display_name,
-                    "response": response.content if hasattr(response, "content") else str(response),
+                    "response": response_text,
                     "success": True,
                     "error": None,
                     "cached": False,
