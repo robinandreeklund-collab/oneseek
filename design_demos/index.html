@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Grok Chat Design Demos</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0b0d;
+        --panel: #141416;
+        --border: #23242a;
+        --text: #e7e7ea;
+        --muted: #9ca3af;
+        --accent: #7dd3fc;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        font-family: "Inter", "SF Pro Text", system-ui, -apple-system, sans-serif;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        padding: 40px;
+      }
+
+      h1 {
+        font-size: 28px;
+        margin-bottom: 12px;
+      }
+
+      p {
+        color: var(--muted);
+        margin-bottom: 24px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 18px;
+      }
+
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        text-decoration: none;
+        color: var(--text);
+        transition: transform 0.2s ease, border-color 0.2s ease;
+      }
+
+      .card:hover {
+        transform: translateY(-2px);
+        border-color: rgba(125, 211, 252, 0.6);
+      }
+
+      .card span {
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border-radius: 10px;
+        background: rgba(125, 211, 252, 0.2);
+        border: 1px solid rgba(125, 211, 252, 0.4);
+        color: var(--accent);
+        font-weight: 600;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Grok-inspired chat design demos</h1>
+    <p>Five HTML prototypes based on the Grok layout and sidebars.</p>
+    <div class="grid">
+      <a class="card" href="./grok-demo-1-classic.html">
+        <div class="badge">1</div>
+        <strong>Classic center prompt</strong>
+        <span>Minimal home state with full sidebars.</span>
+      </a>
+      <a class="card" href="./grok-demo-2-split-panel.html">
+        <div class="badge">2</div>
+        <strong>Split panel workspace</strong>
+        <span>Chat + right research panel with assets.</span>
+      </a>
+      <a class="card" href="./grok-demo-3-threaded.html">
+        <div class="badge">3</div>
+        <strong>Threaded workspace</strong>
+        <span>Left thread list plus right context.</span>
+      </a>
+      <a class="card" href="./grok-demo-4-command-center.html">
+        <div class="badge">4</div>
+        <strong>Command center</strong>
+        <span>Top command bar and action chips.</span>
+      </a>
+      <a class="card" href="./grok-demo-5-focus-mode.html">
+        <div class="badge">5</div>
+        <strong>Focus mode</strong>
+        <span>Minimal chrome with peek panel.</span>
+      </a>
+    </div>
+  </body>
+</html>

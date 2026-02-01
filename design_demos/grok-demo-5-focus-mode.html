@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Grok Chat Demo 5 - Focus Mode</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0b0d;
+        --panel: #141416;
+        --panel-2: #17181b;
+        --border: #23242a;
+        --text: #e7e7ea;
+        --muted: #9ca3af;
+        --accent: #7dd3fc;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        font-family: "Inter", "SF Pro Text", system-ui, -apple-system, sans-serif;
+      }
+
+      body {
+        background: radial-gradient(circle at top, rgba(125, 211, 252, 0.08), transparent 55%),
+          var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 64px 1fr;
+        min-height: 100vh;
+      }
+
+      .rail {
+        background: #0a0a0c;
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px 0;
+        gap: 16px;
+      }
+
+      .rail .icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+      }
+
+      .content {
+        padding: 36px 60px 120px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+
+      .headline {
+        font-size: 20px;
+        letter-spacing: 0.3px;
+      }
+
+      .subhead {
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .message {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 16px 18px;
+        line-height: 1.6;
+        font-size: 14px;
+        max-width: 800px;
+      }
+
+      .message.user {
+        align-self: flex-end;
+        background: #111215;
+        border-color: rgba(125, 211, 252, 0.35);
+      }
+
+      .message-meta {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 6px;
+      }
+
+      .composer {
+        position: fixed;
+        left: 64px;
+        right: 32px;
+        bottom: 24px;
+        display: flex;
+        justify-content: center;
+      }
+
+      .composer-inner {
+        width: min(880px, 100%);
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 14px;
+      }
+
+      .composer-inner input {
+        flex: 1;
+        background: transparent;
+        border: none;
+        color: var(--text);
+        font-size: 14px;
+        outline: none;
+      }
+
+      .composer-inner button {
+        background: rgba(125, 211, 252, 0.18);
+        border: 1px solid rgba(125, 211, 252, 0.4);
+        color: var(--text);
+        padding: 8px 14px;
+        border-radius: 999px;
+        font-size: 12px;
+      }
+
+      .peek {
+        position: fixed;
+        right: 24px;
+        top: 120px;
+        width: 240px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 14px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+      }
+
+      .peek h4 {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 1.1px;
+        color: var(--muted);
+        margin-bottom: 8px;
+      }
+
+      .peek p {
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.4;
+      }
+
+      .peek button {
+        margin-top: 12px;
+        width: 100%;
+        background: #0f1013;
+        border: 1px solid var(--border);
+        color: var(--text);
+        border-radius: 12px;
+        padding: 8px 10px;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="layout">
+      <aside class="rail">
+        <div class="icon"></div>
+        <div class="icon"></div>
+        <div class="icon"></div>
+        <div class="icon"></div>
+        <div class="icon"></div>
+      </aside>
+      <main class="content">
+        <div>
+          <div class="headline">Focus mode</div>
+          <div class="subhead">Minimal chrome with a right peek panel.</div>
+        </div>
+        <div class="message user">
+          Summarize the key takeaways from the workshop notes.
+          <div class="message-meta">User</div>
+        </div>
+        <div class="message">
+          The team aligned on three priorities: simplify onboarding, ship the
+          new search flow, and improve real-time collaboration. Risks include
+          timeline compression and scope creep.
+          <div class="message-meta">Assistant</div>
+        </div>
+        <div class="message">
+          I can turn this into a recap mail, action items, or a brief deck.
+          <div class="message-meta">Assistant</div>
+        </div>
+      </main>
+    </div>
+    <div class="composer">
+      <div class="composer-inner">
+        <input type="text" placeholder="Add a follow up..." />
+        <button>Send</button>
+      </div>
+    </div>
+    <div class="peek">
+      <h4>Peek panel</h4>
+      <p>Quick context, files, and side outputs stay close without distraction.</p>
+      <button>Open full panel</button>
+    </div>
+  </body>
+</html>

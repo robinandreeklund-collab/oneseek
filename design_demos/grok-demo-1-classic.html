@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Grok Chat Demo 1 - Classic</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0b0d;
+        --panel: #141416;
+        --panel-2: #17181b;
+        --border: #23242a;
+        --text: #e7e7ea;
+        --muted: #9ca3af;
+        --accent: #7dd3fc;
+        --accent-2: #a78bfa;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        font-family: "Inter", "SF Pro Text", system-ui, -apple-system, sans-serif;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 64px 1fr 320px;
+        min-height: 100vh;
+      }
+
+      .rail {
+        background: #0a0a0c;
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px 0;
+        gap: 18px;
+      }
+
+      .rail-top,
+      .rail-bottom {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .rail-top {
+        flex: 1;
+      }
+
+      .logo-dot {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--accent), var(--accent-2));
+        box-shadow: 0 0 18px rgba(125, 211, 252, 0.25);
+      }
+
+      .rail-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+      }
+
+      .rail-icon.active {
+        border-color: rgba(125, 211, 252, 0.6);
+        box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.3);
+      }
+
+      .avatar {
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        background: #24262c;
+        border: 1px solid var(--border);
+      }
+
+      .center {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 32px 28px 80px;
+      }
+
+      .hero {
+        width: min(720px, 100%);
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+
+      .brand {
+        font-size: 32px;
+        letter-spacing: 0.5px;
+      }
+
+      .tagline {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .composer {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 10px 14px;
+      }
+
+      .composer input {
+        flex: 1;
+        background: transparent;
+        border: none;
+        color: var(--text);
+        font-size: 14px;
+        outline: none;
+      }
+
+      .composer button {
+        background: linear-gradient(135deg, rgba(125, 211, 252, 0.2), rgba(167, 139, 250, 0.2));
+        border: 1px solid rgba(125, 211, 252, 0.4);
+        color: var(--text);
+        padding: 8px 14px;
+        border-radius: 999px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+
+      .chips {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .chip {
+        background: #141519;
+        border: 1px solid var(--border);
+        padding: 6px 12px;
+        border-radius: 999px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .panel {
+        background: var(--panel);
+        border-left: 1px solid var(--border);
+        padding: 24px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .panel-title {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        color: var(--muted);
+      }
+
+      .panel-card {
+        background: #111215;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .panel-card h4 {
+        font-size: 14px;
+      }
+
+      .panel-card p {
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.4;
+      }
+
+      .panel-toggle {
+        display: flex;
+        gap: 8px;
+      }
+
+      .panel-toggle span {
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 6px 10px;
+        font-size: 11px;
+        color: var(--muted);
+        background: #0f1013;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="layout">
+      <aside class="rail">
+        <div class="rail-top">
+          <div class="logo-dot"></div>
+          <div class="rail-icon active"></div>
+          <div class="rail-icon"></div>
+          <div class="rail-icon"></div>
+          <div class="rail-icon"></div>
+        </div>
+        <div class="rail-bottom">
+          <div class="avatar"></div>
+        </div>
+      </aside>
+      <main class="center">
+        <div class="hero">
+          <div class="brand">SuperGrok</div>
+          <div class="tagline">Minimal home state with a centered prompt.</div>
+          <div class="composer">
+            <input type="text" placeholder="What can I help with?" />
+            <button>Send</button>
+          </div>
+          <div class="chips">
+            <div class="chip">DeepSearch</div>
+            <div class="chip">Summarize</div>
+            <div class="chip">Write mode</div>
+            <div class="chip">Voice chat</div>
+          </div>
+        </div>
+      </main>
+      <aside class="panel">
+        <div class="panel-title">Workspace</div>
+        <div class="panel-card">
+          <h4>Quick toggles</h4>
+          <div class="panel-toggle">
+            <span>Automatic</span>
+            <span>Focus</span>
+            <span>Fast</span>
+          </div>
+        </div>
+        <div class="panel-card">
+          <h4>Shortcuts</h4>
+          <p>Type "/" to open commands, or paste a URL to fetch.</p>
+        </div>
+        <div class="panel-card">
+          <h4>Recent topics</h4>
+          <p>Market overview, product research, UI feedback.</p>
+        </div>
+      </aside>
+    </div>
+  </body>
+</html>
