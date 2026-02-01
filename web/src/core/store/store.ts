@@ -420,8 +420,35 @@ export async function sendMessage(
         }
       }
       
-      // Handle tool_call_result specially: use the message that contains the tool call
-      if (type === "tool_call_result") {
+      // Handle tool_calls/tool_call_chunks: reuse existing message if possible
+      if (type === "tool_calls" || type === "tool_call_chunks") {
+        const toolCallId =
+          type === "tool_calls"
+            ? data.tool_calls?.[0]?.id
+            : data.tool_call_chunks?.[0]?.id;
+        message = toolCallId ? findMessageByToolCallId(toolCallId) : undefined;
+        if (message) {
+          messageId = message.id;
+        } else {
+          messageId = data.id;
+        }
+        
+        if (!existsMessage(messageId)) {
+          message = {
+            id: messageId,
+            threadId: data.thread_id,
+            agent: data.agent,
+            role: data.role,
+            content: "",
+            contentChunks: [],
+            reasoningContent: "",
+            reasoningContentChunks: [],
+            isStreaming: true,
+            interruptFeedback,
+          };
+          appendMessage(message);
+        }
+      } else if (type === "tool_call_result") {
         message = findMessageByToolCallId(data.tool_call_id);
         if (message) {
           // Use the found message's ID, not data.id
