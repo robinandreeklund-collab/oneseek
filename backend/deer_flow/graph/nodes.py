@@ -3114,10 +3114,6 @@ async def ai_compare_query_node(
             tool_call_id=tool_call_id,
             name="query_model_in_round",
         ),
-        AIMessage(
-            content=ui_text or "",
-            name="ai_compare_query",
-        ),
     ]
     return Command(
         update={
@@ -3168,10 +3164,6 @@ async def ai_compare_fact_check_node(
             content=ui_text or str(tool_output),
             tool_call_id=tool_call_id,
             name="fact_check_responses",
-        ),
-        AIMessage(
-            content=ui_text or "",
-            name="ai_compare_fact_check",
         ),
     ]
     current_plan = state.get("current_plan")
@@ -3237,14 +3229,6 @@ async def ai_compare_meta_node(
             content=str(tool_output),
             tool_call_id=tool_call_id,
             name="run_meta_analysis",
-        ),
-        AIMessage(
-            content=(
-                json.dumps(payload, ensure_ascii=False)
-                if payload
-                else ""
-            ),
-            name="ai_compare_meta",
         ),
     ]
     current_plan = state.get("current_plan")
@@ -3349,19 +3333,6 @@ async def ai_compare_synth_node(
                     ),
                     tool_call_id=tool_call_id,
                     name="synthesize_optimal_answer",
-                ),
-                AIMessage(
-                    content=(
-                        synthesis_payload.get("synthesized_answer")
-                        if isinstance(synthesis_payload, dict)
-                        and synthesis_payload.get("synthesized_answer")
-                        else (
-                            synthesis_payload.get("synthesis")
-                            if isinstance(synthesis_payload, dict)
-                            else ""
-                        )
-                    ),
-                    name="ai_compare_synth",
                 ),
             ],
             "current_plan": current_plan,
