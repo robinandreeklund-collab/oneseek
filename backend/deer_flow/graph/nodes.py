@@ -3098,6 +3098,10 @@ async def ai_compare_query_node(
                 tool_call_id=tool_call_id,
                 name="query_model_in_round",
             ),
+            AIMessage(
+                content=response_text or "",
+                name="ai_compare_query",
+            ),
         ]
         return Command(
             update={

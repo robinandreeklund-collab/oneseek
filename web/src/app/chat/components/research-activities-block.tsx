@@ -50,36 +50,61 @@ export function ResearchActivitiesBlock({
   );
   const messages = useStore((state) => state.messages);
   const ongoing = useStore((state) => state.ongoingResearchId === researchId);
-  const filteredActivityIds = useMemo(() => {
+  const displayItems = useMemo(() => {
     if (!activityIds) return [];
-    const seen = new Set<string>();
-    return activityIds.filter((activityId) => {
+    const items: Array<{ id: string; responseId?: string }> = [];
+    const consumed = new Set<string>();
+    const seenContent = new Set<string>();
+    for (let i = 0; i < activityIds.length; i += 1) {
+      const activityId = activityIds[i];
+      if (consumed.has(activityId)) continue;
       const message = messages.get(activityId);
       if (!message) {
-        return true;
+        items.push({ id: activityId });
+        continue;
       }
-      if (message.agent === "ai_compare_query") {
-        const toolCall = message.toolCalls?.find(
-          (call) => call.name === "query_model_in_round",
-        );
-        const args = (toolCall?.args ?? {}) as { model_key?: string; display_name?: string };
-        const modelKey = args.model_key || args.display_name;
-        if (!modelKey) {
-          return Boolean(message.toolCalls?.length);
+      if (message.agent === "ai_compare_query" && message.toolCalls?.length) {
+        let responseId: string | undefined;
+        for (let j = i + 1; j < activityIds.length; j += 1) {
+          const nextId = activityIds[j];
+          if (consumed.has(nextId)) continue;
+          const nextMessage = messages.get(nextId);
+          if (!nextMessage) continue;
+          if (nextMessage.agent === "ai_compare_query" && nextMessage.toolCalls?.length) {
+            break;
+          }
+          if (
+            nextMessage.agent === "ai_compare_query"
+            && !nextMessage.toolCalls?.length
+          ) {
+            const contentKey = (nextMessage.content ?? "")
+              .replace(/\s+/g, " ")
+              .trim();
+            if (contentKey && !seenContent.has(contentKey)) {
+              responseId = nextId;
+              seenContent.add(contentKey);
+            }
+            consumed.add(nextId);
+            break;
+          }
         }
-        const dedupeKey = `model:${modelKey}`;
-        if (seen.has(dedupeKey)) {
-          return false;
-        }
-        seen.add(dedupeKey);
-        return true;
+        items.push({ id: activityId, responseId });
+        continue;
       }
-      return true;
-    });
+      if (message.agent === "ai_compare_query" && !message.toolCalls?.length) {
+        const contentKey = (message.content ?? "").replace(/\s+/g, " ").trim();
+        if (!contentKey || seenContent.has(contentKey)) {
+          continue;
+        }
+        seenContent.add(contentKey);
+      }
+      items.push({ id: activityId });
+    }
+    return items;
   }, [activityIds, messages]);
   
   // Guard against undefined activityIds
-  if (!activityIds || filteredActivityIds.length === 0) {
+  if (!activityIds || displayItems.length === 0) {
     return (
       <>
         {ongoing && <LoadingAnimation className="mx-4 my-12" />}
@@ -90,16 +115,16 @@ export function ResearchActivitiesBlock({
   return (
     <>
       <ul className={cn("flex flex-col py-4", className)}>
-        {filteredActivityIds.map(
-          (activityId, i) => {
+        {displayItems.map(
+          (item, i) => {
             // Performance optimization: limit animations for large lists
             const shouldAnimate = i < MAX_ANIMATED_ITEMS;
             const animationDelay = shouldAnimate ? Math.min(i * ANIMATION_DELAY_MULTIPLIER, 0.5) : 0;
-            const message = messages.get(activityId);
-            const isAiCompareQuery = message?.agent === "ai_compare_query";
+            const message = messages.get(item.id);
+            const isAiCompareToolRow = message?.agent === "ai_compare_query" && Boolean(message.toolCalls?.length);
             return (
               <motion.li
-                key={activityId}
+                key={item.id}
                 style={{ transition: shouldAnimate ? "all 0.3s ease-out" : "none" }}
                 initial={shouldAnimate ? { opacity: 0, y: 24 } : { opacity: 1, y: 0 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -109,18 +134,18 @@ export function ResearchActivitiesBlock({
                   ease: "easeOut",
                 } : undefined}
               >
-                {isAiCompareQuery ? (
+                {isAiCompareToolRow ? (
                   <>
-                    <ActivityListItem messageId={activityId} />
-                    <ActivityMessage messageId={activityId} />
+                    <ActivityListItem messageId={item.id} />
+                    {item.responseId && <ActivityMessage messageId={item.responseId} />}
                   </>
                 ) : (
                   <>
-                    <ActivityMessage messageId={activityId} />
-                    <ActivityListItem messageId={activityId} />
+                    <ActivityMessage messageId={item.id} />
+                    <ActivityListItem messageId={item.id} />
                   </>
                 )}
-                {i !== activityIds.length - 1 && <hr className="my-8" />}
+                {i !== displayItems.length - 1 && <hr className="my-8" />}
               </motion.li>
             );
           },
@@ -153,7 +178,10 @@ const ActivityMessage = React.memo(({ messageId }: { messageId: string }) => {
       ai_compare_synth: isSwedish ? "Syntes" : "Synthesis",
     };
     if (message.agent === "ai_compare_query") {
-      return null;
+      const content = message.content?.trim() ?? "";
+      if (!content || !/^###\s+/m.test(content)) {
+        return null;
+      }
     }
     if (message.content && message.agent && agentLabelMap[message.agent]) {
       const label = agentLabelMap[message.agent];
@@ -847,6 +875,12 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
     }
     return entries;
   }, [toolCall.result]);
+  const isAiCompareTool = useMemo(() => {
+    if (toolCall.name !== "query_model_in_round") return false;
+    if (!toolCall.args || typeof toolCall.args !== "object") return false;
+    const args = toolCall.args as { user_query?: string; round_number?: number };
+    return Boolean(args.user_query) && !args.round_number;
+  }, [toolCall.args, toolCall.name]);
   const isRunning = toolCall.result === undefined;
 
   return (
@@ -886,39 +920,48 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
                       {JSON.stringify(toolCall.args, null, 2)}
                     </pre>
                   </div>
-                  <>
-                    <SyntaxHighlighter
-                      language="markdown" // Changed to markdown for better reading of text responses
-                      style={resolvedTheme === "dark" ? dark : docco}
-                      wrapLongLines={true}
-                      customStyle={{
-                        background: "transparent",
-                        border: "none",
-                        boxShadow: "none",
-                      }}
-                    >
-                      {displayResult.trim()}
-                    </SyntaxHighlighter>
-                    {metrics && (
-                      <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-                        {metrics.latency_ms && (
-                          <span className="rounded-full border border-border/60 px-2 py-0.5">
-                            {metrics.latency_ms} ms
-                          </span>
-                        )}
-                        {metrics.tokens_in && (
-                          <span className="rounded-full border border-border/60 px-2 py-0.5">
-                            in {metrics.tokens_in}
-                          </span>
-                        )}
-                        {metrics.tokens_out && (
-                          <span className="rounded-full border border-border/60 px-2 py-0.5">
-                            out {metrics.tokens_out}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </>
+                  {!isAiCompareTool && (
+                    <>
+                      <SyntaxHighlighter
+                        language="markdown" // Changed to markdown for better reading of text responses
+                        style={resolvedTheme === "dark" ? dark : docco}
+                        wrapLongLines={true}
+                        customStyle={{
+                          background: "transparent",
+                          border: "none",
+                          boxShadow: "none",
+                        }}
+                      >
+                        {displayResult.trim()}
+                      </SyntaxHighlighter>
+                      {metrics && (
+                        <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                          {metrics.latency_ms && (
+                            <span className="rounded-full border border-border/60 px-2 py-0.5">
+                              {metrics.latency_ms} ms
+                            </span>
+                          )}
+                          {metrics.tokens_in && (
+                            <span className="rounded-full border border-border/60 px-2 py-0.5">
+                              in {metrics.tokens_in}
+                            </span>
+                          )}
+                          {metrics.tokens_out && (
+                            <span className="rounded-full border border-border/60 px-2 py-0.5">
+                              out {metrics.tokens_out}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {isAiCompareTool && (
+                    <div className="text-xs text-muted-foreground px-2 pb-2">
+                      {isSwedish
+                        ? "Modellsvar visas nedan."
+                        : "Model response is shown below."}
+                    </div>
+                  )}
                 </div>
               )}
             </AccordionContent>
