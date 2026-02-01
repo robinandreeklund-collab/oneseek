@@ -740,6 +740,229 @@
         color: var(--text);
       }
 
+      .live-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 10px;
+        letter-spacing: 0.4px;
+        text-transform: uppercase;
+        padding: 4px 8px;
+        border-radius: 999px;
+        border: 1px solid rgba(74, 222, 128, 0.4);
+        color: var(--success);
+        background: rgba(74, 222, 128, 0.08);
+      }
+
+      .live-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--success);
+        box-shadow: 0 0 10px rgba(74, 222, 128, 0.8);
+        animation: pulse 1.4s ease infinite;
+      }
+
+      .progress {
+        width: 100%;
+        height: 8px;
+        border-radius: 999px;
+        background: #1b1c21;
+        overflow: hidden;
+      }
+
+      .progress-bar {
+        height: 100%;
+        width: 62%;
+        background: linear-gradient(90deg, #60a5fa, #a78bfa);
+        animation: progressMove 2.6s ease infinite;
+      }
+
+      .timeline {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .timeline-item {
+        display: grid;
+        grid-template-columns: 12px 1fr;
+        gap: 10px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .timeline-dot {
+        width: 10px;
+        height: 10px;
+        margin-top: 3px;
+        border-radius: 50%;
+        background: #1b1c21;
+        border: 2px solid rgba(96, 165, 250, 0.6);
+        position: relative;
+      }
+
+      .timeline-dot.running::after {
+        content: "";
+        position: absolute;
+        inset: -4px;
+        border-radius: 50%;
+        border: 1px solid rgba(96, 165, 250, 0.3);
+        animation: pulse 1.4s ease infinite;
+      }
+
+      .timeline-title {
+        color: var(--text);
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+
+      .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 10px;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        background: #0f1013;
+      }
+
+      .status-badge.running {
+        border-color: rgba(96, 165, 250, 0.6);
+        color: var(--accent);
+      }
+
+      .status-badge.done {
+        border-color: rgba(74, 222, 128, 0.6);
+        color: var(--success);
+      }
+
+      .status-badge.waiting {
+        border-color: rgba(250, 204, 21, 0.5);
+        color: var(--warning);
+      }
+
+      .tool-card {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: #0f1013;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .tool-card.running {
+        border-color: rgba(96, 165, 250, 0.5);
+        box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.15);
+      }
+
+      .tool-card.done {
+        border-color: rgba(74, 222, 128, 0.4);
+      }
+
+      .tool-card strong {
+        color: var(--text);
+      }
+
+      .tool-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 11px;
+      }
+
+      .tool-output {
+        background: #0b0c0f;
+        border-radius: 8px;
+        padding: 8px;
+        font-size: 11px;
+        color: var(--muted);
+        border: 1px solid #1b1c21;
+      }
+
+      .shimmer {
+        position: relative;
+        overflow: hidden;
+      }
+
+      .shimmer::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          120deg,
+          transparent,
+          rgba(255, 255, 255, 0.08),
+          transparent
+        );
+        transform: translateX(-100%);
+        animation: shimmer 2.2s ease infinite;
+      }
+
+      .streaming {
+        position: relative;
+        padding-right: 12px;
+      }
+
+      .streaming::after {
+        content: "";
+        position: absolute;
+        right: 0;
+        top: 4px;
+        width: 6px;
+        height: 16px;
+        background: var(--accent);
+        animation: blink 1s steps(2) infinite;
+      }
+
+      .mini-metrics {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+      }
+
+      .metric-card {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 8px;
+        background: #0f1013;
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      .metric-card strong {
+        color: var(--text);
+        display: block;
+        margin-bottom: 4px;
+      }
+
+      .vote-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      .vote-row span {
+        min-width: 64px;
+        color: var(--text);
+      }
+
+      .vote-row .vote-bar {
+        flex: 1;
+      }
+
+      .vote-row .vote-bar span {
+        width: 0;
+        animation: voteFill 2.4s ease forwards;
+      }
+
       @keyframes fadeInUp {
         from {
           opacity: 0;
@@ -789,6 +1012,62 @@
         100% {
           opacity: 0;
           transform: translateY(-12px) scale(1);
+        }
+      }
+
+      @keyframes pulse {
+        0% {
+          transform: scale(1);
+          opacity: 0.8;
+        }
+        50% {
+          transform: scale(1.2);
+          opacity: 1;
+        }
+        100% {
+          transform: scale(1);
+          opacity: 0.8;
+        }
+      }
+
+      @keyframes shimmer {
+        0% {
+          transform: translateX(-100%);
+        }
+        100% {
+          transform: translateX(100%);
+        }
+      }
+
+      @keyframes blink {
+        0%,
+        49% {
+          opacity: 1;
+        }
+        50%,
+        100% {
+          opacity: 0;
+        }
+      }
+
+      @keyframes progressMove {
+        0% {
+          width: 35%;
+        }
+        50% {
+          width: 78%;
+        }
+        100% {
+          width: 62%;
+        }
+      }
+
+      @keyframes voteFill {
+        from {
+          width: 0;
+        }
+        to {
+          width: var(--vote, 50%);
         }
       }
     </style>
@@ -1013,7 +1292,13 @@
               Jag startar en djup forskning med plan, källor och rapportstil.
             </div>
             <div class="plan-card">
-              <h4>Plan för djup forskning</h4>
+              <div class="panel-highlight">
+                <strong>Djup forskning pågår</strong>
+                <div class="live-pill"><span class="live-dot"></span>Live</div>
+              </div>
+              <div class="progress">
+                <div class="progress-bar"></div>
+              </div>
               <div class="plan-step">
                 Steg 1: Identifiera källor, konkurrenter och trender.
               </div>
@@ -1022,6 +1307,56 @@
               </div>
               <div class="plan-step">
                 Steg 3: Leverera rapport med exportformat.
+              </div>
+            </div>
+            <div class="tool-card running">
+              <div class="tool-meta">
+                <strong>web_search</strong>
+                <span class="status-badge running">
+                  <span class="live-dot"></span>Kör
+                </span>
+              </div>
+              <div>Sökfråga: "marknadstrender 2025 SaaS"</div>
+              <div class="tool-output">Hittar 8 källor...</div>
+            </div>
+            <div class="tool-card done">
+              <div class="tool-meta">
+                <strong>browse_page</strong>
+                <span class="status-badge done">Klar</span>
+              </div>
+              <div>URL: reports.example.com/market-2025</div>
+              <div class="tool-output">Sammanfattar 4 sidor innehåll.</div>
+            </div>
+            <div class="tool-card shimmer running">
+              <div class="tool-meta">
+                <strong>Rapportutkast</strong>
+                <span class="status-badge running">Genererar</span>
+              </div>
+              <div class="tool-output streaming">
+                Skriver avsnitt: "Tillväxt, risker och affärsmodell"
+              </div>
+            </div>
+            <div class="timeline">
+              <div class="timeline-item">
+                <div class="timeline-dot running"></div>
+                <div>
+                  <div class="timeline-title">Insamling av källor</div>
+                  3 källor klara, 2 källor pågår
+                </div>
+              </div>
+              <div class="timeline-item">
+                <div class="timeline-dot"></div>
+                <div>
+                  <div class="timeline-title">Analys av trender</div>
+                  Bearbetar prissättning och kundbeteende
+                </div>
+              </div>
+              <div class="timeline-item">
+                <div class="timeline-dot"></div>
+                <div>
+                  <div class="timeline-title">Rapport & export</div>
+                  PDF/HTML/Word genereras när analysen är klar
+                </div>
               </div>
             </div>
             <div class="loader">
@@ -1063,20 +1398,61 @@
               latens.
             </div>
             <div class="compare-card">
-              <h4>AI-jämförelse</h4>
+              <div class="panel-highlight">
+                <strong>AI-jämförelse pågår</strong>
+                <div class="live-pill"><span class="live-dot"></span>Live</div>
+              </div>
+              <div class="progress">
+                <div class="progress-bar"></div>
+              </div>
+              <div class="mini-metrics">
+                <div class="metric-card">
+                  <strong>Grok-4</strong>
+                  <span class="status-badge running">Analyserar</span>
+                  <div>Latens: 280 ms</div>
+                  <div>Kvalitet: 8.7</div>
+                </div>
+                <div class="metric-card">
+                  <strong>Gemini</strong>
+                  <span class="status-badge done">Klar</span>
+                  <div>Latens: 320 ms</div>
+                  <div>Kvalitet: 8.3</div>
+                </div>
+                <div class="metric-card">
+                  <strong>DeepSeek</strong>
+                  <span class="status-badge done">Klar</span>
+                  <div>Latens: 260 ms</div>
+                  <div>Kvalitet: 7.8</div>
+                </div>
+                <div class="metric-card">
+                  <strong>Slutscore</strong>
+                  <div class="tool-output streaming">
+                    Viktning och ranking beräknas...
+                  </div>
+                </div>
+              </div>
               <div class="compare-row">
                 <div class="compare-item">
-                  <strong>Grok-4</strong>
-                  Snabbt resonemang, tydliga sammanfattningar.
+                  <strong>Service</strong>
+                  24/7, svensk support, SLA 99.9%
                 </div>
                 <div class="compare-item">
-                  <strong>Gemini</strong>
-                  Stark multimodalitet, bra verktygsstöd.
+                  <strong>Kostnad</strong>
+                  18-24% skillnad beroende på volym
                 </div>
                 <div class="compare-item">
-                  <strong>DeepSeek</strong>
-                  Kostnadseffektiv, stabil QA.
+                  <strong>Säkerhet</strong>
+                  RAG, redaction, policy-kontroller
                 </div>
+              </div>
+            </div>
+            <div class="tool-card shimmer">
+              <div class="tool-meta">
+                <strong>AI-jämförelse</strong>
+                <span class="status-badge running">Sammanställer</span>
+              </div>
+              <div class="tool-output streaming">
+                Summerar styrkor, risker och rekommendation...
               </div>
             </div>
           </div>
@@ -1112,23 +1488,78 @@
             <div class="bubble assistant">
               Debatten är igång. Här är rundorna och en preliminär röstning.
             </div>
+            <div class="plan-card">
+              <div class="panel-highlight">
+                <strong>Debatt pågår</strong>
+                <div class="live-pill"><span class="live-dot"></span>Live</div>
+              </div>
+              <div class="progress">
+                <div class="progress-bar"></div>
+              </div>
+              <div class="plan-step">
+                Runda 1: Argument per modell, 90 sek vardera.
+              </div>
+              <div class="plan-step">
+                Runda 2: Replik + motfragor, 60 sek vardera.
+              </div>
+            </div>
             <div class="debate-grid">
               <div class="debate-card">
                 <strong>Runda 1 - Grok-4</strong>
                 Fokus på snabbhet och tydlig rapportering.
+                <div class="status-badge running">Talar</div>
               </div>
               <div class="debate-card">
                 <strong>Runda 1 - Gemini</strong>
                 Multimodalitet och verktygsintegrering.
+                <div class="status-badge waiting">Väntar</div>
               </div>
               <div class="debate-card">
                 <strong>Runda 1 - DeepSeek</strong>
                 Kostnadseffektivitet och robusthet.
+                <div class="status-badge waiting">Väntar</div>
               </div>
               <div class="debate-card">
                 <strong>Röstning</strong>
                 Grok-4 leder just nu.
-                <div class="vote-bar"><span></span></div>
+                <div class="vote-row">
+                  <span>Grok-4</span>
+                  <div class="vote-bar"><span style="--vote: 60%"></span></div>
+                  61%
+                </div>
+                <div class="vote-row">
+                  <span>Gemini</span>
+                  <div class="vote-bar"><span style="--vote: 24%"></span></div>
+                  24%
+                </div>
+                <div class="vote-row">
+                  <span>DeepSeek</span>
+                  <div class="vote-bar"><span style="--vote: 15%"></span></div>
+                  15%
+                </div>
+              </div>
+            </div>
+            <div class="timeline">
+              <div class="timeline-item">
+                <div class="timeline-dot running"></div>
+                <div>
+                  <div class="timeline-title">Runda 1 pågår</div>
+                  Grok-4 talar, Gemini och DeepSeek pa tur.
+                </div>
+              </div>
+              <div class="timeline-item">
+                <div class="timeline-dot"></div>
+                <div>
+                  <div class="timeline-title">Runda 2 startar</div>
+                  Repliker med fokus pa risker och robusthet.
+                </div>
+              </div>
+              <div class="timeline-item">
+                <div class="timeline-dot"></div>
+                <div>
+                  <div class="timeline-title">Omröstning</div>
+                  Slutlig rankning med motiveringar.
+                </div>
               </div>
             </div>
           </div>
@@ -1184,7 +1615,58 @@
             <div class="panel-subtab">Aktiviteter</div>
           </div>
           <div class="panel-card">
-            <h4>Rapportverktyg</h4>
+            <div class="panel-highlight">
+              <strong>Djup forskning pågår</strong>
+              <div class="live-pill"><span class="live-dot"></span>Live</div>
+            </div>
+            <div class="progress">
+              <div class="progress-bar"></div>
+            </div>
+            <div class="panel-highlight">
+              Status: Samlar källor och skriver rapport
+            </div>
+          </div>
+          <div class="panel-card">
+            <h4>Aktiva verktyg</h4>
+            <div class="tool-card running">
+              <div class="tool-meta">
+                <strong>web_search</strong>
+                <span class="status-badge running">Kör</span>
+              </div>
+              <div class="tool-output">Källor: 3/8 klara</div>
+            </div>
+            <div class="tool-card done">
+              <div class="tool-meta">
+                <strong>browse_page</strong>
+                <span class="status-badge done">Klar</span>
+              </div>
+              <div class="tool-output">Sammanfattar 4 sidor</div>
+            </div>
+          </div>
+          <div class="panel-card">
+            <h4>Aktiviteter (live)</h4>
+            <div class="timeline">
+              <div class="timeline-item">
+                <div class="timeline-dot running"></div>
+                <div>
+                  <div class="timeline-title">Insamling av källor</div>
+                  Nya källor valideras just nu
+                </div>
+              </div>
+              <div class="timeline-item">
+                <div class="timeline-dot"></div>
+                <div>
+                  <div class="timeline-title">Analys</div>
+                  Tolkar kostnad, latens, kvalitet
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="panel-card shimmer">
+            <h4>Rapportutkast</h4>
+            <div class="tool-output streaming">
+              Skriver slutsats och rekommendation...
+            </div>
             <div class="panel-actions">
               <span>Podcast</span>
               <span>Redigera</span>
@@ -1194,52 +1676,119 @@
             </div>
           </div>
           <div class="panel-card">
-            <h4>Highlights</h4>
-            <ul>
-              <li>3 källor insamlade</li>
-              <li>Rapportstil: Akademisk</li>
-              <li>Status: Genererar</li>
-            </ul>
-          </div>
-          <div class="panel-card">
             <h4>Filer</h4>
             <p>research-report.md</p>
+            <p>källor.json</p>
             <p>workspace-snapshot.zip</p>
           </div>
         </div>
 
         <div class="panel-state panel-compare">
           <div class="panel-card">
-            <h4>AI-jämförelse</h4>
             <div class="panel-highlight">
-              <strong>3 modeller</strong> analyserade
+              <strong>AI-jämförelse pågår</strong>
+              <div class="live-pill"><span class="live-dot"></span>Live</div>
+            </div>
+            <div class="progress">
+              <div class="progress-bar"></div>
             </div>
             <div class="panel-actions">
               <span>Kostnad</span>
               <span>Latens</span>
               <span>Kvalitet</span>
               <span>Säkerhet</span>
+              <span>Support</span>
             </div>
           </div>
           <div class="panel-card">
-            <h4>Rekommendation</h4>
-            <p>
-              Grok-4 för snabbhet, Gemini för multimodalitet, DeepSeek för
-              kostnad.
-            </p>
+            <h4>Scorecard (live)</h4>
+            <div class="mini-metrics">
+              <div class="metric-card">
+                <strong>Grok-4</strong>
+                Score: 8.7
+              </div>
+              <div class="metric-card">
+                <strong>Gemini</strong>
+                Score: 8.2
+              </div>
+              <div class="metric-card">
+                <strong>DeepSeek</strong>
+                Score: 7.9
+              </div>
+              <div class="metric-card">
+                <strong>Viktning</strong>
+                Kostnad 20%, kvalitet 40%, latens 20%, säkerhet 20%
+              </div>
+            </div>
+          </div>
+          <div class="panel-card shimmer">
+            <h4>Rekommendation (utkast)</h4>
+            <div class="tool-output streaming">
+              Grok-4 som primar, Gemini som multimodal fallback...
+            </div>
+          </div>
+          <div class="panel-card">
+            <h4>Datakällor</h4>
+            <ul>
+              <li>Benchmark Q4 2025</li>
+              <li>Support KPI-rapport</li>
+              <li>Prislista leverantor</li>
+            </ul>
           </div>
         </div>
 
         <div class="panel-state panel-debate">
           <div class="panel-card">
-            <h4>Debattstatus</h4>
-            <p>Runda 1 slutförd, runda 2 startar.</p>
+            <div class="panel-highlight">
+              <strong>Debatt pågår</strong>
+              <div class="live-pill"><span class="live-dot"></span>Live</div>
+            </div>
+            <div class="progress">
+              <div class="progress-bar"></div>
+            </div>
+            <p>Runda 1 pågår, runda 2 förbereds.</p>
           </div>
           <div class="panel-card">
-            <h4>Omröstning</h4>
-            <p>Grok-4: 61%</p>
-            <p>Gemini: 24%</p>
-            <p>DeepSeek: 15%</p>
+            <h4>Modellstatus</h4>
+            <div class="tool-card running">
+              <div class="tool-meta">
+                <strong>Grok-4</strong>
+                <span class="status-badge running">Talar</span>
+              </div>
+              <div class="tool-output">Argumenterar för snabbhet.</div>
+            </div>
+            <div class="tool-card">
+              <div class="tool-meta">
+                <strong>Gemini</strong>
+                <span class="status-badge waiting">Väntar</span>
+              </div>
+              <div class="tool-output">Forbereder repliker.</div>
+            </div>
+            <div class="tool-card">
+              <div class="tool-meta">
+                <strong>DeepSeek</strong>
+                <span class="status-badge waiting">Väntar</span>
+              </div>
+              <div class="tool-output">Inväntar motfråga.</div>
+            </div>
+          </div>
+          <div class="panel-card">
+            <h4>Omröstning (live)</h4>
+            <div class="vote-row">
+              <span>Grok-4</span>
+              <div class="vote-bar"><span style="--vote: 60%"></span></div>
+              61%
+            </div>
+            <div class="vote-row">
+              <span>Gemini</span>
+              <div class="vote-bar"><span style="--vote: 24%"></span></div>
+              24%
+            </div>
+            <div class="vote-row">
+              <span>DeepSeek</span>
+              <div class="vote-bar"><span style="--vote: 15%"></span></div>
+              15%
+            </div>
           </div>
         </div>
       </aside>
