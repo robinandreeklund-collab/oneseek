@@ -307,6 +307,9 @@ PlanCard.displayName = "PlanCard";
 
 const ActivityListItem = React.memo(({ messageId }: { messageId: string }) => {
   const message = useMessage(messageId);
+  if (message?.agent === "ai_compare_query") {
+    return null;
+  }
   if (message) {
     if (message.toolCalls?.length) {
       const toolCallComponents = message.toolCalls

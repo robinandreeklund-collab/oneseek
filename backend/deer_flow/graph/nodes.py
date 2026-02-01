@@ -3031,6 +3031,33 @@ async def ai_compare_query_node(
                 current_step = step
                 break
 
+    def _format_ai_compare_responses(responses: list[dict[str, Any]]) -> str:
+        sections: list[str] = []
+        seen: set[str] = set()
+        for idx, resp in enumerate(responses):
+            if not isinstance(resp, dict):
+                continue
+            model_key = str(resp.get("model") or "").strip()
+            display_name = str(
+                resp.get("display_name") or model_key or f"Model {idx + 1}"
+            ).strip()
+            dedupe_key = model_key or display_name.lower()
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            label = display_name
+            if resp.get("cached"):
+                label = f"{label} (cached)"
+            response = resp.get("response")
+            error = resp.get("error")
+            if response:
+                sections.append(f"### {label}\n\n{response}")
+            elif error:
+                sections.append(f"### {label}\n\nError: {error}")
+            else:
+                sections.append(f"### {label}\n\n(No response)")
+        return "\n\n---\n\n".join([section for section in sections if section]).strip()
+
     parallel_enabled = get_bool_env("AI_COMPARE_PARALLEL_QUERY", True)
     pending_tool = state.get("ai_compare_pending_tool") or {}
     if parallel_enabled:
@@ -3070,22 +3097,7 @@ async def ai_compare_query_node(
                 for step in current_plan.steps:
                     if not step.execution_res and step.step_type == StepType.AI_QUERY:
                         step.execution_res = f"Completed: {step.title}"
-
-            response_sections = []
-            for resp in merged_responses:
-                name = resp.get("display_name") or resp.get("model") or "Model"
-                cached_flag = resp.get("cached")
-                if cached_flag:
-                    name = f"{name} (cached)"
-                response = resp.get("response")
-                error = resp.get("error")
-                if response:
-                    response_sections.append(f"### {name}\n\n{response}")
-                elif error:
-                    response_sections.append(f"### {name}\n\nError: {error}")
-                else:
-                    response_sections.append(f"### {name}\n\n(No response)")
-            response_text = "\n\n".join(response_sections).strip()
+            response_text = _format_ai_compare_responses(merged_responses)
             messages = [
                 ToolMessage(
                     content=response_text or str(tool_output),
@@ -3205,16 +3217,17 @@ async def ai_compare_query_node(
         if responses and isinstance(responses[0], dict):
             display_name = responses[0].get("display_name")
         name = display_name or tool_args.get("display_name") or selected_model or "Model"
-        response_text = ""
-        if responses and isinstance(responses[0], dict):
-            response = responses[0].get("response")
-            error = responses[0].get("error")
-            if response:
-                response_text = f"### {name}\n\n{response}"
-            elif error:
-                response_text = f"### {name}\n\nError: {error}"
-            else:
-                response_text = f"### {name}\n\n(No response)"
+        base_response = responses[0] if responses else {}
+        response_text = _format_ai_compare_responses(
+            [
+                {
+                    **(base_response if isinstance(base_response, dict) else {}),
+                    "display_name": name,
+                    "model": selected_model
+                    or (base_response.get("model") if isinstance(base_response, dict) else None),
+                }
+            ]
+        )
         messages = [
             ToolMessage(
                 content=response_text or str(tool_output),
