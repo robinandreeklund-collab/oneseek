@@ -3505,7 +3505,12 @@ async def debate_orchestrator_node(
             debate_flow = get_debate_flow(thread_id=thread_id)
             round_3_responses = list(debate_flow.chain_so_far) if debate_flow.chain_so_far else []
             if round_3_responses:
-                vote_results = await debate_flow.collect_votes(user_query, round_3_responses)
+                allowed_models = [resp.get("model") for resp in round_3_responses if resp.get("model")]
+                vote_results = await debate_flow.collect_votes(
+                    user_query,
+                    round_3_responses,
+                    allowed_models=allowed_models,
+                )
             debate_rounds = list(debate_flow.debate_history)
             if round_3_responses:
                 debate_rounds.append({
@@ -3679,7 +3684,19 @@ async def external_ai_caller_node(
     # Determine model order and index
     model_order = state.get("debate_model_order") or []
     model_index = state.get("debate_model_index", 0)
+    selected_models = state.get("debate_model_ids") or []
+    if selected_models:
+        allowed = set(selected_models)
+        allowed.add("oneseek-local")
+        model_order = [model for model in model_order if model in allowed]
+        if model_index >= len(model_order):
+            model_index = max(len(model_order) - 1, 0)
     pending_model = state.get("debate_pending_model")
+    if pending_model and selected_models:
+        allowed = set(selected_models)
+        allowed.add("oneseek-local")
+        if pending_model.get("model_key") not in allowed:
+            pending_model = None
     
     try:
         tool_calls: list[dict[str, Any]] = []
