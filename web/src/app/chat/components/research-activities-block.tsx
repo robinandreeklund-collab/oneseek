@@ -91,7 +91,8 @@ export function ResearchActivitiesBlock({
             // Performance optimization: limit animations for large lists
             const shouldAnimate = i < MAX_ANIMATED_ITEMS;
             const animationDelay = shouldAnimate ? Math.min(i * ANIMATION_DELAY_MULTIPLIER, 0.5) : 0;
-            
+            const message = messages.get(activityId);
+            const isAiCompareQuery = message?.agent === "ai_compare_query";
             return (
               <motion.li
                 key={activityId}
@@ -104,8 +105,17 @@ export function ResearchActivitiesBlock({
                   ease: "easeOut",
                 } : undefined}
               >
-                <ActivityMessage messageId={activityId} />
-                <ActivityListItem messageId={activityId} />
+                {isAiCompareQuery ? (
+                  <>
+                    <ActivityListItem messageId={activityId} />
+                    <ActivityMessage messageId={activityId} />
+                  </>
+                ) : (
+                  <>
+                    <ActivityMessage messageId={activityId} />
+                    <ActivityListItem messageId={activityId} />
+                  </>
+                )}
                 {i !== activityIds.length - 1 && <hr className="my-8" />}
               </motion.li>
             );
@@ -882,36 +892,46 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
                       {JSON.stringify(toolCall.args, null, 2)}
                     </pre>
                   </div>
-                  
-                  <SyntaxHighlighter
-                    language="markdown" // Changed to markdown for better reading of text responses
-                    style={resolvedTheme === "dark" ? dark : docco}
-                    wrapLongLines={true}
-                    customStyle={{
-                      background: "transparent",
-                      border: "none",
-                      boxShadow: "none",
-                    }}
-                  >
-                    {displayResult.trim()}
-                  </SyntaxHighlighter>
-                  {metrics && (
-                    <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-                      {metrics.latency_ms && (
-                        <span className="rounded-full border border-border/60 px-2 py-0.5">
-                          {metrics.latency_ms} ms
-                        </span>
+                  {!isAiCompareTool && (
+                    <>
+                      <SyntaxHighlighter
+                        language="markdown" // Changed to markdown for better reading of text responses
+                        style={resolvedTheme === "dark" ? dark : docco}
+                        wrapLongLines={true}
+                        customStyle={{
+                          background: "transparent",
+                          border: "none",
+                          boxShadow: "none",
+                        }}
+                      >
+                        {displayResult.trim()}
+                      </SyntaxHighlighter>
+                      {metrics && (
+                        <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                          {metrics.latency_ms && (
+                            <span className="rounded-full border border-border/60 px-2 py-0.5">
+                              {metrics.latency_ms} ms
+                            </span>
+                          )}
+                          {metrics.tokens_in && (
+                            <span className="rounded-full border border-border/60 px-2 py-0.5">
+                              in {metrics.tokens_in}
+                            </span>
+                          )}
+                          {metrics.tokens_out && (
+                            <span className="rounded-full border border-border/60 px-2 py-0.5">
+                              out {metrics.tokens_out}
+                            </span>
+                          )}
+                        </div>
                       )}
-                      {metrics.tokens_in && (
-                        <span className="rounded-full border border-border/60 px-2 py-0.5">
-                          in {metrics.tokens_in}
-                        </span>
-                      )}
-                      {metrics.tokens_out && (
-                        <span className="rounded-full border border-border/60 px-2 py-0.5">
-                          out {metrics.tokens_out}
-                        </span>
-                      )}
+                    </>
+                  )}
+                  {isAiCompareTool && (
+                    <div className="text-xs text-muted-foreground px-2 pb-2">
+                      {isSwedish
+                        ? "Modellsvar visas ovan i listan."
+                        : "Model response is shown above."}
                     </div>
                   )}
                 </div>
