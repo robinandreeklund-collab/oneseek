@@ -876,10 +876,19 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
     return entries;
   }, [toolCall.result]);
   const isAiCompareTool = useMemo(() => {
-    if (toolCall.name !== "query_model_in_round") return false;
-    if (!toolCall.args || typeof toolCall.args !== "object") return false;
-    const args = toolCall.args as { user_query?: string; round_number?: number };
-    return Boolean(args.user_query) && !args.round_number;
+    if (!toolCall.name) return false;
+    const aiCompareToolNames = new Set([
+      "query_model_in_round",
+      "query_gpt35",
+      "query_gemini_flash",
+      "query_deepseek",
+      "query_grok4",
+    ]);
+    if (!aiCompareToolNames.has(toolCall.name)) return false;
+    if (toolCall.name !== "query_model_in_round") return true;
+    if (!toolCall.args || typeof toolCall.args !== "object") return true;
+    const args = toolCall.args as { round_number?: number };
+    return args.round_number === undefined;
   }, [toolCall.args, toolCall.name]);
   const isRunning = toolCall.result === undefined;
 
