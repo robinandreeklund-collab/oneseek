@@ -10,11 +10,13 @@
         --bg: #0b0b0d;
         --panel: #141416;
         --panel-2: #17181b;
+        --panel-3: #101114;
         --border: #23242a;
         --text: #e7e7ea;
         --muted: #9ca3af;
         --accent: #7dd3fc;
         --accent-2: #a78bfa;
+        --brand: #60a5fa;
       }
 
       * {
@@ -25,14 +27,19 @@
       }
 
       body {
-        background: var(--bg);
+        background: radial-gradient(
+            circle at top,
+            rgba(125, 211, 252, 0.12),
+            transparent 52%
+          ),
+          var(--bg);
         color: var(--text);
         min-height: 100vh;
       }
 
       .layout {
         display: grid;
-        grid-template-columns: 64px 1fr 320px;
+        grid-template-columns: 64px 1fr 360px;
         min-height: 100vh;
       }
 
@@ -90,72 +97,304 @@
       .center {
         display: flex;
         flex-direction: column;
+        padding: 20px 36px 120px;
+        gap: 24px;
+      }
+
+      .topbar {
+        height: 48px;
+        display: flex;
         align-items: center;
-        justify-content: center;
-        padding: 32px 28px 80px;
+        justify-content: space-between;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .topbar-left {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .logo-text {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text);
+        letter-spacing: 0.4px;
+      }
+
+      .status-chip {
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 4px 10px;
+        background: #0f1013;
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      .topbar-actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      .icon-btn {
+        width: 32px;
+        height: 32px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: #101114;
+        display: grid;
+        place-items: center;
+      }
+
+      .icon-btn svg {
+        width: 14px;
+        height: 14px;
+        stroke: var(--muted);
+        stroke-width: 1.6;
+        fill: none;
       }
 
       .hero {
-        width: min(720px, 100%);
-        text-align: center;
         display: flex;
         flex-direction: column;
-        gap: 18px;
+        align-items: center;
+        gap: 12px;
+        text-align: center;
+        padding: 10px 0 6px;
       }
 
-      .brand {
-        font-size: 32px;
-        letter-spacing: 0.5px;
+      .hero-mark {
+        width: 56px;
+        height: 56px;
+        border-radius: 18px;
+        background: linear-gradient(
+          140deg,
+          rgba(96, 165, 250, 0.25),
+          rgba(167, 139, 250, 0.25)
+        );
+        border: 1px solid rgba(96, 165, 250, 0.4);
+        display: grid;
+        place-items: center;
+        font-size: 18px;
+        font-weight: 600;
       }
 
-      .tagline {
+      .hero h1 {
+        font-size: 28px;
+        font-weight: 600;
+      }
+
+      .hero p {
         color: var(--muted);
         font-size: 14px;
       }
 
-      .composer {
-        display: flex;
-        align-items: center;
-        gap: 10px;
+      .input-card {
+        width: min(880px, 100%);
+        margin: 0 auto;
         background: var(--panel-2);
         border: 1px solid var(--border);
+        border-radius: 24px;
+        padding: 16px 18px 12px;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        box-shadow: 0 22px 45px rgba(0, 0, 0, 0.35);
+      }
+
+      .feedback-pill {
+        position: absolute;
+        top: 10px;
+        left: 16px;
+        background: #0f1013;
+        border: 1px solid rgba(96, 165, 250, 0.4);
+        color: var(--accent);
+        padding: 4px 10px;
         border-radius: 999px;
-        padding: 10px 14px;
+        font-size: 11px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
       }
 
-      .composer input {
-        flex: 1;
-        background: transparent;
-        border: none;
-        color: var(--text);
-        font-size: 14px;
-        outline: none;
-      }
-
-      .composer button {
-        background: linear-gradient(135deg, rgba(125, 211, 252, 0.2), rgba(167, 139, 250, 0.2));
+      .feedback-pill span {
+        display: inline-flex;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
         border: 1px solid rgba(125, 211, 252, 0.4);
-        color: var(--text);
-        padding: 8px 14px;
-        border-radius: 999px;
-        font-size: 12px;
-        cursor: pointer;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        color: var(--muted);
       }
 
-      .chips {
+      .input-area {
+        min-height: 84px;
+        padding: 24px 8px 8px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .input-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .action-group {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .ghost-btn {
+        border: 1px solid var(--border);
+        background: #0f1013;
+        color: var(--muted);
+        padding: 8px 12px;
+        border-radius: 12px;
+        font-size: 12px;
+      }
+
+      .round-btn {
+        width: 40px;
+        height: 40px;
+        border-radius: 999px;
+        border: 1px solid rgba(125, 211, 252, 0.4);
+        background: rgba(125, 211, 252, 0.2);
+        display: grid;
+        place-items: center;
+        color: var(--text);
+        font-weight: 600;
+        font-size: 13px;
+      }
+
+      .tool-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .tool-btn {
+        border: 1px solid var(--border);
+        background: #101114;
+        color: var(--muted);
+        padding: 6px 12px;
+        border-radius: 12px;
+        font-size: 11px;
+      }
+
+      .tool-btn.active {
+        border-color: rgba(96, 165, 250, 0.5);
+        color: var(--accent);
+      }
+
+      .hero-pills {
         display: flex;
         justify-content: center;
         gap: 10px;
         flex-wrap: wrap;
       }
 
-      .chip {
+      .hero-pill {
         background: #141519;
         border: 1px solid var(--border);
         padding: 6px 12px;
         border-radius: 999px;
         color: var(--muted);
         font-size: 12px;
+      }
+
+      .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 12px;
+        width: min(880px, 100%);
+        margin: 0 auto;
+      }
+
+      .feature-card {
+        background: #111215;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .feature-card h4 {
+        font-size: 13px;
+      }
+
+      .feature-card p {
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.4;
+      }
+
+      .feature-card button {
+        border: 1px solid var(--border);
+        background: #0f1013;
+        color: var(--text);
+        border-radius: 999px;
+        padding: 6px 10px;
+        font-size: 11px;
+        align-self: flex-start;
+      }
+
+      .message-preview {
+        width: min(880px, 100%);
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .bubble {
+        max-width: 640px;
+        padding: 12px 14px;
+        border-radius: 18px;
+        border: 1px solid var(--border);
+        background: var(--panel-2);
+        line-height: 1.5;
+        font-size: 14px;
+      }
+
+      .bubble.user {
+        align-self: flex-end;
+        background: rgba(96, 165, 250, 0.2);
+        border-color: rgba(96, 165, 250, 0.5);
+        border-bottom-right-radius: 6px;
+      }
+
+      .bubble.assistant {
+        border-bottom-left-radius: 6px;
+      }
+
+      .plan-card {
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: #101114;
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .plan-card h4 {
+        font-size: 14px;
+      }
+
+      .plan-step {
+        border-left: 2px solid rgba(96, 165, 250, 0.4);
+        padding-left: 12px;
+        margin-top: 8px;
+        font-size: 12px;
+        color: var(--muted);
       }
 
       .panel {
@@ -167,11 +406,42 @@
         gap: 16px;
       }
 
-      .panel-title {
-        font-size: 12px;
-        text-transform: uppercase;
-        letter-spacing: 1.5px;
+      .panel-tabs {
+        display: flex;
+        gap: 8px;
+      }
+
+      .panel-tab {
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 6px 12px;
+        font-size: 11px;
         color: var(--muted);
+        background: #0f1013;
+      }
+
+      .panel-tab.active {
+        border-color: rgba(96, 165, 250, 0.5);
+        color: var(--text);
+      }
+
+      .panel-subtabs {
+        display: flex;
+        gap: 8px;
+      }
+
+      .panel-subtab {
+        padding: 4px 10px;
+        border-radius: 10px;
+        font-size: 11px;
+        color: var(--muted);
+        border: 1px solid var(--border);
+        background: #0f1013;
+      }
+
+      .panel-subtab.active {
+        color: var(--accent);
+        border-color: rgba(96, 165, 250, 0.4);
       }
 
       .panel-card {
@@ -185,27 +455,33 @@
       }
 
       .panel-card h4 {
-        font-size: 14px;
+        font-size: 13px;
       }
 
-      .panel-card p {
+      .panel-card p,
+      .panel-card li {
         font-size: 12px;
         color: var(--muted);
         line-height: 1.4;
       }
 
-      .panel-toggle {
+      .panel-card ul {
+        padding-left: 16px;
+      }
+
+      .panel-actions {
         display: flex;
+        flex-wrap: wrap;
         gap: 8px;
       }
 
-      .panel-toggle span {
+      .panel-actions span {
         border: 1px solid var(--border);
-        border-radius: 999px;
-        padding: 6px 10px;
-        font-size: 11px;
-        color: var(--muted);
+        border-radius: 10px;
+        padding: 6px 8px;
+        font-size: 10px;
         background: #0f1013;
+        color: var(--muted);
       }
     </style>
   </head>
@@ -224,38 +500,152 @@
         </div>
       </aside>
       <main class="center">
-        <div class="hero">
-          <div class="brand">SuperGrok</div>
-          <div class="tagline">Minimal home state with a centered prompt.</div>
-          <div class="composer">
-            <input type="text" placeholder="What can I help with?" />
-            <button>Send</button>
+        <header class="topbar">
+          <div class="topbar-left">
+            <div class="logo-text">OneSeek</div>
+            <div class="status-chip">Automatic</div>
+            <div class="status-chip">Private</div>
           </div>
-          <div class="chips">
-            <div class="chip">DeepSearch</div>
-            <div class="chip">Summarize</div>
-            <div class="chip">Write mode</div>
-            <div class="chip">Voice chat</div>
+          <div class="topbar-actions">
+            <div class="icon-btn" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="5"></circle>
+                <path d="M12 2v2M12 20v2M2 12h2M20 12h2"></path>
+              </svg>
+            </div>
+            <div class="icon-btn" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path
+                  d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"
+                ></path>
+                <path
+                  d="M19.4 15a1.6 1.6 0 0 0 .3 1.7l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.7-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.7.3l-.1.1a2 2 0 0 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.7 1.6 1.6 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.7l-.1-.1a2 2 0 0 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.7.3h0A1.6 1.6 0 0 0 9 4.6V4a2 2 0 0 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.7-.3l.1-.1a2 2 0 0 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.7v0A1.6 1.6 0 0 0 20.4 12H21a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"
+                ></path>
+              </svg>
+            </div>
+            <div class="icon-btn" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="9"></circle>
+                <path d="M12 8v4l3 2"></path>
+              </svg>
+            </div>
+          </div>
+        </header>
+
+        <section class="hero">
+          <div class="hero-mark">OS</div>
+          <h1>What do you want OneSeek to know?</h1>
+          <p>Start with a question, attach context, or pick a starter.</p>
+        </section>
+
+        <section class="input-card">
+          <div class="feedback-pill">
+            Feedback: Edit plan <span>x</span>
+          </div>
+          <div class="input-area">
+            Ask a question, drop a file, or type / for commands.
+          </div>
+          <div class="input-actions">
+            <div class="action-group">
+              <button class="ghost-btn">Enhance prompt</button>
+              <button class="ghost-btn">Attach</button>
+            </div>
+            <div class="action-group">
+              <button class="round-btn">Send</button>
+            </div>
+          </div>
+          <div class="tool-row">
+            <button class="tool-btn">Modes (3)</button>
+            <button class="tool-btn">Trending questions</button>
+            <button class="tool-btn active">Report style: Academic</button>
+          </div>
+        </section>
+
+        <div class="hero-pills">
+          <div class="hero-pill">DeepSearch</div>
+          <div class="hero-pill">Create image</div>
+          <div class="hero-pill">Latest news</div>
+          <div class="hero-pill">Voice analysis</div>
+        </div>
+
+        <div class="feature-grid">
+          <div class="feature-card">
+            <h4>Deep research</h4>
+            <p>Plan, run, and export research reports with sources.</p>
+            <button>Open research</button>
+          </div>
+          <div class="feature-card">
+            <h4>Coder session</h4>
+            <p>Track tool calls, previews, and workspace files.</p>
+            <button>Open coder</button>
+          </div>
+          <div class="feature-card">
+            <h4>Debate mode</h4>
+            <p>Compare models, rounds, and voting results.</p>
+            <button>Open debate</button>
+          </div>
+          <div class="feature-card">
+            <h4>Podcast output</h4>
+            <p>Generate audio summaries from research reports.</p>
+            <button>Generate audio</button>
+          </div>
+        </div>
+
+        <div class="message-preview">
+          <div class="bubble user">
+            Draft a two-week rollout plan for the design refresh.
+          </div>
+          <div class="bubble assistant">
+            Here is a plan with milestones, owners, and risk checks. I can open a
+            research session or a coder session from here.
+          </div>
+          <div class="plan-card">
+            <h4>Deep research plan</h4>
+            <div class="plan-step">
+              Step 1: Collect references, UI patterns, and constraints.
+            </div>
+            <div class="plan-step">
+              Step 2: Draft layout proposals and compare with Grok baseline.
+            </div>
+            <div class="plan-step">
+              Step 3: Prepare a report with recommendations and assets.
+            </div>
           </div>
         </div>
       </main>
+
       <aside class="panel">
-        <div class="panel-title">Workspace</div>
+        <div class="panel-tabs">
+          <div class="panel-tab active">Research</div>
+          <div class="panel-tab">Coder</div>
+          <div class="panel-tab">Debate</div>
+        </div>
+        <div class="panel-subtabs">
+          <div class="panel-subtab active">Report</div>
+          <div class="panel-subtab">Activities</div>
+        </div>
         <div class="panel-card">
-          <h4>Quick toggles</h4>
-          <div class="panel-toggle">
-            <span>Automatic</span>
-            <span>Focus</span>
-            <span>Fast</span>
+          <h4>Report tools</h4>
+          <div class="panel-actions">
+            <span>Podcast</span>
+            <span>Edit</span>
+            <span>Copy</span>
+            <span>Download PDF</span>
+            <span>Download HTML</span>
           </div>
         </div>
         <div class="panel-card">
-          <h4>Shortcuts</h4>
-          <p>Type "/" to open commands, or paste a URL to fetch.</p>
+          <h4>Highlights</h4>
+          <ul>
+            <li>3 sources captured</li>
+            <li>Report style: Academic</li>
+            <li>Status: Generating</li>
+          </ul>
         </div>
         <div class="panel-card">
-          <h4>Recent topics</h4>
-          <p>Market overview, product research, UI feedback.</p>
+          <h4>Files</h4>
+          <p>research-report.md</p>
+          <p>workspace-snapshot.zip</p>
         </div>
       </aside>
     </div>
