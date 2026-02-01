@@ -114,6 +114,13 @@ const ActivityMessage = React.memo(({ messageId }: { messageId: string }) => {
       ai_compare_meta: isSwedish ? "Meta-analys" : "Meta analysis",
       ai_compare_synth: isSwedish ? "Syntes" : "Synthesis",
     };
+    if (message.agent === "ai_compare_query") {
+      const content = message.content?.trim() ?? "";
+      // Only render if the content includes a model header to avoid duplicates.
+      if (!/^###\s+/m.test(content)) {
+        return null;
+      }
+    }
     if (message.content && message.agent && agentLabelMap[message.agent]) {
       const label = agentLabelMap[message.agent];
       return (
