@@ -958,6 +958,81 @@
         flex-wrap: wrap;
       }
 
+      .text-block {
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: #0f1013;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .text-block h4 {
+        font-size: 13px;
+        color: var(--text);
+      }
+
+      .text-block ul {
+        padding-left: 16px;
+      }
+
+      .search-results {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .result-item {
+        border: 1px solid #1b1c21;
+        border-radius: 12px;
+        padding: 8px 10px;
+        background: #0b0c10;
+      }
+
+      .result-title {
+        font-size: 12px;
+        color: var(--text);
+        margin-bottom: 4px;
+        font-weight: 600;
+      }
+
+      .result-snippet {
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      .debate-transcript {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .debate-turn {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 10px;
+        background: #0f1013;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .debate-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 10px;
+        text-transform: uppercase;
+        padding: 3px 8px;
+        border-radius: 999px;
+        border: 1px solid rgba(96, 165, 250, 0.5);
+        color: var(--accent);
+        margin-bottom: 6px;
+      }
+
       .landing-hero {
         width: min(900px, 100%);
         margin: 0 auto;
@@ -1797,6 +1872,50 @@
                 Skriver avsnitt: "Tillväxt, risker och affärsmodell"
               </div>
             </div>
+            <div class="text-block">
+              <h4>Simulerad webbsökning (exempel)</h4>
+              <div class="search-results">
+                <div class="result-item">
+                  <div class="result-title">
+                    1. McKinsey: State of AI 2025
+                  </div>
+                  <div class="result-snippet">
+                    Rapporten visar att enterprise‑adoption av AI har ökat med
+                    22% YoY, med störst effekt i support och sales.
+                  </div>
+                </div>
+                <div class="result-item">
+                  <div class="result-title">
+                    2. Gartner Q4 Trend Report
+                  </div>
+                  <div class="result-snippet">
+                    Kostnadsbesparingar drivs främst av automatisering av
+                    handläggning och bättre triage.
+                  </div>
+                </div>
+                <div class="result-item">
+                  <div class="result-title">
+                    3. OECD AI Adoption Index
+                  </div>
+                  <div class="result-snippet">
+                    Ökande regulatoriskt fokus på transparens och data‑spårning.
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="text-block">
+              <h4>Simulerad analys (utkast)</h4>
+              <p>
+                <strong>Sammanfattning:</strong> Marknaden växer stabilt, men
+                ledande aktörer fokuserar på säkerhet, spårbarhet och kostnad
+                per ärende. Support‑team prioriterar latens och stabilitet.
+              </p>
+              <ul>
+                <li>Störst tillväxt i enterprise‑segmentet (support/CRM).</li>
+                <li>Ökade krav på källor och faktakontroll.</li>
+                <li>AI‑budgetar flyttas från POC till drift.</li>
+              </ul>
+            </div>
             <div class="podcast-card">
               <div class="podcast-header">
                 <strong>Podcast från forskning</strong>
@@ -1993,6 +2112,25 @@
                 Syntes startar när meta-analysen är klar...
               </div>
             </div>
+            <div class="text-block">
+              <h4>Simulerad jämförelse (utdrag)</h4>
+              <p>
+                <strong>Grok‑4:</strong> Stark struktur, låg latens, tydliga
+                sammanfattningar. Rekommenderas för hög volym.
+              </p>
+              <p>
+                <strong>Gemini:</strong> Bäst på multimodala flöden och
+                dokument‑hantering. Passar när bilder/visuella källor behövs.
+              </p>
+              <p>
+                <strong>GPT‑3.5:</strong> Lågt pris, men lägre precision vid
+                komplexa ärenden.
+              </p>
+              <p>
+                <strong>DeepSeek:</strong> Stabil QA och god kostnadsprofil,
+                men mindre flexibelt verktygsstöd.
+              </p>
+            </div>
           </div>
           <div class="input-card compact">
             <div class="enhance-overlay"></div>
@@ -2185,6 +2323,31 @@
               <div class="debate-card">
                 <strong>Runda 2 pågår</strong>
                 2/4 svar klara, analys väntar.
+              </div>
+            </div>
+            <div class="text-block">
+              <h4>Simulerad debatt (utdrag)</h4>
+              <div class="debate-transcript">
+                <div class="debate-turn">
+                  <div class="debate-tag">Grok‑4</div>
+                  För supportteam är låg latens och konsekvent struktur
+                  avgörande. Vi prioriterar snabbhet och robusta sammanfattningar.
+                </div>
+                <div class="debate-turn">
+                  <div class="debate-tag">Gemini</div>
+                  Multimodala inflöden är kritiska när kunder skickar skärmar och
+                  bilder. Vi vinner på verktygsintegration.
+                </div>
+                <div class="debate-turn">
+                  <div class="debate-tag">GPT‑3.5</div>
+                  Kostnad per ärende är centralt. En enklare modell räcker i
+                  många standardärenden.
+                </div>
+                <div class="debate-turn">
+                  <div class="debate-tag">DeepSeek</div>
+                  Stabil QA och god kontroll på säkerhetsregler gör oss lämpliga
+                  i regulated environments.
+                </div>
               </div>
             </div>
           </div>
