@@ -48,6 +48,7 @@ export function ResearchActivitiesBlock({
   const activityIds = useStore((state) =>
     state.researchActivityIds.get(researchId),
   );
+  const messages = useStore((state) => state.messages);
   const ongoing = useStore((state) => state.ongoingResearchId === researchId);
   
   // Guard against undefined activityIds
@@ -61,6 +62,10 @@ export function ResearchActivitiesBlock({
   
   return (
     <>
+      <AiCompareResponses
+        activityIds={activityIds}
+        messages={messages}
+      />
       <ul className={cn("flex flex-col py-4", className)}>
         {activityIds.map(
           (activityId, i) => {
@@ -130,6 +135,112 @@ const ActivityMessage = React.memo(({ messageId }: { messageId: string }) => {
   return null;
 });
 ActivityMessage.displayName = "ActivityMessage";
+
+const AI_COMPARE_MODELS = [
+  { key: "gpt-3.5-turbo", label: "GPT-3.5" },
+  { key: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+  { key: "deepseek-chat", label: "DeepSeek Chat" },
+  { key: "grok-4-fast-reasoning", label: "Grok-4 Fast Reasoning" },
+];
+
+function parseAiCompareResponse(result: string): string {
+  if (!result) return "";
+  const cleaned = result.replace(/^\s*METRICS:.*$/m, "").trim();
+  const headerMatch = /^###\s+[^\n]+\n+/m.exec(cleaned);
+  if (headerMatch) {
+    return cleaned.slice(headerMatch[0].length).trim();
+  }
+  return cleaned;
+}
+
+function AiCompareResponses({
+  activityIds,
+  messages,
+}: {
+  activityIds?: string[];
+  messages: Map<string, Message>;
+}) {
+  const locale = useLocale();
+  const isSwedish = locale.startsWith("sv");
+  const responseState = useMemo(() => {
+    const responses = new Map<
+      string,
+      { response: string; displayName: string; toolCallId: string }
+    >();
+    const running = new Set<string>();
+    if (activityIds) {
+      for (const messageId of activityIds) {
+        const message = messages.get(messageId);
+        if (!message?.toolCalls?.length) continue;
+        for (const toolCall of message.toolCalls) {
+          if (toolCall.name !== "query_model_in_round") continue;
+          const args = toolCall.args as { model_key?: string; display_name?: string };
+          const modelKey = args?.model_key;
+          if (!modelKey) continue;
+          if (toolCall.result) {
+            const responseText = parseAiCompareResponse(toolCall.result);
+            responses.set(modelKey, {
+              response: responseText,
+              displayName: args.display_name ?? modelKey,
+              toolCallId: toolCall.id,
+            });
+          } else {
+            running.add(modelKey);
+          }
+        }
+      }
+    }
+    return { responses, running };
+  }, [activityIds, messages]);
+
+  const showSection =
+    responseState.responses.size > 0 || responseState.running.size > 0;
+
+  if (!showSection) {
+    return null;
+  }
+
+  return (
+    <div className="px-4 pt-4">
+      <div className="text-xs font-semibold uppercase text-muted-foreground">
+        {isSwedish ? "Modellerna svarar" : "Model responses"}
+      </div>
+      <div className="mt-3 space-y-3">
+        {AI_COMPARE_MODELS.map((model) => {
+          const response = responseState.responses.get(model.key);
+          const isRunning = responseState.running.has(model.key) && !response;
+          if (!response && !isRunning) return null;
+          return (
+            <div
+              key={model.key}
+              className="rounded-md border border-border/40 bg-background/60 p-3"
+            >
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <DebateModelIcon modelKey={model.key} />
+                <span>{response?.displayName ?? model.label}</span>
+                {isRunning ? (
+                  <Loader2 size={14} className="animate-spin text-muted-foreground" />
+                ) : (
+                  <CheckCircle2 size={14} className="text-emerald-500" />
+                )}
+              </div>
+              {response?.response && (
+                <div className="mt-2 text-sm text-foreground/80">
+                  <Markdown animated={false}>{response.response}</Markdown>
+                </div>
+              )}
+              {isRunning && (
+                <div className="mt-2 text-xs text-muted-foreground">
+                  {isSwedish ? "Väntar på svar..." : "Waiting for response..."}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 // Component to display the research plan
 const PlanCard = React.memo(({ message }: { message: Message }) => {
