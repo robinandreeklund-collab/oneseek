@@ -33,6 +33,8 @@ export interface MessageInputRef {
 
 export interface MessageInputProps {
   className?: string;
+  contentClassName?: string;
+  editorClassName?: string;
   placeholder?: string;
   loading?: boolean;
   config?: DeerFlowConfig | null;
@@ -80,7 +82,15 @@ function formatItem(item: JSONContent): {
 
 const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
   (
-    { className, loading, config, onChange, onEnter }: MessageInputProps,
+    {
+      className,
+      contentClassName,
+      editorClassName,
+      loading,
+      config,
+      onChange,
+      onEnter,
+    }: MessageInputProps,
     ref,
   ) => {
     const t = useTranslations("messageInput");
@@ -173,23 +183,28 @@ const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
 
     if (loading) {
       return (
-        <div className={cn("flex min-h-24 max-h-40 flex-col items-center justify-center", className)}>
+        <div className={cn("flex flex-col items-center justify-center", className)}>
           <LoadingOutlined />
         </div>
       );
     }
 
     return (
-      <div className={cn("flex min-h-24 max-h-40 flex-col", className)}>
+      <div className={cn("flex flex-col", className)}>
         <EditorRoot>
           <EditorContent
             immediatelyRender={false}
             extensions={extensions}
-            className="border-muted w-full flex-1 overflow-auto break-words"
+            className={cn(
+              "border-muted w-full flex-1 break-words",
+              contentClassName,
+            )}
             editorProps={{
               attributes: {
-                class:
+                class: cn(
                   "prose prose-base dark:prose-invert inline-editor font-default focus:outline-none max-w-full",
+                  editorClassName,
+                ),
               },
               transformPastedHTML: transformPastedHTML,
             }}

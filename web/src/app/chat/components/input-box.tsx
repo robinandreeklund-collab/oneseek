@@ -3,7 +3,7 @@
 
 import { MagicWandIcon } from "@radix-ui/react-icons";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowUp, X } from "lucide-react";
+import { ArrowUp, Paperclip, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useRef, useState } from "react";
 
@@ -119,7 +119,7 @@ export function InputBox({
     <div className="flex w-full flex-col items-center gap-3">
       <div
         className={cn(
-          "bg-card/60 relative flex w-full items-center gap-3 rounded-full border border-border/60 px-4 py-2 shadow-lg backdrop-blur",
+          "bg-card/70 relative flex w-full items-center gap-2 rounded-[22px] border border-border/70 px-3 py-2 shadow-lg backdrop-blur-sm",
           className,
         )}
         ref={containerRef}
@@ -190,12 +190,22 @@ export function InputBox({
             </motion.div>
           )}
         </AnimatePresence>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 rounded-full text-muted-foreground hover:bg-background/70 hover:text-foreground"
+          aria-label="Bilagor"
+        >
+          <Paperclip className="h-4 w-4" />
+        </Button>
         <MessageInput
           className={cn(
-            "min-h-[34px] max-h-[160px] flex-1 px-0 py-0",
-            feedback && "pt-4",
+            "oneseek-input flex-1 px-0 py-0",
+            feedback && "pt-3",
             isEnhanceAnimating && "transition-all duration-500",
           )}
+          contentClassName="max-h-[260px] overflow-auto pr-1"
+          editorClassName="text-sm leading-6"
           ref={inputRef}
           loading={loading}
           config={config}
@@ -208,7 +218,7 @@ export function InputBox({
               variant="ghost"
               size="icon"
               className={cn(
-                "hover:bg-accent h-8 w-8 rounded-full",
+                "h-8 w-8 rounded-full text-muted-foreground hover:bg-background/70 hover:text-foreground",
                 isEnhancing && "animate-pulse",
               )}
               onClick={handleEnhancePrompt}
@@ -227,12 +237,12 @@ export function InputBox({
             <Button
               variant="outline"
               size="icon"
-              className="h-8 w-8 rounded-full border-border/60 bg-background/60"
+              className="h-8 w-8 rounded-full border-foreground/40 bg-foreground text-background hover:bg-foreground/90"
               onClick={() => inputRef.current?.submit()}
             >
               {responding ? (
                 <div className="flex h-8 w-8 items-center justify-center">
-                  <div className="bg-foreground h-3 w-3 rounded-sm opacity-70" />
+                  <div className="bg-background h-3 w-3 rounded-sm opacity-70" />
                 </div>
               ) : (
                 <ArrowUp className="h-4 w-4" />

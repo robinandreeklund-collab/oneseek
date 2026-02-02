@@ -2,6 +2,20 @@
   max-width: inherit;
 }
 
+.oneseek-input .ProseMirror {
+  min-height: 24px;
+  padding: 3px 0;
+  line-height: 1.6;
+}
+
+.oneseek-input .ProseMirror p {
+  margin: 0;
+}
+
+.oneseek-input .ProseMirror .is-editor-empty:first-child::before {
+  transform: translateY(1px);
+}
+
 .prose.inline-editor * {
   margin: 0;
 }
