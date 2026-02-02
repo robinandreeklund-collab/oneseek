@@ -21,6 +21,7 @@ from langgraph.types import Command, interrupt
 from backend.deer_flow.agents import create_agent
 from backend.deer_flow.citations import extract_citations_from_messages, merge_citations
 from backend.deer_flow.config.agents import AGENT_LLM_MAP
+from backend.deer_flow.config.loader import get_bool_env
 from backend.deer_flow.config.configuration import Configuration
 from backend.deer_flow.llms.llm import get_llm_by_type, get_llm_token_limit_by_type, configure_llm_with_thinking
 from backend.deer_flow.prompts.planner_model import Plan
@@ -33,10 +34,12 @@ from backend.deer_flow.tools import (
 )
 from backend.deer_flow.tools.ai_comparison_tools import (
     fact_check_responses,
+    query_all_models,
     query_deepseek,
     query_gemini_flash,
     query_gpt35,
     query_grok4,
+    query_oneseek_local,
     run_meta_analysis,
     set_ai_comparison_context,
     synthesize_optimal_answer,
@@ -2740,6 +2743,13 @@ async def ai_comparison_node(
             ),
             Step(
                 need_search=False,
+                step_type=StepType.AI_QUERY,
+                title="OneSeek Local",
+                description="Model: oneseek-local",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
                 step_type=StepType.AI_FACT_CHECK,
                 title="Faktakoll",
                 description="Verifiera centrala påståenden med externa källor.",
@@ -2796,6 +2806,13 @@ async def ai_comparison_node(
                 step_type=StepType.AI_QUERY,
                 title="Grok-4 Fast Reasoning",
                 description="Model: grok-4-fast-reasoning",
+                execution_res=None,
+            ),
+            Step(
+                need_search=False,
+                step_type=StepType.AI_QUERY,
+                title="OneSeek Local",
+                description="Model: oneseek-local",
                 execution_res=None,
             ),
             Step(
@@ -3014,7 +3031,7 @@ Provide a comprehensive debate report with all rounds, voting results, and concl
 async def ai_compare_query_node(
     state: State, config: RunnableConfig
 ) -> Command[Literal["ai_compare_team"]]:
-    """Query AI models sequentially and store responses."""
+    """Query AI models and store responses."""
     configurable = Configuration.from_runnable_config(config)
     from backend.deer_flow.prompts.planner_model import Plan, StepType
     set_ai_comparison_context(
@@ -3029,13 +3046,147 @@ async def ai_compare_query_node(
                 current_step = step
                 break
 
+    def _format_ai_compare_responses(responses: list[dict[str, Any]]) -> str:
+        sections: list[str] = []
+        seen: set[str] = set()
+        for idx, resp in enumerate(responses):
+            if not isinstance(resp, dict):
+                continue
+            model_key = str(resp.get("model") or "").strip()
+            display_name = str(
+                resp.get("display_name") or model_key or f"Model {idx + 1}"
+            ).strip()
+            dedupe_key = model_key or display_name.lower()
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            label = display_name
+            if resp.get("cached"):
+                label = f"{label} (cached)"
+            response = resp.get("response")
+            error = resp.get("error")
+            if response:
+                sections.append(f"### {label}\n\n{response}")
+            elif error:
+                sections.append(f"### {label}\n\nError: {error}")
+            else:
+                sections.append(f"### {label}\n\n(No response)")
+        return "\n\n---\n\n".join([section for section in sections if section]).strip()
+
+    parallel_enabled = get_bool_env("AI_COMPARE_PARALLEL_QUERY", True)
+    pending_tool = state.get("ai_compare_pending_tool") or {}
+    if parallel_enabled:
+        if pending_tool.get("step") == "ai_compare_query_all":
+            tool_call_id = pending_tool.get("tool_call_id") or uuid4().hex
+            tool_args = pending_tool.get("tool_args") or {}
+            try:
+                tool_output = await query_all_models.ainvoke(tool_args)
+            except Exception as exc:
+                tool_output = json.dumps(
+                    {
+                        "error": str(exc),
+                        "success": False,
+                    },
+                    ensure_ascii=False,
+                )
+            payload = _parse_json_content(str(tool_output))
+            responses = []
+            if isinstance(payload, list):
+                responses = [resp for resp in payload if isinstance(resp, dict)]
+            elif isinstance(payload, dict) and payload.get("responses"):
+                responses = [
+                    resp
+                    for resp in payload.get("responses", [])
+                    if isinstance(resp, dict)
+                ]
+            existing = state.get("ai_compare_responses", [])
+            merged = {
+                resp.get("model"): resp for resp in existing if isinstance(resp, dict)
+            }
+            for resp in responses:
+                if isinstance(resp, dict):
+                    merged[resp.get("model")] = resp
+            merged_responses = [resp for resp in merged.values() if resp]
+            responses_json = json.dumps(merged_responses, ensure_ascii=False)
+            if isinstance(current_plan, Plan):
+                for step in current_plan.steps:
+                    if not step.execution_res and step.step_type == StepType.AI_QUERY:
+                        step.execution_res = f"Completed: {step.title}"
+            response_text = _format_ai_compare_responses(merged_responses)
+            messages = [
+                ToolMessage(
+                    content=response_text or str(tool_output),
+                    tool_call_id=tool_call_id,
+                    name="query_all_models",
+                ),
+                AIMessage(
+                    content=response_text or "",
+                    name="ai_compare_query",
+                ),
+            ]
+            return Command(
+                update={
+                    **preserve_state_meta_fields(state),
+                    "ai_compare_pending_tool": None,
+                    "ai_compare_responses": merged_responses,
+                    "ai_compare_responses_json": responses_json,
+                    "messages": messages,
+                    "current_plan": current_plan,
+                },
+                goto="ai_compare_team",
+            )
+
+        existing = state.get("ai_compare_responses", [])
+        if existing:
+            if isinstance(current_plan, Plan):
+                for step in current_plan.steps:
+                    if not step.execution_res and step.step_type == StepType.AI_QUERY:
+                        step.execution_res = f"Completed: {step.title}"
+            return Command(
+                update={
+                    **preserve_state_meta_fields(state),
+                    "current_plan": current_plan,
+                },
+                goto="ai_compare_team",
+            )
+
+        query = state.get("research_topic", "")
+        tool_call_id = uuid4().hex
+        tool_args = {"query": query}
+        messages = [
+            AIMessage(
+                content="",
+                name="ai_compare_query",
+                tool_calls=[
+                    {
+                        "id": tool_call_id,
+                        "name": "query_all_models",
+                        "args": tool_args,
+                    }
+                ],
+            ),
+        ]
+        return Command(
+            update={
+                **preserve_state_meta_fields(state),
+                "ai_compare_pending_tool": {
+                    "step": "ai_compare_query_all",
+                    "tool_call_id": tool_call_id,
+                    "tool_args": tool_args,
+                },
+                "messages": messages,
+                "current_plan": current_plan,
+            },
+            goto="ai_compare_team",
+        )
+
     model_tool_map = {
         "gpt-3.5-turbo": query_gpt35,
         "gemini-2.5-flash": query_gemini_flash,
         "deepseek-chat": query_deepseek,
         "grok-4-fast-reasoning": query_grok4,
+        "oneseek-local": query_oneseek_local,
     }
-    pending_tool = state.get("ai_compare_pending_tool") or {}
     if pending_tool.get("step") == "ai_compare_query":
         selected_model = pending_tool.get("model_key")
         tool_args = pending_tool.get("tool_args") or {}
@@ -3065,6 +3216,41 @@ async def ai_compare_query_node(
             )
 
         payload = _parse_json_content(str(tool_output))
+        def _build_meta_summary(meta_data: dict[str, Any], locale_value: str) -> str:
+            if not isinstance(meta_data, dict):
+                return ""
+            labels_en = {
+                "cognitive_properties": "Cognitive properties",
+                "integrity_objectivity": "Integrity & objectivity",
+                "stability_emotional": "Stability & emotional profile",
+                "adaptivity_system": "Adaptivity & system role",
+            }
+            labels_sv = {
+                "cognitive_properties": "Kognitiva egenskaper",
+                "integrity_objectivity": "Integritet & objektivitet",
+                "stability_emotional": "Stabilitet & emotionell profil",
+                "adaptivity_system": "Adaptivitet & systemroll",
+            }
+            label_map = labels_sv if locale_value.startswith("sv") else labels_en
+            sections = []
+            for key in [
+                "cognitive_properties",
+                "integrity_objectivity",
+                "stability_emotional",
+                "adaptivity_system",
+            ]:
+                item = meta_data.get(key)
+                if not item:
+                    continue
+                if isinstance(item, dict):
+                    text = item.get("analysis") or item.get("error")
+                    if not text:
+                        text = json.dumps(item, ensure_ascii=False)
+                else:
+                    text = str(item)
+                label = label_map.get(key, key.replace("_", " ").title())
+                sections.append(f"### {label}\n\n{text}")
+            return "\n\n".join(sections).strip()
         responses = []
         if isinstance(payload, dict) and payload:
             responses = [payload]
@@ -3082,16 +3268,17 @@ async def ai_compare_query_node(
         if responses and isinstance(responses[0], dict):
             display_name = responses[0].get("display_name")
         name = display_name or tool_args.get("display_name") or selected_model or "Model"
-        response_text = ""
-        if responses and isinstance(responses[0], dict):
-            response = responses[0].get("response")
-            error = responses[0].get("error")
-            if response:
-                response_text = f"### {name}\n\n{response}"
-            elif error:
-                response_text = f"### {name}\n\nError: {error}"
-            else:
-                response_text = f"### {name}\n\n(No response)"
+        base_response = responses[0] if responses else {}
+        response_text = _format_ai_compare_responses(
+            [
+                {
+                    **(base_response if isinstance(base_response, dict) else {}),
+                    "display_name": name,
+                    "model": selected_model
+                    or (base_response.get("model") if isinstance(base_response, dict) else None),
+                }
+            ]
+        )
         messages = [
             ToolMessage(
                 content=response_text or str(tool_output),
@@ -3158,6 +3345,10 @@ async def ai_compare_query_node(
         "locale": state.get("locale", "en-US"),
         "display_name": current_step.title if current_step else selected_model,
     }
+    if selected_model == "oneseek-local":
+        tool_args["peer_responses_json"] = state.get("ai_compare_responses_json") or json.dumps(
+            state.get("ai_compare_responses", []), ensure_ascii=False
+        )
     messages = [
         AIMessage(
             content="",
@@ -3282,6 +3473,41 @@ async def ai_compare_meta_node(
 ) -> Command[Literal["ai_compare_team"]]:
     """Run meta-analysis on AI model responses."""
     configurable = Configuration.from_runnable_config(config)
+    def _build_meta_summary(meta_data: dict[str, Any], locale_value: str) -> str:
+        if not isinstance(meta_data, dict):
+            return ""
+        labels_en = {
+            "cognitive_properties": "Cognitive properties",
+            "integrity_objectivity": "Integrity & objectivity",
+            "stability_emotional": "Stability & emotional profile",
+            "adaptivity_system": "Adaptivity & system role",
+        }
+        labels_sv = {
+            "cognitive_properties": "Kognitiva egenskaper",
+            "integrity_objectivity": "Integritet & objektivitet",
+            "stability_emotional": "Stabilitet & emotionell profil",
+            "adaptivity_system": "Adaptivitet & systemroll",
+        }
+        label_map = labels_sv if locale_value.startswith("sv") else labels_en
+        sections = []
+        for key in [
+            "cognitive_properties",
+            "integrity_objectivity",
+            "stability_emotional",
+            "adaptivity_system",
+        ]:
+            item = meta_data.get(key)
+            if not item:
+                continue
+            if isinstance(item, dict):
+                text = item.get("analysis") or item.get("error")
+                if not text:
+                    text = json.dumps(item, ensure_ascii=False)
+            else:
+                text = str(item)
+            label = label_map.get(key, key.replace("_", " ").title())
+            sections.append(f"### {label}\n\n{text}")
+        return "\n\n".join(sections).strip()
     set_ai_comparison_context(
         max_search_results=configurable.max_search_results,
         resources=state.get("resources", []),
@@ -3310,6 +3536,9 @@ async def ai_compare_meta_node(
         except Exception as exc:
             tool_output = json.dumps({"error": str(exc)}, ensure_ascii=False)
         payload = _parse_json_content(str(tool_output))
+        meta_results = payload.get("meta_results") if payload else None
+        meta_payload = meta_results or payload
+        meta_summary = _build_meta_summary(meta_payload or {}, state.get("locale", "en-US"))
         messages = [
             ToolMessage(
                 content=str(tool_output),
@@ -3317,7 +3546,7 @@ async def ai_compare_meta_node(
                 name="run_meta_analysis",
             ),
             AIMessage(
-                content=(json.dumps(payload, ensure_ascii=False) if payload else ""),
+                content=meta_summary or "",
                 name="ai_compare_meta",
             ),
         ]

@@ -10,15 +10,21 @@ Uses the same deep research tools and techniques as DeerFlow.
 """
 
 import asyncio
+import hashlib
+import json
 import logging
 import os
+import random
+import time
 from typing import Any, Dict, List, Optional
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_deepseek import ChatDeepSeek
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 
+from backend.deer_flow.config import SELECTED_SEARCH_ENGINE
+from backend.deer_flow.prompts import apply_prompt_template
 from backend.deer_flow.tools import get_web_search_tool, get_retriever_tool, crawl_tool
 from backend.deer_flow.llms.llm import get_llm_by_type
 
@@ -55,6 +61,103 @@ AI_MODELS = {
 }
 
 
+class _TTLCache:
+    def __init__(self, ttl_seconds: int, max_size: int) -> None:
+        self.ttl_seconds = ttl_seconds
+        self.max_size = max_size
+        self._store: dict[str, tuple[float, Any]] = {}
+
+    def _is_expired(self, expires_at: float) -> bool:
+        return expires_at <= time.time()
+
+    def get(self, key: str) -> Optional[Any]:
+        entry = self._store.get(key)
+        if not entry:
+            return None
+        expires_at, value = entry
+        if self._is_expired(expires_at):
+            self._store.pop(key, None)
+            return None
+        return value
+
+    def set(self, key: str, value: Any) -> None:
+        if self.ttl_seconds <= 0 or self.max_size <= 0:
+            return
+        if len(self._store) >= self.max_size:
+            # Evict the oldest entry by expiration time (best-effort).
+            oldest_key = min(self._store.items(), key=lambda item: item[1][0])[0]
+            self._store.pop(oldest_key, None)
+        expires_at = time.time() + self.ttl_seconds
+        self._store[key] = (expires_at, value)
+
+
+def _build_cache_key(prefix: str, *parts: Any) -> str:
+    payload = "|".join([str(part) for part in parts if part is not None])
+    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    return f"{prefix}:{digest}"
+
+
+def _hash_resources(resources: List[Any]) -> str:
+    if not resources:
+        return "none"
+    tokens = []
+    for resource in resources:
+        if isinstance(resource, dict):
+            tokens.append(str(resource.get("uri") or resource.get("title") or resource))
+        else:
+            tokens.append(str(getattr(resource, "uri", None) or getattr(resource, "title", None) or resource))
+    digest = hashlib.sha256("|".join(tokens).encode("utf-8")).hexdigest()
+    return digest[:16]
+
+
+def _hash_payload(payload: Any) -> str:
+    try:
+        serialized = json.dumps(payload, sort_keys=True, ensure_ascii=False)
+    except (TypeError, ValueError):
+        serialized = str(payload)
+    digest = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+    return digest[:16]
+
+
+def _hash_model_responses(model_responses: List[Dict[str, Any]]) -> str:
+    normalized = []
+    for resp in model_responses:
+        if not isinstance(resp, dict):
+            continue
+        normalized.append(
+            {
+                "model": resp.get("model"),
+                "response": resp.get("response"),
+                "error": resp.get("error"),
+            }
+        )
+    normalized.sort(key=lambda item: str(item.get("model")))
+    return _hash_payload(normalized)
+
+
+_MODEL_CACHE_TTL = int(os.getenv("AI_COMPARE_MODEL_CACHE_TTL_S", "900"))
+_MODEL_CACHE_MAX = int(os.getenv("AI_COMPARE_MODEL_CACHE_MAX", "256"))
+_SEARCH_CACHE_TTL = int(os.getenv("AI_COMPARE_SEARCH_CACHE_TTL_S", "900"))
+_SEARCH_CACHE_MAX = int(os.getenv("AI_COMPARE_SEARCH_CACHE_MAX", "256"))
+_RAG_CACHE_TTL = int(os.getenv("AI_COMPARE_RAG_CACHE_TTL_S", "900"))
+_RAG_CACHE_MAX = int(os.getenv("AI_COMPARE_RAG_CACHE_MAX", "256"))
+_META_CACHE_TTL = int(os.getenv("AI_COMPARE_META_CACHE_TTL_S", "900"))
+_META_CACHE_MAX = int(os.getenv("AI_COMPARE_META_CACHE_MAX", "128"))
+_SYNTH_CACHE_TTL = int(os.getenv("AI_COMPARE_SYNTH_CACHE_TTL_S", "900"))
+_SYNTH_CACHE_MAX = int(os.getenv("AI_COMPARE_SYNTH_CACHE_MAX", "128"))
+
+_MODEL_CACHE = _TTLCache(_MODEL_CACHE_TTL, _MODEL_CACHE_MAX)
+_SEARCH_CACHE = _TTLCache(_SEARCH_CACHE_TTL, _SEARCH_CACHE_MAX)
+_RAG_CACHE = _TTLCache(_RAG_CACHE_TTL, _RAG_CACHE_MAX)
+_META_CACHE = _TTLCache(_META_CACHE_TTL, _META_CACHE_MAX)
+_SYNTH_CACHE = _TTLCache(_SYNTH_CACHE_TTL, _SYNTH_CACHE_MAX)
+
+_REQUEST_TIMEOUT_S = float(os.getenv("AI_COMPARE_REQUEST_TIMEOUT_S", "60"))
+_MAX_RETRIES = int(os.getenv("AI_COMPARE_MAX_RETRIES", "2"))
+_BACKOFF_BASE_S = float(os.getenv("AI_COMPARE_BACKOFF_BASE_S", "1.0"))
+_ONESEEK_SELF_META_ENABLED = os.getenv("ONESEEK_SELF_META_ENABLED", "true").lower() in ("true", "1", "yes")
+
+
 class AIComparisonFlow:
     """
     Handles parallel AI model comparison with analysis and synthesis.
@@ -66,6 +169,8 @@ class AIComparisonFlow:
         self.models = self._initialize_models()
         self.search_tool = None
         self.retriever_tool = None
+        self.max_search_results = max_search_results
+        self._resources_cache_key = _hash_resources(resources or [])
         
         # Initialize tools from deer_flow
         try:
@@ -172,8 +277,121 @@ class AIComparisonFlow:
         
         return models
 
+    def _format_search_results(self, results: Any, max_items: int = 3) -> str:
+        if not results:
+            return ""
+        if isinstance(results, dict):
+            results = [results]
+        if not isinstance(results, list):
+            return str(results)
+        lines: list[str] = []
+        for idx, item in enumerate(results[:max_items]):
+            if not isinstance(item, dict):
+                lines.append(f"- {str(item)[:200]}")
+                continue
+            title = item.get("title") or item.get("source") or f"Source {idx + 1}"
+            url = item.get("url") or item.get("link") or ""
+            snippet = item.get("content") or item.get("description") or ""
+            snippet = snippet[:240].strip()
+            if url:
+                lines.append(f"- {title} ({url}): {snippet}")
+            else:
+                lines.append(f"- {title}: {snippet}")
+        return "\n".join(lines)
+
+    def _infer_locale(self, query: str) -> str:
+        lowered = (query or "").lower()
+        if any(ch in lowered for ch in ("å", "ä", "ö")):
+            return "sv-SE"
+        return "en-US"
+
+    def _render_oneseek_prompt(
+        self,
+        prompt_name: str,
+        query: str,
+        search_summary: str,
+        draft: str = "",
+        self_meta: str = "",
+        peer_responses: str = "",
+        locale: str = "en-US",
+    ) -> str:
+        try:
+            state = {
+                "messages": [],
+                "research_topic": query,
+                "oneseek_search_summary": search_summary,
+                "oneseek_draft": draft,
+                "oneseek_self_meta": self_meta,
+                "oneseek_peer_responses": peer_responses,
+            }
+            messages = apply_prompt_template(prompt_name, state, None, locale)
+            if messages and isinstance(messages[0], dict):
+                return str(messages[0].get("content") or "")
+        except Exception as exc:
+            logger.warning(f"Failed to render {prompt_name} prompt: {exc}")
+        return ""
+
+    def _format_peer_responses(
+        self,
+        responses: List[Dict[str, Any]],
+        max_chars: int = 700,
+    ) -> str:
+        if not responses:
+            return ""
+        lines: list[str] = []
+        for resp in responses:
+            if not isinstance(resp, dict):
+                continue
+            name = resp.get("display_name") or resp.get("model") or "Model"
+            text = resp.get("response") or resp.get("error") or ""
+            text = str(text).strip()
+            if not text:
+                continue
+            if len(text) > max_chars:
+                text = text[:max_chars] + "..."
+            lines.append(f"### {name}\n{text}")
+        return "\n\n".join(lines).strip()
+
+    def _build_oneseek_system_prompt(self, query: str, search_summary: str) -> str:
+        return f"""You are OneSeek Local. Answer the user question with maximum quality.
+
+Goal: maximize scores on the 16 meta‑analysis dimensions:
+1) Meta‑reflection level
+2) Reasoning depth
+3) Synthesis capacity
+4) Bias detection
+5) Objectivity degree
+6) Integrity index
+7) Transparency degree
+8) Epistemic humility
+9) Emotional distance
+10) Conflict neutrality
+11) Stability coefficient
+12) Cognitive redundancy (avoid over‑complexity)
+13) Context elasticity
+14) System loyalty
+15) Adaptive precision
+16) Structural clarity
+
+Mandatory behaviors:
+- Be explicit about uncertainties and competing interpretations.
+- Show clear reasoning steps and balanced trade‑offs.
+- Provide a concise, structured answer with headings.
+- Include a short "Sources" section if any web search data is available.
+
+Web search findings (use these, do not invent sources):
+{search_summary or "- (No web search results available)"}
+
+User question:
+{query}
+"""
+
     async def query_model(
-        self, model_key: str, model: Any, query: str
+        self,
+        model_key: str,
+        model: Any,
+        query: str,
+        peer_responses_summary: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Query a single AI model and return its response.
@@ -186,33 +404,159 @@ class AIComparisonFlow:
         Returns:
             Dictionary with model response and metadata
         """
-        try:
-            logger.info(f"Querying {model_key}...")
-            messages = [HumanMessage(content=query)]
-            response = await model.ainvoke(messages)
-            
-            # Get display name if it's a standard model, otherwise use the key
-            display_name = AI_MODELS.get(model_key, {}).get("display_name", model_key)
-            
-            return {
-                "model": model_key,
-                "display_name": display_name,
-                "response": response.content if hasattr(response, "content") else str(response),
-                "success": True,
-                "error": None,
-            }
-        except Exception as e:
-            logger.error(f"Error querying {model_key}: {e}")
-            display_name = AI_MODELS.get(model_key, {}).get("display_name", model_key)
-            return {
-                "model": model_key,
-                "display_name": display_name,
-                "response": None,
-                "success": False,
-                "error": str(e),
-            }
+        display_name = AI_MODELS.get(model_key, {}).get("display_name", model_key)
+        if model_key != "oneseek-local":
+            cache_key = _build_cache_key("model", model_key, query)
+            cached = _MODEL_CACHE.get(cache_key)
+            if isinstance(cached, dict):
+                cached_payload = dict(cached)
+                cached_payload["cached"] = True
+                return cached_payload
 
-    async def query_single_model(self, model_key: str, query: str) -> Dict[str, Any]:
+        attempt = 0
+        while True:
+            try:
+                logger.info(f"Querying {model_key} (attempt {attempt + 1})...")
+                messages = [HumanMessage(content=query)]
+                if model_key == "oneseek-local":
+                    search_summary = ""
+                    locale = self._infer_locale(query)
+                    if self.search_tool:
+                        search_cache_key = _build_cache_key(
+                            "search",
+                            query,
+                            self.max_search_results,
+                            SELECTED_SEARCH_ENGINE,
+                        )
+                        cached_search = _SEARCH_CACHE.get(search_cache_key)
+                        if cached_search is not None:
+                            logger.info("Using cached web search results for OneSeek")
+                            search_summary = self._format_search_results(cached_search)
+                        else:
+                            try:
+                                logger.info("OneSeek performing web search before answering")
+                                search_results = await asyncio.wait_for(
+                                    self.search_tool.ainvoke(query),
+                                    timeout=_REQUEST_TIMEOUT_S if _REQUEST_TIMEOUT_S > 0 else None,
+                                )
+                                _SEARCH_CACHE.set(search_cache_key, search_results)
+                                search_summary = self._format_search_results(search_results)
+                            except Exception as search_exc:
+                                logger.warning(f"OneSeek web search failed: {search_exc}")
+                    cache_key = _build_cache_key(
+                        "model",
+                        model_key,
+                        query,
+                        search_summary,
+                        peer_responses_summary or "",
+                    )
+                    cached = _MODEL_CACHE.get(cache_key)
+                    if isinstance(cached, dict):
+                        cached_payload = dict(cached)
+                        cached_payload["cached"] = True
+                        return cached_payload
+                    system_prompt = self._render_oneseek_prompt(
+                        "ai_compare_oneseek_system",
+                        query,
+                        search_summary,
+                        peer_responses=peer_responses_summary or "",
+                        locale=locale,
+                    )
+                    if not system_prompt:
+                        system_prompt = self._build_oneseek_system_prompt(query, search_summary)
+                    messages = [SystemMessage(content=system_prompt), HumanMessage(content=query)]
+                response = await asyncio.wait_for(
+                    model.ainvoke(messages),
+                    timeout=_REQUEST_TIMEOUT_S if _REQUEST_TIMEOUT_S > 0 else None,
+                )
+                response_text = response.content if hasattr(response, "content") else str(response)
+                if model_key == "oneseek-local" and _ONESEEK_SELF_META_ENABLED:
+                    self_meta_prompt = self._render_oneseek_prompt(
+                        "ai_compare_oneseek_self_meta",
+                        query,
+                        search_summary,
+                        draft=response_text,
+                        peer_responses=peer_responses_summary or "",
+                        locale=locale,
+                    )
+                    self_meta_text = ""
+                    if self_meta_prompt:
+                        try:
+                            meta_response = await asyncio.wait_for(
+                                model.ainvoke(
+                                    [
+                                        SystemMessage(content=self_meta_prompt),
+                                        HumanMessage(content=response_text),
+                                    ]
+                                ),
+                                timeout=_REQUEST_TIMEOUT_S if _REQUEST_TIMEOUT_S > 0 else None,
+                            )
+                            self_meta_text = (
+                                meta_response.content
+                                if hasattr(meta_response, "content")
+                                else str(meta_response)
+                            )
+                        except Exception as meta_exc:
+                            logger.warning(f"OneSeek self-meta failed: {meta_exc}")
+                    revision_prompt = self._render_oneseek_prompt(
+                        "ai_compare_oneseek_revision",
+                        query,
+                        search_summary,
+                        draft=response_text,
+                        self_meta=self_meta_text,
+                        peer_responses=peer_responses_summary or "",
+                        locale=locale,
+                    )
+                    if revision_prompt:
+                        try:
+                            revised = await asyncio.wait_for(
+                                model.ainvoke(
+                                    [
+                                        SystemMessage(content=revision_prompt),
+                                        HumanMessage(content=response_text),
+                                    ]
+                                ),
+                                timeout=_REQUEST_TIMEOUT_S if _REQUEST_TIMEOUT_S > 0 else None,
+                            )
+                            response_text = (
+                                revised.content if hasattr(revised, "content") else str(revised)
+                            )
+                        except Exception as revise_exc:
+                            logger.warning(f"OneSeek revision failed: {revise_exc}")
+
+                payload = {
+                    "model": model_key,
+                    "display_name": display_name,
+                    "response": response_text,
+                    "success": True,
+                    "error": None,
+                    "cached": False,
+                }
+                _MODEL_CACHE.set(cache_key, payload)
+                return payload
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"Error querying {model_key}: {e}")
+                if attempt >= _MAX_RETRIES:
+                    return {
+                        "model": model_key,
+                        "display_name": display_name,
+                        "response": None,
+                        "success": False,
+                        "error": str(e),
+                        "cached": False,
+                    }
+                backoff = _BACKOFF_BASE_S * (2**attempt) + random.uniform(0, _BACKOFF_BASE_S)
+                await asyncio.sleep(backoff)
+                attempt += 1
+
+    async def query_single_model(
+        self,
+        model_key: str,
+        query: str,
+        peer_responses: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
         """
         Query a single AI model by its key (for individual tool calls).
         
@@ -232,7 +576,13 @@ class AIComparisonFlow:
                 "error": f"Model {model_key} not available (check API key)",
             }
         
-        return await self.query_model(model_key, self.models[model_key], query)
+        peer_summary = self._format_peer_responses(peer_responses or [])
+        return await self.query_model(
+            model_key,
+            self.models[model_key],
+            query,
+            peer_responses_summary=peer_summary,
+        )
 
     async def parallel_query_all_models(self, query: str) -> List[Dict[str, Any]]:
         """
@@ -250,30 +600,56 @@ class AIComparisonFlow:
         
         logger.info(f"Starting parallel queries to {len(self.models)} models")
         
-        # Create tasks for all models
+        oneseek_model = self.models.get("oneseek-local")
+        other_models = {
+            key: model
+            for key, model in self.models.items()
+            if key != "oneseek-local"
+        }
+
         tasks = [
             self.query_model(model_key, model, query)
-            for model_key, model in self.models.items()
+            for model_key, model in other_models.items()
         ]
-        
-        # Execute all queries in parallel with asyncio.gather
+
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        # Process results and handle any exceptions
-        processed_results = []
+
+        processed_results: list[dict[str, Any]] = []
+        other_keys = list(other_models.keys())
         for i, result in enumerate(results):
+            model_key = other_keys[i]
             if isinstance(result, Exception):
-                model_key = list(self.models.keys())[i]
-                processed_results.append({
-                    "model": model_key,
-                    "display_name": AI_MODELS[model_key]["display_name"],
-                    "response": None,
-                    "success": False,
-                    "error": str(result),
-                })
+                processed_results.append(
+                    {
+                        "model": model_key,
+                        "display_name": AI_MODELS.get(model_key, {}).get("display_name", model_key),
+                        "response": None,
+                        "success": False,
+                        "error": str(result),
+                    }
+                )
             else:
                 processed_results.append(result)
-        
+
+        if oneseek_model:
+            peer_summary = self._format_peer_responses(processed_results)
+            try:
+                oneseek_result = await self.query_model(
+                    "oneseek-local",
+                    oneseek_model,
+                    query,
+                    peer_responses_summary=peer_summary,
+                )
+            except Exception as exc:
+                oneseek_result = {
+                    "model": "oneseek-local",
+                    "display_name": AI_MODELS.get("oneseek-local", {}).get("display_name", "OneSeek Local"),
+                    "response": None,
+                    "success": False,
+                    "error": str(exc),
+                }
+            processed_results.append(oneseek_result)
+
         logger.info(f"Completed parallel queries: {len(processed_results)} responses")
         return processed_results
 
@@ -299,27 +675,68 @@ class AIComparisonFlow:
             "consensus_points": [],
         }
         
+        tasks: dict[str, asyncio.Task] = {}
+        search_results = None
+        rag_results = None
+
         # Always perform web search for fact-checking if available
-        # This provides external validation regardless of model responses
         if self.search_tool:
-            try:
+            search_cache_key = _build_cache_key(
+                "search",
+                query,
+                self.max_search_results,
+                SELECTED_SEARCH_ENGINE,
+            )
+            cached_search = _SEARCH_CACHE.get(search_cache_key)
+            if cached_search is not None:
+                search_results = cached_search
+                logger.info("Using cached web search results for fact-checking")
+            else:
                 logger.info("Performing web search for fact-checking")
-                search_results = await self.search_tool.ainvoke(query)
-                analysis["sources"] = search_results if isinstance(search_results, list) else [search_results]
-                logger.info(f"Found {len(analysis['sources'])} search results")
-            except Exception as e:
-                logger.warning(f"Web search failed during fact-checking: {e}")
-        
+                tasks["search"] = asyncio.create_task(self.search_tool.ainvoke(query))
+
         # Use retriever tool for RAG if available
         if self.retriever_tool:
-            try:
+            rag_cache_key = _build_cache_key("rag", query, self._resources_cache_key)
+            cached_rag = _RAG_CACHE.get(rag_cache_key)
+            if cached_rag is not None:
+                rag_results = cached_rag
+                logger.info("Using cached RAG results for fact-checking")
+            else:
                 logger.info("Retrieving relevant documents from RAG")
-                rag_results = await self.retriever_tool.ainvoke(query)
-                if rag_results:
-                    analysis["sources"].extend(rag_results if isinstance(rag_results, list) else [rag_results])
-                logger.info(f"Retrieved {len(rag_results) if rag_results else 0} RAG documents")
-            except Exception as e:
-                logger.warning(f"RAG retrieval failed during fact-checking: {e}")
+                tasks["rag"] = asyncio.create_task(self.retriever_tool.ainvoke(query))
+
+        if tasks:
+            results = await asyncio.gather(*tasks.values(), return_exceptions=True)
+            for (name, result) in zip(tasks.keys(), results):
+                if isinstance(result, Exception):
+                    logger.warning(f"{name} retrieval failed during fact-checking: {result}")
+                    continue
+                if name == "search":
+                    search_results = result
+                    search_cache_key = _build_cache_key(
+                        "search",
+                        query,
+                        self.max_search_results,
+                        SELECTED_SEARCH_ENGINE,
+                    )
+                    _SEARCH_CACHE.set(search_cache_key, search_results)
+                elif name == "rag":
+                    rag_results = result
+                    rag_cache_key = _build_cache_key("rag", query, self._resources_cache_key)
+                    _RAG_CACHE.set(rag_cache_key, rag_results)
+
+        if search_results is not None:
+            analysis["sources"] = (
+                search_results if isinstance(search_results, list) else [search_results]
+            )
+            logger.info(f"Found {len(analysis['sources'])} search results")
+
+        if rag_results:
+            analysis["sources"].extend(
+                rag_results if isinstance(rag_results, list) else [rag_results]
+            )
+            logger.info(f"Retrieved {len(rag_results) if rag_results else 0} RAG documents")
         
         # Extract key claims from responses if provided
         successful_responses = [r for r in model_responses if r.get("success")]
@@ -359,6 +776,12 @@ class AIComparisonFlow:
         Returns:
             Meta-agent analysis results with scores for each dimension
         """
+        cache_key = _build_cache_key("meta", query, _hash_model_responses(model_responses))
+        cached = _META_CACHE.get(cache_key)
+        if isinstance(cached, dict):
+            logger.info("Using cached meta-agent analysis")
+            return cached
+
         logger.info("Running 4 parallel meta-agents with dimensional scoring")
         
         meta_results = {
@@ -392,7 +815,7 @@ Svar från modellerna:
 
 Betygsätt varje modell på dessa 4 dimensioner (1-10).
 
-**VIKTIGT:** Använd de exakta modellnamnen som visas ovan (t.ex. "GPT-3.5 (OpenAI)", "Gemini 2.5 Flash (Google)", "DeepSeek Chat", "Grok-4 Fast Reasoning (xAI)") i din analys. Säg INTE "Modell A", "Modell B", etc.
+**VIKTIGT:** Använd de exakta modellnamnen som visas ovan (t.ex. "GPT-3.5 (OpenAI)", "Gemini 2.5 Flash (Google)", "DeepSeek Chat", "Grok-4 Fast Reasoning (xAI)", "OneSeek Local") i din analys. Säg INTE "Modell A", "Modell B", etc.
 
 Dimensioner:
 1. **Meta-reflektionsnivå** - Förmåga att analysera hur resonemang uppstår
@@ -418,7 +841,7 @@ Svar från modellerna:
 
 Betygsätt varje modell på dessa 4 dimensioner (1-10).
 
-**VIKTIGT:** Använd de exakta modellnamnen som visas ovan (t.ex. "GPT-3.5 (OpenAI)", "Gemini 2.5 Flash (Google)", "DeepSeek Chat", "Grok-4 Fast Reasoning (xAI)") i din analys. Säg INTE "Modell A", "Modell B", etc.
+**VIKTIGT:** Använd de exakta modellnamnen som visas ovan (t.ex. "GPT-3.5 (OpenAI)", "Gemini 2.5 Flash (Google)", "DeepSeek Chat", "Grok-4 Fast Reasoning (xAI)", "OneSeek Local") i din analys. Säg INTE "Modell A", "Modell B", etc.
 
 Dimensioner:
 1. **Objektivitetsgrad** - Grad av neutralitet och frånvaro av partiskhet
@@ -444,7 +867,7 @@ Svar från modellerna:
 
 Betygsätt varje modell på dessa 4 dimensioner (1-10).
 
-**VIKTIGT:** Använd de exakta modellnamnen som visas ovan (t.ex. "GPT-3.5 (OpenAI)", "Gemini 2.5 Flash (Google)", "DeepSeek Chat", "Grok-4 Fast Reasoning (xAI)") i din analys. Säg INTE "Modell A", "Modell B", etc.
+**VIKTIGT:** Använd de exakta modellnamnen som visas ovan (t.ex. "GPT-3.5 (OpenAI)", "Gemini 2.5 Flash (Google)", "DeepSeek Chat", "Grok-4 Fast Reasoning (xAI)", "OneSeek Local") i din analys. Säg INTE "Modell A", "Modell B", etc.
 
 Dimensioner:
 1. **Emotionell distans** - Förmåga att förstå känslor utan att påverkas
@@ -470,7 +893,7 @@ Svar från modellerna:
 
 Betygsätt varje modell på dessa 4 dimensioner (1-10).
 
-**VIKTIGT:** Använd de exakta modellnamnen som visas ovan (t.ex. "GPT-3.5 (OpenAI)", "Gemini 2.5 Flash (Google)", "DeepSeek Chat", "Grok-4 Fast Reasoning (xAI)") i din analys. Säg INTE "Modell A", "Modell B", etc.
+**VIKTIGT:** Använd de exakta modellnamnen som visas ovan (t.ex. "GPT-3.5 (OpenAI)", "Gemini 2.5 Flash (Google)", "DeepSeek Chat", "Grok-4 Fast Reasoning (xAI)", "OneSeek Local") i din analys. Säg INTE "Modell A", "Modell B", etc.
 
 Dimensioner:
 1. **Kontextelasticitet** - Förmåga att anpassa sig till olika format och situationer
@@ -510,6 +933,7 @@ Ge konkreta poäng (exakt siffra 1-10) och korta motiveringar för varje dimensi
                 meta_results[agent_name] = {"error": "Failed to generate analysis"}
         
         logger.info("Meta-agent analysis completed with dimensional scoring")
+        _META_CACHE.set(cache_key, meta_results)
         return meta_results
 
     async def synthesize_optimal_answer(
@@ -532,6 +956,19 @@ Ge konkreta poäng (exakt siffra 1-10) och korta motiveringar för varje dimensi
         Returns:
             Synthesized optimal answer with sources and tools used
         """
+        cache_key = _build_cache_key(
+            "synth",
+            query,
+            _hash_model_responses(model_responses),
+            _hash_payload(analysis),
+            _hash_payload(meta_results),
+            locale,
+        )
+        cached = _SYNTH_CACHE.get(cache_key)
+        if isinstance(cached, dict):
+            logger.info("Using cached synthesized answer")
+            return cached
+
         logger.info("Synthesizing optimal answer")
         
         # Use OneSeek local model for synthesis if available
@@ -596,7 +1033,7 @@ Please provide a comprehensive, well-reasoned answer that:
                 "synthesis", local_model, synthesis_prompt
             )
             
-            return {
+            payload = {
                 "synthesized_answer": synthesis_result["response"] if synthesis_result["success"] else "Failed to synthesize answer",
                 "sources": analysis.get("sources", []),
                 "tools_used": [
@@ -609,6 +1046,8 @@ Please provide a comprehensive, well-reasoned answer that:
                 ],
                 "models_used": [r["display_name"] for r in successful_responses],
             }
+            _SYNTH_CACHE.set(cache_key, payload)
+            return payload
         except Exception as e:
             logger.error(f"Synthesis failed: {e}")
             return {

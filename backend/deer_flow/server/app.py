@@ -642,6 +642,17 @@ def _create_event_stream_message(
     if not isinstance(content, str):
         content = json.dumps(content, ensure_ascii=False)
     max_message_chars = int(os.getenv("STREAM_MESSAGE_MAX_CHARS", "12000"))
+    ai_compare_agents = {
+        "ai_compare_query",
+        "ai_compare_fact_check",
+        "ai_compare_meta",
+        "ai_compare_synth",
+        "ai_compare_reporter",
+    }
+    if agent_name in ai_compare_agents:
+        max_message_chars = int(
+            os.getenv("STREAM_MESSAGE_MAX_CHARS_AI_COMPARE", "60000")
+        )
     if isinstance(content, str) and len(content) > max_message_chars:
         content = content[:max_message_chars] + "... [truncated]"
 
@@ -753,6 +764,19 @@ async def _process_message_chunk(message_chunk, message_metadata, thread_id, age
             event_stream_message["tool_name"] = message_chunk.name
         
         max_tool_chars = int(os.getenv("STREAM_TOOL_OUTPUT_MAX_CHARS", "6000"))
+        ai_compare_tools = {
+            "query_all_models",
+            "query_model_in_round",
+            "query_gpt35",
+            "query_gemini_flash",
+            "query_deepseek",
+            "query_grok4",
+            "query_oneseek_local",
+        }
+        if message_chunk.name in ai_compare_tools:
+            max_tool_chars = int(
+                os.getenv("STREAM_TOOL_OUTPUT_MAX_CHARS_AI_COMPARE", "60000")
+            )
         content = event_stream_message.get("content", "")
         if isinstance(content, str) and len(content) > max_tool_chars:
             event_stream_message["content"] = content[:max_tool_chars] + "... [truncated]"

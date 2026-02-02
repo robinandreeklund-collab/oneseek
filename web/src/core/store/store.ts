@@ -193,10 +193,12 @@ export const useStore = create<{
         const toolName = action.tool_name ?? "unknown";
         const fallbackAgent =
           toolName === "query_model_in_round" ||
+          toolName === "query_all_models" ||
           toolName === "query_gpt35" ||
           toolName === "query_gemini_flash" ||
           toolName === "query_deepseek" ||
-          toolName === "query_grok4"
+          toolName === "query_grok4" ||
+          toolName === "query_oneseek_local"
             ? "ai_compare_query"
             : toolName === "fact_check_responses"
               ? "ai_compare_fact_check"
@@ -457,10 +459,12 @@ export async function sendMessage(
           const toolName = (data.tool_name as string | undefined) ?? "unknown";
           const fallbackAgent =
             toolName === "query_model_in_round" ||
+            toolName === "query_all_models" ||
             toolName === "query_gpt35" ||
             toolName === "query_gemini_flash" ||
             toolName === "query_deepseek" ||
-            toolName === "query_grok4"
+            toolName === "query_grok4" ||
+            toolName === "query_oneseek_local"
               ? "ai_compare_query"
               : toolName === "fact_check_responses"
                 ? "ai_compare_fact_check"
@@ -788,6 +792,17 @@ function appendResearch(researchId: string) {
 function appendResearchActivity(message: Message) {
   const researchId = getOngoingResearchId();
   if (researchId) {
+    if (
+      message.toolCalls?.length
+      && [
+        "ai_compare_query",
+        "ai_compare_fact_check",
+        "ai_compare_meta",
+        "ai_compare_synth",
+      ].includes(message.agent ?? "")
+    ) {
+      return;
+    }
     const researchActivityIds = useStore.getState().researchActivityIds;
     const current = researchActivityIds.get(researchId)!;
     if (!current.includes(message.id)) {

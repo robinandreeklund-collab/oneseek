@@ -227,6 +227,87 @@ async def query_grok4(query: str) -> str:
 
 
 @tool
+async def query_oneseek_local(query: str, peer_responses_json: str | None = None) -> str:
+    """
+    Query OneSeek Local model.
+    
+    Args:
+        query: The question or prompt to send to OneSeek Local
+        
+    Returns:
+        The response from OneSeek Local
+    """
+    try:
+        comparison_flow = _get_flow()
+        peer_responses = []
+        if peer_responses_json:
+            try:
+                peer_responses = json.loads(peer_responses_json)
+            except json.JSONDecodeError:
+                peer_responses = []
+        response = await comparison_flow.query_single_model(
+            "oneseek-local",
+            query,
+            peer_responses=peer_responses,
+        )
+        
+        if response["success"]:
+            content = response["response"]
+            payload = {
+                "model": "oneseek-local",
+                "display_name": "OneSeek Local",
+                "response": content,
+                "success": True,
+            }
+            return _safe_json_dump(payload)
+        else:
+            return _safe_json_dump(
+                {
+                    "model": "oneseek-local",
+                    "display_name": "OneSeek Local",
+                    "error": response.get("error"),
+                    "success": False,
+                }
+            )
+        
+    except Exception as e:
+        logger.error(f"Error querying OneSeek Local: {e}", exc_info=True)
+        return _safe_json_dump(
+            {
+                "model": "oneseek-local",
+                "display_name": "OneSeek Local",
+                "error": str(e),
+                "success": False,
+            }
+        )
+
+
+@tool
+async def query_all_models(query: str) -> str:
+    """
+    Query all available AI models in parallel and return their responses.
+    
+    Args:
+        query: The question or prompt to send to all models
+        
+    Returns:
+        JSON list of model responses
+    """
+    try:
+        comparison_flow = _get_flow()
+        responses = await comparison_flow.parallel_query_all_models(query)
+        return _safe_json_dump(responses)
+    except Exception as e:
+        logger.error(f"Error querying all models: {e}", exc_info=True)
+        return _safe_json_dump(
+            {
+                "error": str(e),
+                "success": False,
+            }
+        )
+
+
+@tool
 async def fact_check_responses(query: str, model_responses_json: str) -> str:
     """
     Perform fact-checking on AI model responses using web search and RAG tools.
@@ -348,10 +429,6 @@ async def synthesize_optimal_answer(
 def get_ai_comparison_tools():
     """Get all AI comparison tools for the agent.
     
-    NOTE: OneSeek Local is NOT included as a tool because it serves as the 
-    synthesizing agent that analyzes responses from other models, rather than
-    being queried as one of the models to compare.
-    
     The web_search tool is included directly so the frontend can display
     search results with the same rich UI as deep research mode.
     """
@@ -362,10 +439,12 @@ def get_ai_comparison_tools():
     web_search = get_web_search_tool(max_search_results=3)
     
     return [
+        query_all_models,
         query_gpt35,
         query_gemini_flash,
         query_deepseek,
         query_grok4,
+        query_oneseek_local,
         fact_check_responses,
         web_search,  # Direct web search for fact-checking (optional)
         run_meta_analysis,
