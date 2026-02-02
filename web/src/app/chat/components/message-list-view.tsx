@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import React, { useCallback, useMemo, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { LoadingAnimation } from "~/components/deer-flow/loading-animation";
 import { Markdown } from "~/components/deer-flow/markdown";
@@ -443,10 +444,12 @@ function ToolActivityStream() {
   const locale = useLocale();
   const isSwedish = locale.startsWith("sv");
   const responding = useStore((state) => state.responding);
-  const { messageIds, messages } = useStore((state) => ({
-    messageIds: state.messageIds,
-    messages: state.messages,
-  }));
+  const { messageIds, messages } = useStore(
+    useShallow((state) => ({
+      messageIds: state.messageIds,
+      messages: state.messages,
+    })),
+  );
   const toolCalls = useMemo(() => {
     let lastUserIndex = -1;
     for (let i = messageIds.length - 1; i >= 0; i -= 1) {
