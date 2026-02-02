@@ -4,11 +4,14 @@
 import { LoadingOutlined } from "@ant-design/icons";
 import { motion } from "framer-motion";
 import {
+  AlertTriangle,
+  CheckCircle2,
   Download,
   Headphones,
   ChevronDown,
   ChevronRight,
   Lightbulb,
+  Loader2,
   Wrench,
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
@@ -37,7 +40,7 @@ import {
   CollapsibleTrigger,
 } from "~/components/ui/collapsible";
 import { isPlannerAgent } from "~/core/messages";
-import type { Message, Option } from "~/core/messages";
+import type { Message, Option, ToolCallRuntime } from "~/core/messages";
 import {
   closeResearch,
   openResearch,
@@ -213,6 +216,25 @@ function MessageListItem({
     return debateSessionIds.includes(messageId);
   }, [debateSessionIds, messageId]);
   if (message) {
+    const isToolOnlyMessage = Boolean(message.toolCalls?.length)
+      && (!message.content || message.content.trim() === "");
+    if (isToolOnlyMessage) {
+      return (
+        <motion.li
+          className="mt-6"
+          key={messageId}
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          style={{ transition: "all 0.2s ease-out" }}
+          transition={{
+            duration: 0.2,
+            ease: "easeOut",
+          }}
+        >
+          <ToolCallList message={message} />
+        </motion.li>
+      );
+    }
     if (
       message.role === "user" ||
       message.agent === "coordinator" ||
@@ -334,6 +356,129 @@ function MessageBubble({
       style={{ wordBreak: "break-all" }}
     >
       {children}
+    </div>
+  );
+}
+
+const TOOL_LABELS: Record<string, { sv: string; en: string }> = {
+  web_search: { sv: "Webbsökning", en: "Web search" },
+  crawl_tool: { sv: "Läser sida", en: "Read page" },
+  python_repl_tool: { sv: "Python", en: "Python" },
+  local_search_tool: { sv: "Lokalsök", en: "Local search" },
+  file_system_tool: { sv: "Filer", en: "Files" },
+  bash_tool: { sv: "Terminal", en: "Terminal" },
+  react_sandbox_tool: { sv: "React-sandbox", en: "React sandbox" },
+  query_all_models: { sv: "Alla modeller", en: "All models" },
+  query_model_in_round: { sv: "Modell i runda", en: "Model in round" },
+  query_gpt35: { sv: "GPT-3.5", en: "GPT-3.5" },
+  query_gemini_flash: { sv: "Gemini 2.5 Flash", en: "Gemini 2.5 Flash" },
+  query_deepseek: { sv: "DeepSeek", en: "DeepSeek" },
+  query_grok4: { sv: "Grok-4", en: "Grok-4" },
+  query_oneseek_local: { sv: "OneSeek", en: "OneSeek" },
+  fact_check_responses: { sv: "Faktakoll", en: "Fact check" },
+  run_meta_analysis: { sv: "Meta-analys", en: "Meta analysis" },
+  synthesize_optimal_answer: { sv: "Syntes", en: "Synthesis" },
+  start_debate_round: { sv: "Debattrunda", en: "Debate round" },
+  collect_debate_votes: { sv: "Röstinsamling", en: "Collect votes" },
+};
+
+function formatToolLabel(name: string, isSwedish: boolean) {
+  const match = TOOL_LABELS[name];
+  if (match) {
+    return isSwedish ? match.sv : match.en;
+  }
+  const cleaned = name.replace(/_tool$/, "").replace(/_/g, " ").trim();
+  if (!cleaned) return name;
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+}
+
+function getToolDetail(toolCall: ToolCallRuntime) {
+  if (!toolCall.args || typeof toolCall.args !== "object") return null;
+  const args = toolCall.args as Record<string, unknown>;
+  const candidates = [
+    args.query,
+    args.url,
+    args.keywords,
+    args.path,
+    args.model_key,
+    args.display_name,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      const trimmed = candidate.trim();
+      return trimmed.length > 80 ? `${trimmed.slice(0, 77)}...` : trimmed;
+    }
+  }
+  return null;
+}
+
+function getToolStatus(toolCall: ToolCallRuntime) {
+  const status = toolCall.status?.toLowerCase();
+  if (status === "error" || status === "failed") return "error";
+  if (status === "running" || status === "pending" || status === "in_progress") {
+    return "running";
+  }
+  if (toolCall.result === undefined) return "running";
+  return "success";
+}
+
+function ToolCallList({ message }: { message: Message }) {
+  const locale = useLocale();
+  const isSwedish = locale.startsWith("sv");
+  const toolCalls = message.toolCalls ?? [];
+  if (toolCalls.length === 0) return null;
+
+  return (
+    <div className="w-full px-4">
+      <div className="rounded-2xl border border-border/60 bg-card/70 px-4 py-3">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <Wrench size={12} />
+          {isSwedish ? "Verktyg" : "Tools"}
+        </div>
+        <div className="mt-2 flex flex-col gap-2">
+          {toolCalls.map((toolCall) => {
+            const status = getToolStatus(toolCall);
+            const StatusIcon =
+              status === "running"
+                ? Loader2
+                : status === "error"
+                  ? AlertTriangle
+                  : CheckCircle2;
+            const statusClass =
+              status === "running"
+                ? "text-amber-500"
+                : status === "error"
+                  ? "text-destructive"
+                  : "text-emerald-500";
+            const label = formatToolLabel(toolCall.name ?? "tool", isSwedish);
+            const detail = getToolDetail(toolCall);
+            return (
+              <Tooltip
+                key={toolCall.id}
+                title={detail ? `${label}: ${detail}` : label}
+              >
+                <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-background/60 px-3 py-2 text-xs">
+                  <StatusIcon
+                    className={cn(
+                      "h-3.5 w-3.5",
+                      statusClass,
+                      status === "running" && "animate-spin",
+                    )}
+                  />
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <span className="font-medium">{label}</span>
+                    {detail && (
+                      <span className="text-muted-foreground truncate">
+                        {detail}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </Tooltip>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }

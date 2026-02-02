@@ -954,6 +954,7 @@ export function useRenderableMessageIds() {
         const isStartOfResearch = state.researchIds.includes(messageId);
         const isStartOfCoderSession = state.coderSessionIds.includes(messageId);
         const isStartOfDebateSession = state.debateSessionIds.includes(messageId);
+        const hasToolCalls = Boolean(message.toolCalls?.length);
 
         // Planner, podcast, research cards, coder cards, and debate cards always render (they have their own content)
         let isRenderable = isPlanner || isPodcast || isStartOfResearch || isStartOfCoderSession || isStartOfDebateSession;
@@ -962,6 +963,10 @@ export function useRenderableMessageIds() {
         // This prevents empty dividers from appearing in the UI
         if (!isRenderable && (message.role === "user" || message.agent === "coordinator")) {
           isRenderable = !!message.content;
+        }
+
+        if (!isRenderable && hasToolCalls) {
+          isRenderable = true;
         }
 
         if (!isRenderable) {
