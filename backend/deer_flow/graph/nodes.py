@@ -61,16 +61,44 @@ from .utils import (
 logger = logging.getLogger(__name__)
 
 
+def _unwrap_fenced_content(content: str) -> str:
+    """Remove Markdown code fences from content when present."""
+    if not content:
+        return content
+    stripped = content.strip()
+    if not stripped.startswith("```"):
+        return content
+    stripped = re.sub(r"^```(?:json|js|ts|plaintext)?", "", stripped, flags=re.I).strip()
+    if stripped.endswith("```"):
+        stripped = stripped[:-3].rstrip()
+    return stripped
+
+
+def _extract_json_start(content: str) -> str:
+    """Drop leading non-JSON text and return from first { or [."""
+    if not content:
+        return content
+    stripped = content.lstrip()
+    obj_index = stripped.find("{")
+    arr_index = stripped.find("[")
+    if obj_index < 0 and arr_index < 0:
+        return stripped
+    indices = [idx for idx in (obj_index, arr_index) if idx >= 0]
+    start = min(indices) if indices else 0
+    return stripped[start:].lstrip()
+
+
 def is_json_like(content: str) -> bool:
     """
     Check if content looks like JSON by checking if it starts with { or [.
-    
+
     This is a heuristic check for basic structural indicators, not actual JSON validation.
     """
     if not content:
         return False
-    stripped = content.strip()
-    return stripped.startswith('{') or stripped.startswith('[')
+    normalized = _unwrap_fenced_content(content).strip()
+    normalized = _extract_json_start(normalized)
+    return normalized.startswith("{") or normalized.startswith("[")
 
 
 def strip_think_tags(content: str, expect_json: bool = False) -> str:
@@ -96,61 +124,81 @@ def strip_think_tags(content: str, expect_json: bool = False) -> str:
         Content with <think> tags stripped appropriately
     """
     if not content or '<think>' not in content or '</think>' not in content:
+        if expect_json:
+            return _extract_json_start(_unwrap_fenced_content(content))
         return content
+
+    think_start = content.find('<think>')
+    think_end = content.rfind('</think>')
+
+    # Validate that tags are in correct order
+    if think_start >= think_end or think_start < 0 or think_end < 0:
+        # Invalid tag ordering, return content as-is
+        if expect_json:
+            return _extract_json_start(_unwrap_fenced_content(content))
+        return content
+
+    # Extract all potential content locations
+    content_before = content[:think_start].strip()
+    content_inside = content[think_start + len('<think>'):think_end].strip()
+    content_after = content[think_end + len('</think>'):].strip()
+
+    if expect_json:
+        # For JSON: prefer after, but fall back to inside if after is not valid JSON
+        if content_after and is_json_like(content_after):
+            cleaned = content_after
+        elif content_inside and is_json_like(content_inside):
+            cleaned = content_inside
+        elif content_before and is_json_like(content_before):
+            cleaned = content_before
+        else:
+            cleaned = content_after
+        cleaned = _unwrap_fenced_content(cleaned)
+        cleaned = _extract_json_start(cleaned)
+        return cleaned
+
+    # For non-JSON: prefer after, then before, then inside
+    if content_after:
+        return content_after
+    if content_before:
+        return content_before
+    if content_inside:
+        return content_inside
+    # Fallback: return empty string to avoid showing just the tags
+    return ""
+
+
+def extract_think_content(content: str) -> str:
+    """Extract content from <think> tags, if present."""
+    if not content:
+        return ""
+    matches = re.findall(r"<think>(.*?)</think>", content, re.S)
+    if not matches:
+        return ""
+    cleaned = [match.strip() for match in matches if match and match.strip()]
+    return "\n\n".join(cleaned)
+
+
+def extract_think_and_content(
+    content: str, expect_json: bool = False
+) -> tuple[str, str]:
+    """Return cleaned content plus extracted think content."""
+    think_content = extract_think_content(content)
+    cleaned_content = strip_think_tags(content, expect_json=expect_json)
+    return cleaned_content, think_content
 
 
 def _parse_json_content(content: str) -> dict[str, Any]:
     """Parse JSON content from a message string."""
     if not content:
         return {}
-    content = content.strip()
-    if content.startswith("```"):
-        match = re.search(r"```json\s*(.*?)```", content, re.S | re.I)
-        if match:
-            content = match.group(1).strip()
-        else:
-            # Fallback to any fenced block
-            match = re.search(r"```(.*?)```", content, re.S)
-            if match:
-                content = match.group(1).strip()
+    content = strip_think_tags(content, expect_json=True)
+    content = _unwrap_fenced_content(content)
+    content = _extract_json_start(content)
     try:
         return json.loads(repair_json_output(content))
     except Exception:
         return {}
-    
-    think_start = content.find('<think>')
-    think_end = content.find('</think>')
-    
-    # Validate that tags are in correct order
-    if think_start >= think_end or think_start < 0 or think_end < 0:
-        # Invalid tag ordering, return content as-is
-        return content
-    
-    # Extract all potential content locations
-    content_before = content[:think_start].strip()
-    content_inside = content[think_start + len('<think>'):think_end].strip()
-    content_after = content[think_end + len('</think>'):].strip()
-    
-    if expect_json:
-        # For JSON: prefer after, but fall back to inside if after is not valid JSON
-        if content_after and is_json_like(content_after):
-            return content_after
-        if content_inside and is_json_like(content_inside):
-            return content_inside
-        if content_before and is_json_like(content_before):
-            return content_before
-        # Fallback to after even if empty/invalid (will be caught by validation)
-        return content_after
-    else:
-        # For non-JSON: prefer after, then before, then inside
-        if content_after:
-            return content_after
-        if content_before:
-            return content_before
-        if content_inside:
-            return content_inside
-        # Fallback: return empty string to avoid showing just the tags
-        return ""
 
 
 @tool
@@ -632,13 +680,14 @@ def planner_node(
     logger.info(f"Planner response: {full_response}")
 
     # Strip <think> tags if present (from deep thinking mode)
-    original_response = full_response
-    full_response = strip_think_tags(full_response, expect_json=True)
-    if '<think>' in original_response and '<think>' not in full_response:  # Tags were stripped
-        logger.debug(f"Stripped think tags, result: {full_response[:100]}...")
+    normalized_response, think_content = extract_think_and_content(
+        full_response, expect_json=True
+    )
+    if '<think>' in full_response and '<think>' not in normalized_response:
+        logger.debug(f"Stripped think tags, result: {normalized_response[:100]}...")
 
     # Validate explicitly that response content is valid JSON before proceeding to parse it
-    if not is_json_like(full_response):
+    if not is_json_like(normalized_response):
         logger.warning("Planner response does not appear to be valid JSON")
         if plan_iterations > 0:
             return Command(
@@ -652,8 +701,8 @@ def planner_node(
             )
 
     try:
-        curr_plan = json.loads(repair_json_output(full_response))
-        # Need to extract the plan from the full_response
+        curr_plan = json.loads(repair_json_output(normalized_response))
+        # Need to extract the plan from the normalized_response
         curr_plan_content = extract_plan_content(curr_plan)
         # load the current_plan
         curr_plan = json.loads(repair_json_output(curr_plan_content))
@@ -674,12 +723,19 @@ def planner_node(
     if isinstance(curr_plan, dict):
         curr_plan = validate_and_fix_plan(curr_plan, configurable.enforce_web_search, configurable.enable_web_search)
 
+    planner_message_kwargs = {"reasoning_content": think_content} if think_content else {}
+    planner_message = AIMessage(
+        content=normalized_response,
+        name="planner",
+        additional_kwargs=planner_message_kwargs,
+    )
+
     if isinstance(curr_plan, dict) and curr_plan.get("has_enough_context"):
         logger.info("Planner response has enough context.")
         new_plan = Plan.model_validate(curr_plan)
         return Command(
             update={
-                "messages": [AIMessage(content=full_response, name="planner")],
+                "messages": [planner_message],
                 "current_plan": new_plan,
                 "plan_source": "planner",
                 **preserve_state_meta_fields(state),
@@ -691,8 +747,8 @@ def planner_node(
         logger.info("Planner: AI comparison mode enabled, routing to ai_comparison node")
         return Command(
             update={
-                "messages": [AIMessage(content=full_response, name="planner")],
-                "current_plan": full_response,
+                "messages": [planner_message],
+                "current_plan": normalized_response,
                 "plan_source": "planner",
                 **preserve_state_meta_fields(state),
             },
@@ -701,8 +757,8 @@ def planner_node(
     
     return Command(
         update={
-            "messages": [AIMessage(content=full_response, name="planner")],
-            "current_plan": full_response,
+            "messages": [planner_message],
+            "current_plan": normalized_response,
             "plan_source": "planner",
             **preserve_state_meta_fields(state),
         },
@@ -748,26 +804,14 @@ def debate_planner_node(
     logger.info(f"Debate planner response: {full_response}")
     
     # Strip <think> tags if present (matching planner_node behavior)
-    original_response = full_response
-    full_response = strip_think_tags(full_response, expect_json=True)
-    if '<think>' in original_response and '<think>' not in full_response:
-        logger.debug(f"Stripped think tags from debate planner response")
-    
-    # Strip markdown code fences if present (LLM sometimes wraps JSON in ```json ... ```)
-    full_response = full_response.strip()
-    if full_response.startswith("```"):
-        # Remove opening fence (e.g., ```json or just ```)
-        lines = full_response.split('\n')
-        if len(lines) > 0:
-            lines = lines[1:]  # Remove first line with ```
-        # Remove closing fence
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        full_response = '\n'.join(lines).strip()
-        logger.debug(f"Stripped markdown code fences from debate planner response")
-    
+    normalized_response, think_content = extract_think_and_content(
+        full_response, expect_json=True
+    )
+    if '<think>' in full_response and '<think>' not in normalized_response:
+        logger.debug("Stripped think tags from debate planner response")
+
     # Validate explicitly that response content is valid JSON before proceeding
-    if not is_json_like(full_response):
+    if not is_json_like(normalized_response):
         logger.warning("Debate planner response does not appear to be valid JSON")
         return Command(
             update=preserve_state_meta_fields(state),
@@ -776,8 +820,8 @@ def debate_planner_node(
     
     # Parse and repair JSON (matching planner_node behavior)
     try:
-        curr_plan = json.loads(repair_json_output(full_response))
-        # Need to extract the plan from the full_response
+        curr_plan = json.loads(repair_json_output(normalized_response))
+        # Need to extract the plan from the normalized_response
         curr_plan_content = extract_plan_content(curr_plan)
         # load the current_plan
         curr_plan = json.loads(repair_json_output(curr_plan_content))
@@ -811,7 +855,15 @@ def debate_planner_node(
         new_plan = Plan.model_validate(curr_plan)
         return Command(
             update={
-                "messages": [AIMessage(content=json.dumps(curr_plan, ensure_ascii=False, indent=2), name="planner")],
+                "messages": [
+                    AIMessage(
+                        content=json.dumps(curr_plan, ensure_ascii=False, indent=2),
+                        name="planner",
+                        additional_kwargs={
+                            "reasoning_content": think_content
+                        } if think_content else {},
+                    )
+                ],
                 "current_plan": new_plan,
                 "plan_source": "code_planner",
                 **preserve_state_meta_fields(state),
@@ -827,7 +879,15 @@ def debate_planner_node(
     # IMPORTANT: Use name="planner" so frontend recognizes it and displays the plan card
     return Command(
         update={
-            "messages": [AIMessage(content=full_response, name="planner")],
+            "messages": [
+                AIMessage(
+                    content=full_response,
+                    name="planner",
+                    additional_kwargs={
+                        "reasoning_content": think_content
+                    } if think_content else {},
+                )
+            ],
             "current_plan": full_response,  # Pass as JSON string like planner does
             "plan_source": "code_planner",
             **preserve_state_meta_fields(state),
@@ -873,26 +933,14 @@ def code_planner_node(
     logger.info(f"Code planner response: {full_response}")
     
     # Strip <think> tags if present (matching planner_node behavior)
-    original_response = full_response
-    full_response = strip_think_tags(full_response, expect_json=True)
-    if '<think>' in original_response and '<think>' not in full_response:
-        logger.debug(f"Stripped think tags from code planner response")
-    
-    # Strip markdown code fences if present (LLM sometimes wraps JSON in ```json ... ```)
-    full_response = full_response.strip()
-    if full_response.startswith("```"):
-        # Remove opening fence (e.g., ```json or just ```)
-        lines = full_response.split('\n')
-        if len(lines) > 0:
-            lines = lines[1:]  # Remove first line with ```
-        # Remove closing fence
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        full_response = '\n'.join(lines).strip()
-        logger.debug(f"Stripped markdown code fences from code planner response")
-    
+    normalized_response, think_content = extract_think_and_content(
+        full_response, expect_json=True
+    )
+    if '<think>' in full_response and '<think>' not in normalized_response:
+        logger.debug("Stripped think tags from code planner response")
+
     # Validate explicitly that response content is valid JSON before proceeding
-    if not is_json_like(full_response):
+    if not is_json_like(normalized_response):
         logger.warning("Code planner response does not appear to be valid JSON")
         return Command(
             update=preserve_state_meta_fields(state),
@@ -901,8 +949,8 @@ def code_planner_node(
     
     # Parse and repair JSON (matching planner_node behavior)
     try:
-        curr_plan = json.loads(repair_json_output(full_response))
-        # Need to extract the plan from the full_response
+        curr_plan = json.loads(repair_json_output(normalized_response))
+        # Need to extract the plan from the normalized_response
         curr_plan_content = extract_plan_content(curr_plan)
         # load the current_plan
         curr_plan = json.loads(repair_json_output(curr_plan_content))
@@ -923,7 +971,15 @@ def code_planner_node(
         new_plan = Plan.model_validate(curr_plan)
         return Command(
             update={
-                "messages": [AIMessage(content=json.dumps(curr_plan, ensure_ascii=False, indent=2), name="planner")],
+                "messages": [
+                    AIMessage(
+                        content=json.dumps(curr_plan, ensure_ascii=False, indent=2),
+                        name="planner",
+                        additional_kwargs={
+                            "reasoning_content": think_content
+                        } if think_content else {},
+                    )
+                ],
                 "current_plan": new_plan,
                 "plan_source": "debate_planner",
                 **preserve_state_meta_fields(state),
@@ -939,7 +995,15 @@ def code_planner_node(
     # IMPORTANT: Use name="planner" so frontend recognizes it and displays the plan card
     return Command(
         update={
-            "messages": [AIMessage(content=full_response, name="planner")],
+            "messages": [
+                AIMessage(
+                    content=full_response,
+                    name="planner",
+                    additional_kwargs={
+                        "reasoning_content": think_content
+                    } if think_content else {},
+                )
+            ],
             "current_plan": full_response,  # Pass as JSON string like planner does
             "plan_source": "debate_planner",
             **preserve_state_meta_fields(state),
