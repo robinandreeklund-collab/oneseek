@@ -116,135 +116,129 @@ export function InputBox({
   }, [currentPrompt, isEnhancing, reportStyle]);
 
   return (
-    <div className="flex w-full flex-col gap-2">
+    <div className="flex w-full flex-col items-center gap-3">
       <div
         className={cn(
-          "bg-card relative flex w-full flex-col rounded-[24px] border",
+          "bg-card/60 relative flex w-full items-center gap-3 rounded-full border border-border/60 px-4 py-2 shadow-lg backdrop-blur",
           className,
         )}
         ref={containerRef}
       >
-        <div className="flex w-full flex-col">
-          <AnimatePresence>
-            {feedback && (
-              <motion.div
-                ref={feedbackRef}
-                className="bg-background border-brand absolute top-0 left-0 mt-2 ml-4 flex items-center justify-center gap-1 rounded-2xl border px-2 py-0.5"
-                initial={{ opacity: 0, scale: 0 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0 }}
-                transition={{ duration: 0.2, ease: "easeInOut" }}
-              >
-                <div className="text-brand flex h-full w-full items-center justify-center text-sm opacity-90">
-                  {feedback.option.text}
-                </div>
-                <X
-                  className="cursor-pointer opacity-60"
-                  size={16}
-                  onClick={onRemoveFeedback}
+        <AnimatePresence>
+          {feedback && (
+            <motion.div
+              ref={feedbackRef}
+              className="bg-background border-brand absolute -top-3 left-4 flex items-center justify-center gap-1 rounded-2xl border px-2 py-0.5 text-xs shadow-sm"
+              initial={{ opacity: 0, scale: 0 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0 }}
+              transition={{ duration: 0.2, ease: "easeInOut" }}
+            >
+              <div className="text-brand flex h-full w-full items-center justify-center text-xs opacity-90">
+                {feedback.option.text}
+              </div>
+              <X
+                className="cursor-pointer opacity-60"
+                size={14}
+                onClick={onRemoveFeedback}
+              />
+            </motion.div>
+          )}
+          {isEnhanceAnimating && (
+            <motion.div
+              className="pointer-events-none absolute inset-0 z-20"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <div className="relative h-full w-full">
+                {/* Sparkle effect overlay */}
+                <motion.div
+                  className="absolute inset-0 rounded-full bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-blue-500/10"
+                  animate={{
+                    background: [
+                      "linear-gradient(45deg, rgba(59, 130, 246, 0.1), rgba(147, 51, 234, 0.1), rgba(59, 130, 246, 0.1))",
+                      "linear-gradient(225deg, rgba(147, 51, 234, 0.1), rgba(59, 130, 246, 0.1), rgba(147, 51, 234, 0.1))",
+                      "linear-gradient(45deg, rgba(59, 130, 246, 0.1), rgba(147, 51, 234, 0.1), rgba(59, 130, 246, 0.1))",
+                    ],
+                  }}
+                  transition={{ duration: 2, repeat: Infinity }}
                 />
-              </motion.div>
-            )}
-            {isEnhanceAnimating && (
-              <motion.div
-                className="pointer-events-none absolute inset-0 z-20"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.3 }}
-              >
-                <div className="relative h-full w-full">
-                  {/* Sparkle effect overlay */}
+                {/* Floating sparkles */}
+                {[...Array(6)].map((_, i) => (
                   <motion.div
-                    className="absolute inset-0 rounded-[24px] bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-blue-500/10"
-                    animate={{
-                      background: [
-                        "linear-gradient(45deg, rgba(59, 130, 246, 0.1), rgba(147, 51, 234, 0.1), rgba(59, 130, 246, 0.1))",
-                        "linear-gradient(225deg, rgba(147, 51, 234, 0.1), rgba(59, 130, 246, 0.1), rgba(147, 51, 234, 0.1))",
-                        "linear-gradient(45deg, rgba(59, 130, 246, 0.1), rgba(147, 51, 234, 0.1), rgba(59, 130, 246, 0.1))",
-                      ],
+                    key={i}
+                    className="absolute h-2 w-2 rounded-full bg-blue-400"
+                    style={{
+                      left: `${20 + i * 12}%`,
+                      top: `${30 + (i % 2) * 40}%`,
                     }}
-                    transition={{ duration: 2, repeat: Infinity }}
+                    animate={{
+                      y: [-10, -20, -10],
+                      opacity: [0, 1, 0],
+                      scale: [0.5, 1, 0.5],
+                    }}
+                    transition={{
+                      duration: 1.5,
+                      repeat: Infinity,
+                      delay: i * 0.2,
+                    }}
                   />
-                  {/* Floating sparkles */}
-                  {[...Array(6)].map((_, i) => (
-                    <motion.div
-                      key={i}
-                      className="absolute h-2 w-2 rounded-full bg-blue-400"
-                      style={{
-                        left: `${20 + i * 12}%`,
-                        top: `${30 + (i % 2) * 40}%`,
-                      }}
-                      animate={{
-                        y: [-10, -20, -10],
-                        opacity: [0, 1, 0],
-                        scale: [0.5, 1, 0.5],
-                      }}
-                      transition={{
-                        duration: 1.5,
-                        repeat: Infinity,
-                        delay: i * 0.2,
-                      }}
-                    />
-                  ))}
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <MessageInput
+          className={cn(
+            "min-h-[34px] max-h-[160px] flex-1 px-0 py-0",
+            feedback && "pt-4",
+            isEnhanceAnimating && "transition-all duration-500",
+          )}
+          ref={inputRef}
+          loading={loading}
+          config={config}
+          onEnter={handleSendMessage}
+          onChange={setCurrentPrompt}
+        />
+        <div className="flex shrink-0 items-center gap-2">
+          <Tooltip title={t("enhancePrompt")}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "hover:bg-accent h-8 w-8 rounded-full",
+                isEnhancing && "animate-pulse",
+              )}
+              onClick={handleEnhancePrompt}
+              disabled={isEnhancing || currentPrompt.trim() === ""}
+            >
+              {isEnhancing ? (
+                <div className="flex h-8 w-8 items-center justify-center">
+                  <div className="bg-foreground h-2.5 w-2.5 animate-bounce rounded-full opacity-70" />
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <MessageInput
-            className={cn(
-              "px-4 pt-5",
-              feedback && "pt-9",
-              isEnhanceAnimating && "transition-all duration-500",
-            )}
-            ref={inputRef}
-            loading={loading}
-            config={config}
-            onEnter={handleSendMessage}
-            onChange={setCurrentPrompt}
-          />
-        </div>
-        <div className="flex flex-col gap-2 px-4 pb-3 pt-2">
-          <div className="flex items-center justify-end">
-            <div className="flex shrink-0 items-center gap-2">
-              <Tooltip title={t("enhancePrompt")}>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={cn(
-                    "hover:bg-accent h-10 w-10",
-                    isEnhancing && "animate-pulse",
-                  )}
-                  onClick={handleEnhancePrompt}
-                  disabled={isEnhancing || currentPrompt.trim() === ""}
-                >
-                  {isEnhancing ? (
-                    <div className="flex h-10 w-10 items-center justify-center">
-                      <div className="bg-foreground h-3 w-3 animate-bounce rounded-full opacity-70" />
-                    </div>
-                  ) : (
-                    <MagicWandIcon className="text-brand" />
-                  )}
-                </Button>
-              </Tooltip>
-              <Tooltip title={responding ? tCommon("stop") : tCommon("send")}>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className={cn("h-10 w-10 rounded-full")}
-                  onClick={() => inputRef.current?.submit()}
-                >
-                  {responding ? (
-                    <div className="flex h-10 w-10 items-center justify-center">
-                      <div className="bg-foreground h-4 w-4 rounded-sm opacity-70" />
-                    </div>
-                  ) : (
-                    <ArrowUp />
-                  )}
-                </Button>
-              </Tooltip>
-            </div>
-          </div>
+              ) : (
+                <MagicWandIcon className="text-brand" />
+              )}
+            </Button>
+          </Tooltip>
+          <Tooltip title={responding ? tCommon("stop") : tCommon("send")}>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 rounded-full border-border/60 bg-background/60"
+              onClick={() => inputRef.current?.submit()}
+            >
+              {responding ? (
+                <div className="flex h-8 w-8 items-center justify-center">
+                  <div className="bg-foreground h-3 w-3 rounded-sm opacity-70" />
+                </div>
+              ) : (
+                <ArrowUp className="h-4 w-4" />
+              )}
+            </Button>
+          </Tooltip>
         </div>
         {isEnhancing && (
           <>

@@ -112,7 +112,7 @@ export function MessagesBlock({ className }: { className?: string }) {
           {!isReplay && (
             <div className="relative flex shrink-0 pb-4">
               <InputBox
-                className="w-full"
+                className="mx-auto w-full max-w-2xl"
                 responding={responding}
                 feedback={feedback}
                 onSend={handleSend}
@@ -124,17 +124,17 @@ export function MessagesBlock({ className }: { className?: string }) {
         </>
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-10">
-          <div className="flex flex-col items-center gap-3">
+          <div className="flex flex-col items-center gap-4">
             <Image
               src="/images/oneseek-hero.svg"
               alt="OneSeek"
-              width={320}
-              height={80}
-              className="h-14 w-auto object-contain text-foreground sm:h-16"
+              width={480}
+              height={120}
+              className="h-16 w-auto object-contain text-foreground sm:h-20"
               priority
             />
           </div>
-          <div className="w-full max-w-3xl">
+          <div className="w-full max-w-xl">
             <InputBox
               className="w-full shadow-2xl"
               responding={responding}
