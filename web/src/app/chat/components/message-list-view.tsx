@@ -129,6 +129,7 @@ export function MessageListView({
             />
           </li>
         )}
+        <ToolActivityStream />
         <div className="flex h-8 w-full shrink-0"></div>
       </ul>
       {responding && (noOngoingResearch || !ongoingResearchIsOpen) && (
@@ -216,25 +217,6 @@ function MessageListItem({
     return debateSessionIds.includes(messageId);
   }, [debateSessionIds, messageId]);
   if (message) {
-    const isToolOnlyMessage = Boolean(message.toolCalls?.length)
-      && (!message.content || message.content.trim() === "");
-    if (isToolOnlyMessage) {
-      return (
-        <motion.li
-          className="mt-6"
-          key={messageId}
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          style={{ transition: "all 0.2s ease-out" }}
-          transition={{
-            duration: 0.2,
-            ease: "easeOut",
-          }}
-        >
-          <ToolCallList message={message} />
-        </motion.li>
-      );
-    }
     if (
       message.role === "user" ||
       message.agent === "coordinator" ||
@@ -381,6 +363,27 @@ const TOOL_LABELS: Record<string, { sv: string; en: string }> = {
   start_debate_round: { sv: "Debattrunda", en: "Debate round" },
   collect_debate_votes: { sv: "Röstinsamling", en: "Collect votes" },
 };
+const TOOL_ACTIVITY_TEXT: Record<string, { sv: string; en: string }> = {
+  web_search: { sv: "Söker på webben", en: "Searching the web" },
+  crawl_tool: { sv: "Läser källor", en: "Reading sources" },
+  python_repl_tool: { sv: "Kör Python", en: "Running Python" },
+  local_search_tool: { sv: "Söker lokalt", en: "Searching locally" },
+  file_system_tool: { sv: "Hantera filer", en: "Working with files" },
+  bash_tool: { sv: "Kör kommandon", en: "Running commands" },
+  react_sandbox_tool: { sv: "Bygger preview", en: "Building preview" },
+  query_all_models: { sv: "Frågar modeller", en: "Querying models" },
+  query_model_in_round: { sv: "Frågar modell", en: "Querying model" },
+  query_gpt35: { sv: "Frågar GPT-3.5", en: "Querying GPT-3.5" },
+  query_gemini_flash: { sv: "Frågar Gemini", en: "Querying Gemini" },
+  query_deepseek: { sv: "Frågar DeepSeek", en: "Querying DeepSeek" },
+  query_grok4: { sv: "Frågar Grok-4", en: "Querying Grok-4" },
+  query_oneseek_local: { sv: "Frågar OneSeek", en: "Querying OneSeek" },
+  fact_check_responses: { sv: "Faktakollar", en: "Fact checking" },
+  run_meta_analysis: { sv: "Meta‑analyserar", en: "Running meta analysis" },
+  synthesize_optimal_answer: { sv: "Syntetiserar", en: "Synthesizing" },
+  start_debate_round: { sv: "Startar debatt", en: "Starting debate" },
+  collect_debate_votes: { sv: "Samlar röster", en: "Collecting votes" },
+};
 
 function formatToolLabel(name: string, isSwedish: boolean) {
   const match = TOOL_LABELS[name];
@@ -390,6 +393,14 @@ function formatToolLabel(name: string, isSwedish: boolean) {
   const cleaned = name.replace(/_tool$/, "").replace(/_/g, " ").trim();
   if (!cleaned) return name;
   return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+}
+
+function formatToolActivityText(name: string, isSwedish: boolean) {
+  const match = TOOL_ACTIVITY_TEXT[name];
+  if (match) {
+    return isSwedish ? match.sv : match.en;
+  }
+  return formatToolLabel(name, isSwedish);
 }
 
 function getToolDetail(toolCall: ToolCallRuntime) {
@@ -422,64 +433,92 @@ function getToolStatus(toolCall: ToolCallRuntime) {
   return "success";
 }
 
-function ToolCallList({ message }: { message: Message }) {
+function getToolStatusLabel(status: "running" | "success" | "error", isSwedish: boolean) {
+  if (status === "error") return isSwedish ? "Fel" : "Error";
+  if (status === "running") return isSwedish ? "Kör" : "Running";
+  return isSwedish ? "Klart" : "Done";
+}
+
+function ToolActivityStream() {
   const locale = useLocale();
   const isSwedish = locale.startsWith("sv");
-  const toolCalls = message.toolCalls ?? [];
-  if (toolCalls.length === 0) return null;
+  const responding = useStore((state) => state.responding);
+  const { messageIds, messages } = useStore((state) => ({
+    messageIds: state.messageIds,
+    messages: state.messages,
+  }));
+  const toolCalls = useMemo(() => {
+    let lastUserIndex = -1;
+    for (let i = messageIds.length - 1; i >= 0; i -= 1) {
+      const message = messages.get(messageIds[i]!);
+      if (message?.role === "user") {
+        lastUserIndex = i;
+        break;
+      }
+    }
+    const calls: ToolCallRuntime[] = [];
+    const seen = new Set<string>();
+    for (let i = messageIds.length - 1; i > lastUserIndex; i -= 1) {
+      const message = messages.get(messageIds[i]!);
+      if (!message?.toolCalls?.length) continue;
+      for (const toolCall of message.toolCalls) {
+        if (seen.has(toolCall.id)) continue;
+        seen.add(toolCall.id);
+        calls.push(toolCall);
+      }
+    }
+    return calls.reverse();
+  }, [messageIds, messages]);
+
+  if (!responding) return null;
+
+  const runningCalls = toolCalls.filter((toolCall) => getToolStatus(toolCall) === "running");
+  const currentTool = runningCalls.length > 0
+    ? runningCalls[runningCalls.length - 1]
+    : toolCalls[toolCalls.length - 1];
+  const status = currentTool ? getToolStatus(currentTool) : "running";
+  const detail = currentTool ? getToolDetail(currentTool) : null;
+  const activityText = currentTool
+    ? formatToolActivityText(currentTool.name ?? "tool", isSwedish)
+    : isSwedish
+      ? "Tänker..."
+      : "Thinking...";
+  const label = currentTool ? formatToolLabel(currentTool.name ?? "tool", isSwedish) : activityText;
+  const statusLabel = getToolStatusLabel(status, isSwedish);
+  const StatusIcon =
+    status === "running" ? Loader2 : status === "error" ? AlertTriangle : CheckCircle2;
+  const statusClass =
+    status === "running"
+      ? "text-amber-500"
+      : status === "error"
+        ? "text-destructive"
+        : "text-emerald-500";
+
+  if (!currentTool && !responding) return null;
 
   return (
-    <div className="w-full px-4">
-      <div className="rounded-2xl border border-border/60 bg-card/70 px-4 py-3">
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          <Wrench size={12} />
-          {isSwedish ? "Verktyg" : "Tools"}
+    <li className="px-4 py-2">
+      <Tooltip title={detail ? `${label}: ${detail}` : label}>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <StatusIcon
+            className={cn(
+              "h-3.5 w-3.5",
+              statusClass,
+              status === "running" && "animate-spin",
+            )}
+          />
+          <span className="font-medium">{activityText}</span>
+          {detail && (
+            <span className="truncate text-muted-foreground/80">
+              {detail}
+            </span>
+          )}
+          <span className="rounded-full border border-border/60 px-2 py-0.5 text-[10px] uppercase tracking-wide">
+            {statusLabel}
+          </span>
         </div>
-        <div className="mt-2 flex flex-col gap-2">
-          {toolCalls.map((toolCall) => {
-            const status = getToolStatus(toolCall);
-            const StatusIcon =
-              status === "running"
-                ? Loader2
-                : status === "error"
-                  ? AlertTriangle
-                  : CheckCircle2;
-            const statusClass =
-              status === "running"
-                ? "text-amber-500"
-                : status === "error"
-                  ? "text-destructive"
-                  : "text-emerald-500";
-            const label = formatToolLabel(toolCall.name ?? "tool", isSwedish);
-            const detail = getToolDetail(toolCall);
-            return (
-              <Tooltip
-                key={toolCall.id}
-                title={detail ? `${label}: ${detail}` : label}
-              >
-                <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-background/60 px-3 py-2 text-xs">
-                  <StatusIcon
-                    className={cn(
-                      "h-3.5 w-3.5",
-                      statusClass,
-                      status === "running" && "animate-spin",
-                    )}
-                  />
-                  <div className="flex min-w-0 flex-1 items-center gap-2">
-                    <span className="font-medium">{label}</span>
-                    {detail && (
-                      <span className="text-muted-foreground truncate">
-                        {detail}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </Tooltip>
-            );
-          })}
-        </div>
-      </div>
-    </div>
+      </Tooltip>
+    </li>
   );
 }
 
