@@ -415,12 +415,19 @@ function getToolDetail(toolCall: ToolCallRuntime) {
     args.path,
     args.model_key,
     args.display_name,
+    args.raw,
+    args.tool_input,
+    args.input,
   ];
   for (const candidate of candidates) {
     if (typeof candidate === "string" && candidate.trim()) {
       const trimmed = candidate.trim();
       return trimmed.length > 80 ? `${trimmed.slice(0, 77)}...` : trimmed;
     }
+  }
+  if (args._parsed && typeof args._parsed === "string" && args._parsed.trim()) {
+    const trimmed = args._parsed.trim();
+    return trimmed.length > 80 ? `${trimmed.slice(0, 77)}...` : trimmed;
   }
   return null;
 }
@@ -477,13 +484,46 @@ function getDomainLabel(url?: string) {
 
 function getWebSearchResults(result?: string) {
   if (!result) return [];
-  const parsed = parseJSON<SearchResult[]>(result, []);
-  if (!Array.isArray(parsed)) return [];
-  return parsed
-    .filter((item): item is Extract<SearchResult, { type: "page" }> => item.type === "page")
-    .filter((item) => Boolean(item.url))
-    .slice(0, 6)
-    .map((item) => ({ title: item.title || item.url, url: item.url }));
+  const parsed = parseJSON<unknown>(result, null);
+  const normalizeItems = (items: unknown[]) => {
+    return items
+      .map((item) => {
+        if (!item || typeof item !== "object") return null;
+        const record = item as Record<string, unknown>;
+        const url =
+          (typeof record.url === "string" && record.url) ||
+          (typeof record.link === "string" && record.link) ||
+          (typeof record.source === "string" && record.source);
+        const title =
+          (typeof record.title === "string" && record.title) ||
+          (typeof record.name === "string" && record.name) ||
+          (typeof record.snippet === "string" && record.snippet);
+        if (!url) return null;
+        return { title: title || url, url };
+      })
+      .filter((item): item is { title: string; url: string } => item != null)
+      .slice(0, 6);
+  };
+  if (Array.isArray(parsed)) {
+    return normalizeItems(parsed);
+  }
+  if (parsed && typeof parsed === "object") {
+    const record = parsed as Record<string, unknown>;
+    const candidates = [
+      record.results,
+      record.items,
+      record.data,
+      record.pages,
+      record.sources,
+    ];
+    for (const candidate of candidates) {
+      if (Array.isArray(candidate)) {
+        return normalizeItems(candidate);
+      }
+    }
+  }
+  const urls = Array.from(new Set(result.match(/https?:\/\/[^\s")]+/g) ?? []));
+  return urls.slice(0, 6).map((url) => ({ title: url, url }));
 }
 
 function ToolActivityTimeline() {
@@ -559,108 +599,95 @@ function ToolActivityTimeline() {
     : steps;
 
   return (
-    <li className="px-4 py-3">
-      <div className="rounded-2xl border border-border/60 bg-card/50 px-4 py-3 shadow-sm backdrop-blur">
-        <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          <Wrench size={12} />
-          {isSwedish ? "Verktygsflöde" : "Tool timeline"}
-        </div>
-        <div className="flex flex-col gap-4">
-          {timelineSteps.map((step, index) => {
-            const isLast = index === timelineSteps.length - 1;
-            const statusLabel = getToolStatusLabel(step.status, isSwedish);
-            const StatusIcon =
-              step.status === "running"
-                ? Loader2
-                : step.status === "error"
-                  ? AlertTriangle
-                  : CheckCircle2;
-            const statusClass =
-              step.status === "running"
-                ? "text-amber-500"
-                : step.status === "error"
-                  ? "text-destructive"
-                  : "text-emerald-500";
-            return (
-              <div key={step.id} className="relative flex gap-3">
-                <div className="relative flex flex-col items-center">
-                  <span
+    <li className="px-4 pb-3">
+      <div className="flex flex-col gap-4">
+        {timelineSteps.map((step, index) => {
+          const isLast = index === timelineSteps.length - 1;
+          const statusLabel = getToolStatusLabel(step.status, isSwedish);
+          const StatusIcon =
+            step.status === "running"
+              ? Loader2
+              : step.status === "error"
+                ? AlertTriangle
+                : CheckCircle2;
+          const statusClass =
+            step.status === "running"
+              ? "text-amber-500"
+              : step.status === "error"
+                ? "text-destructive"
+                : "text-emerald-500";
+          return (
+            <div key={step.id} className="relative flex gap-3">
+              <div className="relative flex flex-col items-center">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full border border-border/60 bg-background/70">
+                  <StatusIcon
                     className={cn(
-                      "flex h-6 w-6 items-center justify-center rounded-full border border-border/60 bg-background/80",
-                      step.status === "running" && "shadow-[0_0_0_2px_rgba(251,191,36,0.15)]",
+                      "h-3 w-3",
+                      statusClass,
+                      step.status === "running" && "animate-spin",
                     )}
-                  >
-                    <StatusIcon
-                      className={cn(
-                        "h-3.5 w-3.5",
-                        statusClass,
-                        step.status === "running" && "animate-spin",
-                      )}
-                    />
-                  </span>
-                  {!isLast && (
-                    <span className="mt-1 h-full w-px bg-border/60" />
-                  )}
-                </div>
-                <div className={cn("flex-1", !isLast && "pb-4")}>
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                      {step.label}
-                    </span>
-                    <span className="text-sm font-medium text-foreground">
-                      {step.activity}
-                    </span>
-                    <span className="rounded-full border border-border/60 px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                      {statusLabel}
-                    </span>
-                  </div>
-                  {step.detail && (
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      {step.detail}
-                    </div>
-                  )}
-                  {step.results && step.results.length > 0 && (
-                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      {step.results.map((result) => {
-                        const domainLabel = getDomainLabel(result.url);
-                        return (
-                          <a
-                            key={result.url}
-                            href={result.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex items-start gap-2 rounded-lg border border-border/60 bg-background/60 px-3 py-2 text-xs transition-colors hover:bg-background/80"
-                          >
-                            {domainLabel ? (
-                              <FavIcon url={result.url} title={result.title} className="mt-0.5" />
-                            ) : (
-                              <span className="mt-0.5 h-4 w-4 rounded-full bg-muted" />
-                            )}
-                            <div className="min-w-0">
-                              <div className="truncate font-medium text-foreground">
-                                {result.title}
-                              </div>
-                              <div className="truncate text-muted-foreground">
-                                {domainLabel || result.url}
-                              </div>
-                            </div>
-                          </a>
-                        );
-                      })}
-                    </div>
-                  )}
-                  {step.isThinking && step.status === "running" && (
-                    <div className="mt-2 text-xs text-muted-foreground">
-                      {isSwedish
-                        ? "Förbereder nästa steg..."
-                        : "Preparing next step..."}
-                    </div>
-                  )}
-                </div>
+                  />
+                </span>
+                {!isLast && <span className="mt-1 h-full w-px bg-border/60" />}
               </div>
-            );
-          })}
-        </div>
+              <div className={cn("flex-1", !isLast && "pb-4")}>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    {step.label}
+                  </span>
+                  <span className="text-sm font-medium text-foreground">
+                    {step.activity}
+                  </span>
+                  <span className="rounded-full border border-border/60 px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                    {statusLabel}
+                  </span>
+                </div>
+                {step.detail && (
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {step.detail}
+                  </div>
+                )}
+                {step.results && step.results.length > 0 && (
+                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {step.results.map((result) => {
+                      const domainLabel = getDomainLabel(result.url);
+                      return (
+                        <a
+                          key={result.url}
+                          href={result.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-start gap-2 rounded-lg border border-border/60 bg-background/60 px-3 py-2 text-xs transition-colors hover:bg-background/80"
+                        >
+                          {domainLabel ? (
+                            <FavIcon url={result.url} title={result.title} className="mt-0.5" />
+                          ) : (
+                            <span className="mt-0.5 h-4 w-4 rounded-full bg-muted" />
+                          )}
+                          <div className="min-w-0">
+                            <div className="truncate font-medium text-foreground">
+                              {result.title}
+                            </div>
+                            <div className="truncate text-muted-foreground">
+                              {domainLabel || result.url}
+                            </div>
+                          </div>
+                        </a>
+                      );
+                    })}
+                  </div>
+                )}
+                {step.isThinking && step.status === "running" && (
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    {isSwedish
+                      ? "Förbereder nästa steg..."
+                      : "Preparing next step..."}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </li>
   );
