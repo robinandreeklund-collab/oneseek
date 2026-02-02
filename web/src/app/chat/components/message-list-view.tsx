@@ -19,6 +19,7 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { LoadingAnimation } from "~/components/deer-flow/loading-animation";
+import { CitationList } from "~/components/deer-flow/citation";
 import { FavIcon } from "~/components/deer-flow/fav-icon";
 import { Markdown } from "~/components/deer-flow/markdown";
 import { RainbowText } from "~/components/deer-flow/rainbow-text";
@@ -205,6 +206,8 @@ function MessageListItem({
   ) => void;
   onToggleSidebar?: () => void;
 }) {
+  const locale = useLocale();
+  const isSwedish = locale.startsWith("sv");
   const message = useMessage(messageId);
   const researchIds = useStore((state) => state.researchIds);
   const coderSessionIds = useStore((state) => state.coderSessionIds);
@@ -293,6 +296,15 @@ function MessageListItem({
                 >
                   {message?.content}
                 </Markdown>
+                {message.role !== "user" &&
+                  message.citations &&
+                  message.citations.length > 0 && (
+                    <CitationList
+                      citations={message.citations}
+                      title={isSwedish ? "Källor" : "Sources"}
+                      className="mt-4"
+                    />
+                  )}
               </div>
             </MessageBubble>
           </div>
@@ -470,6 +482,7 @@ type ToolTimelineStep = {
   detail?: string;
   results?: Array<{ title: string; url: string }>;
   isThinking?: boolean;
+  progressText?: string;
 };
 
 function getDomainLabel(url?: string) {
@@ -526,6 +539,22 @@ function getWebSearchResults(result?: string) {
   return urls.slice(0, 6).map((url) => ({ title: url, url }));
 }
 
+function getCrawlResults(toolCall: ToolCallRuntime) {
+  const candidates: string[] = [];
+  if (toolCall.args && typeof toolCall.args === "object") {
+    const args = toolCall.args as Record<string, unknown>;
+    if (typeof args.url === "string") candidates.push(args.url);
+  }
+  if (toolCall.result) {
+    const urls = toolCall.result.match(/https?:\/\/[^\s")]+/g);
+    if (urls) {
+      candidates.push(...urls);
+    }
+  }
+  const unique = Array.from(new Set(candidates));
+  return unique.slice(0, 3).map((url) => ({ title: url, url }));
+}
+
 function ToolActivityTimeline() {
   const locale = useLocale();
   const isSwedish = locale.startsWith("sv");
@@ -560,6 +589,7 @@ function ToolActivityTimeline() {
   }, [messageIds, messages]);
 
   const steps = useMemo<ToolTimelineStep[]>(() => {
+    const crawlCalls = toolCalls.filter((toolCall) => toolCall.name === "crawl_tool");
     return toolCalls.map((toolCall) => {
       const status = getToolStatus(toolCall);
       const label = formatToolLabel(toolCall.name ?? "tool", isSwedish);
@@ -568,7 +598,18 @@ function ToolActivityTimeline() {
       const results =
         toolCall.name === "web_search"
           ? getWebSearchResults(toolCall.result)
-          : undefined;
+          : toolCall.name === "crawl_tool"
+            ? getCrawlResults(toolCall)
+            : undefined;
+      let progressText: string | undefined;
+      if (toolCall.name === "crawl_tool" && crawlCalls.length > 0) {
+        const index = crawlCalls.findIndex((call) => call.id === toolCall.id);
+        if (index >= 0) {
+          progressText = isSwedish
+            ? `Hämtar ${index + 1}/${crawlCalls.length} källor...`
+            : `Fetching ${index + 1}/${crawlCalls.length} sources...`;
+        }
+      }
       return {
         id: toolCall.id,
         name: toolCall.name ?? "tool",
@@ -577,6 +618,7 @@ function ToolActivityTimeline() {
         activity,
         detail,
         results,
+        progressText,
       };
     });
   }, [toolCalls, isSwedish]);
@@ -645,6 +687,11 @@ function ToolActivityTimeline() {
                 {step.detail && (
                   <div className="mt-1 text-xs text-muted-foreground">
                     {step.detail}
+                  </div>
+                )}
+                {step.progressText && (
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {step.progressText}
                   </div>
                 )}
                 {step.results && step.results.length > 0 && (
