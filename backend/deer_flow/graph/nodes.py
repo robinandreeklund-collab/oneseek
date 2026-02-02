@@ -10,7 +10,7 @@ from uuid import uuid4
 from functools import partial
 from typing import Annotated, Any, Literal
 
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage, BaseMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 # MCP adapters import moved to conditional block where it's used
@@ -186,6 +186,38 @@ def extract_think_and_content(
     think_content = extract_think_content(content)
     cleaned_content = strip_think_tags(content, expect_json=expect_json)
     return cleaned_content, think_content
+
+
+def _stream_llm_response(
+    llm: Any,
+    messages: list[dict[str, Any]] | list[BaseMessage],
+    config: RunnableConfig,
+) -> tuple[str, str | None, bool]:
+    """Stream LLM response with fallback to invoke."""
+    full_response = ""
+    message_id = None
+    streamed = False
+
+    try:
+        for chunk in llm.stream(messages, config=config):
+            streamed = True
+            if message_id is None and getattr(chunk, "id", None):
+                message_id = chunk.id
+            token = getattr(chunk, "content", None)
+            if token:
+                full_response += token
+    except Exception as exc:
+        logger.warning(f"Streaming failed, falling back to invoke: {exc}")
+        full_response = ""
+        message_id = None
+        streamed = False
+
+    if not streamed:
+        response = llm.invoke(messages, config=config)
+        full_response = get_message_content(response) or ""
+        message_id = getattr(response, "id", None)
+
+    return full_response, message_id, streamed
 
 
 def _parse_json_content(content: str) -> dict[str, Any]:
@@ -668,14 +700,9 @@ def planner_node(
             goto="reporter"
         )
 
-    full_response = ""
-    if AGENT_LLM_MAP["planner"] == "basic" and not configurable.enable_deep_thinking:
-        response = llm.invoke(messages)
-        full_response = get_message_content(response) or ""
-    else:
-        response = llm.stream(messages)
-        for chunk in response:
-            full_response += chunk.content
+    full_response, message_id, streamed = _stream_llm_response(
+        llm, messages, config
+    )
     logger.debug(f"Current state messages: {state['messages']}")
     logger.info(f"Planner response: {full_response}")
 
@@ -721,14 +748,27 @@ def planner_node(
 
     # Validate and fix plan to ensure web search requirements are met
     if isinstance(curr_plan, dict):
-        curr_plan = validate_and_fix_plan(curr_plan, configurable.enforce_web_search, configurable.enable_web_search)
+        curr_plan = validate_and_fix_plan(
+            curr_plan, configurable.enforce_web_search, configurable.enable_web_search
+        )
+
+    if not think_content and isinstance(curr_plan, dict):
+        thought = curr_plan.get("thought")
+        if isinstance(thought, str) and thought.strip():
+            think_content = thought.strip()
 
     planner_message_kwargs = {"reasoning_content": think_content} if think_content else {}
-    planner_message = AIMessage(
-        content=normalized_response,
-        name="planner",
-        additional_kwargs=planner_message_kwargs,
-    )
+    if streamed and message_id:
+        planner_message_kwargs["skip_frontend_content"] = True
+
+    planner_message_args = {
+        "content": normalized_response,
+        "name": "planner",
+        "additional_kwargs": planner_message_kwargs,
+    }
+    if message_id:
+        planner_message_args["id"] = message_id
+    planner_message = AIMessage(**planner_message_args)
 
     if isinstance(curr_plan, dict) and curr_plan.get("has_enough_context"):
         logger.info("Planner response has enough context.")
@@ -792,14 +832,9 @@ def debate_planner_node(
     
     # Invoke/stream LLM to get debate plan (EXACT match to planner_node logic)
     # CRITICAL: Use the same invoke/stream logic as planner_node for frontend streaming
-    full_response = ""
-    if AGENT_LLM_MAP.get("debate_planner") == "basic" and not configurable.enable_deep_thinking:
-        response = llm.invoke(messages)
-        full_response = get_message_content(response) or ""
-    else:
-        response = llm.stream(messages)
-        for chunk in response:
-            full_response += chunk.content
+    full_response, message_id, streamed = _stream_llm_response(
+        llm, messages, config
+    )
     
     logger.info(f"Debate planner response: {full_response}")
     
@@ -834,7 +869,9 @@ def debate_planner_node(
     
     # Validate and fix plan to ensure web search requirements are met (matching planner_node)
     if isinstance(curr_plan, dict):
-        curr_plan = validate_and_fix_plan(curr_plan, configurable.enforce_web_search, configurable.enable_web_search)
+        curr_plan = validate_and_fix_plan(
+            curr_plan, configurable.enforce_web_search, configurable.enable_web_search
+        )
         # Enforce code planner rule: never use research steps
         steps = curr_plan.get("steps", [])
         for step in steps:
@@ -850,20 +887,27 @@ def debate_planner_node(
         curr_plan["steps"] = steps
     
     # Check if plan has enough context (matching planner_node)
+    if not think_content and isinstance(curr_plan, dict):
+        thought = curr_plan.get("thought")
+        if isinstance(thought, str) and thought.strip():
+            think_content = thought.strip()
+
     if isinstance(curr_plan, dict) and curr_plan.get("has_enough_context"):
         logger.info("Debate planner response has enough context.")
         new_plan = Plan.model_validate(curr_plan)
+        planner_message_kwargs = {"reasoning_content": think_content} if think_content else {}
+        if streamed and message_id:
+            planner_message_kwargs["skip_frontend_content"] = True
+        planner_message_args = {
+            "content": json.dumps(curr_plan, ensure_ascii=False, indent=2),
+            "name": "planner",
+            "additional_kwargs": planner_message_kwargs,
+        }
+        if message_id:
+            planner_message_args["id"] = message_id
         return Command(
             update={
-                "messages": [
-                    AIMessage(
-                        content=json.dumps(curr_plan, ensure_ascii=False, indent=2),
-                        name="planner",
-                        additional_kwargs={
-                            "reasoning_content": think_content
-                        } if think_content else {},
-                    )
-                ],
+                "messages": [AIMessage(**planner_message_args)],
                 "current_plan": new_plan,
                 "plan_source": "code_planner",
                 **preserve_state_meta_fields(state),
@@ -877,17 +921,20 @@ def debate_planner_node(
     
     # Return the plan to human_feedback (same as planner_node)
     # IMPORTANT: Use name="planner" so frontend recognizes it and displays the plan card
+    planner_message_kwargs = {"reasoning_content": think_content} if think_content else {}
+    if streamed and message_id:
+        planner_message_kwargs["skip_frontend_content"] = True
+    planner_message_args = {
+        "content": full_response,
+        "name": "planner",
+        "additional_kwargs": planner_message_kwargs,
+    }
+    if message_id:
+        planner_message_args["id"] = message_id
+
     return Command(
         update={
-            "messages": [
-                AIMessage(
-                    content=full_response,
-                    name="planner",
-                    additional_kwargs={
-                        "reasoning_content": think_content
-                    } if think_content else {},
-                )
-            ],
+            "messages": [AIMessage(**planner_message_args)],
             "current_plan": full_response,  # Pass as JSON string like planner does
             "plan_source": "code_planner",
             **preserve_state_meta_fields(state),
@@ -921,14 +968,9 @@ def code_planner_node(
         llm = configure_llm_with_thinking(llm, enable_thinking=False)
     
     # Invoke/stream LLM to get code plan (EXACT match to planner_node logic)
-    full_response = ""
-    if AGENT_LLM_MAP.get("code_planner") == "basic" and not configurable.enable_deep_thinking:
-        response = llm.invoke(messages)
-        full_response = get_message_content(response) or ""
-    else:
-        response = llm.stream(messages)
-        for chunk in response:
-            full_response += chunk.content
+    full_response, message_id, streamed = _stream_llm_response(
+        llm, messages, config
+    )
     
     logger.info(f"Code planner response: {full_response}")
     
@@ -963,23 +1005,32 @@ def code_planner_node(
     
     # Validate and fix plan to ensure web search requirements are met (matching planner_node)
     if isinstance(curr_plan, dict):
-        curr_plan = validate_and_fix_plan(curr_plan, configurable.enforce_web_search, configurable.enable_web_search)
+        curr_plan = validate_and_fix_plan(
+            curr_plan, configurable.enforce_web_search, configurable.enable_web_search
+        )
     
     # Check if plan has enough context (matching planner_node)
+    if not think_content and isinstance(curr_plan, dict):
+        thought = curr_plan.get("thought")
+        if isinstance(thought, str) and thought.strip():
+            think_content = thought.strip()
+
     if isinstance(curr_plan, dict) and curr_plan.get("has_enough_context"):
         logger.info("Code planner response has enough context.")
         new_plan = Plan.model_validate(curr_plan)
+        planner_message_kwargs = {"reasoning_content": think_content} if think_content else {}
+        if streamed and message_id:
+            planner_message_kwargs["skip_frontend_content"] = True
+        planner_message_args = {
+            "content": json.dumps(curr_plan, ensure_ascii=False, indent=2),
+            "name": "planner",
+            "additional_kwargs": planner_message_kwargs,
+        }
+        if message_id:
+            planner_message_args["id"] = message_id
         return Command(
             update={
-                "messages": [
-                    AIMessage(
-                        content=json.dumps(curr_plan, ensure_ascii=False, indent=2),
-                        name="planner",
-                        additional_kwargs={
-                            "reasoning_content": think_content
-                        } if think_content else {},
-                    )
-                ],
+                "messages": [AIMessage(**planner_message_args)],
                 "current_plan": new_plan,
                 "plan_source": "debate_planner",
                 **preserve_state_meta_fields(state),
@@ -993,17 +1044,20 @@ def code_planner_node(
     
     # Return the plan to human_feedback (same as planner_node)
     # IMPORTANT: Use name="planner" so frontend recognizes it and displays the plan card
+    planner_message_kwargs = {"reasoning_content": think_content} if think_content else {}
+    if streamed and message_id:
+        planner_message_kwargs["skip_frontend_content"] = True
+    planner_message_args = {
+        "content": full_response,
+        "name": "planner",
+        "additional_kwargs": planner_message_kwargs,
+    }
+    if message_id:
+        planner_message_args["id"] = message_id
+
     return Command(
         update={
-            "messages": [
-                AIMessage(
-                    content=full_response,
-                    name="planner",
-                    additional_kwargs={
-                        "reasoning_content": think_content
-                    } if think_content else {},
-                )
-            ],
+            "messages": [AIMessage(**planner_message_args)],
             "current_plan": full_response,  # Pass as JSON string like planner does
             "plan_source": "debate_planner",
             **preserve_state_meta_fields(state),
