@@ -249,7 +249,9 @@ const PlanCard = React.memo(({ message }: { message: Message }) => {
     return parseJSON(message.content ?? "", {});
   }, [message.content]);
 
-  const hasContent = Boolean(message.content && message.content.trim() !== "");
+  const hasContent = Boolean(
+    plan.title || plan.thought || (plan.steps && plan.steps.length > 0),
+  );
 
   return (
     <motion.div
