@@ -91,8 +91,6 @@ export function MessagesBlock({ className }: { className?: string }) {
     fastForwardReplay(!fastForwarding);
   }, [fastForwarding]);
 
-  const heroPills = ["DeepSearch", "Skapa bild", "Senaste nytt", "Röstanalys"];
-  
   // Handle initial query parameter from landing page
   useEffect(() => {
     const query = searchParams?.get("q");
@@ -114,7 +112,8 @@ export function MessagesBlock({ className }: { className?: string }) {
           {!isReplay && (
             <div className="relative flex shrink-0 pb-4">
               <InputBox
-                className="w-full"
+                className="mx-auto w-full max-w-[880px]"
+                variant="compact"
                 responding={responding}
                 feedback={feedback}
                 onSend={handleSend}
@@ -126,42 +125,26 @@ export function MessagesBlock({ className }: { className?: string }) {
         </>
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-10">
-          <div className="flex flex-col items-center gap-3">
+          <div className="flex flex-col items-center gap-4">
             <Image
-              src="/oneseek-logo.svg"
+              src="/images/oneseek-hero.svg"
               alt="OneSeek"
-              width={72}
-              height={72}
-              className="h-18 w-18 object-contain"
+              width={480}
+              height={120}
+              className="h-16 w-auto object-contain text-foreground sm:h-20"
               priority
             />
-            <h3 className="text-center text-2xl font-semibold">OneSeek</h3>
-            <p className="text-muted-foreground text-center text-base">
-              Vad vill du att OneSeek ska veta?
-            </p>
           </div>
-          <div className="w-full max-w-3xl">
+          <div className="w-full max-w-[880px]">
             <InputBox
-              className="w-full shadow-2xl"
+              className="w-full max-w-[880px]"
+              variant="default"
               responding={responding}
               feedback={feedback}
               onSend={handleSend}
               onCancel={handleCancel}
               onRemoveFeedback={handleRemoveFeedback}
             />
-            <div className="mt-3 flex flex-wrap justify-center gap-2 text-sm text-muted-foreground">
-              {heroPills.map((pill) => (
-                <Button
-                  key={pill}
-                  type="button"
-                  variant="outline"
-                  className="rounded-full border-border/70 bg-background/60 px-3 py-1 text-xs hover:bg-background"
-                  onClick={() => handleSend(pill)}
-                >
-                  {pill}
-                </Button>
-              ))}
-            </div>
           </div>
         </div>
       )}

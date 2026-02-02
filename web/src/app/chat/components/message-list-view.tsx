@@ -4,17 +4,23 @@
 import { LoadingOutlined } from "@ant-design/icons";
 import { motion } from "framer-motion";
 import {
+  AlertTriangle,
+  CheckCircle2,
   Download,
   Headphones,
   ChevronDown,
   ChevronRight,
   Lightbulb,
+  Loader2,
   Wrench,
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import React, { useCallback, useMemo, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { LoadingAnimation } from "~/components/deer-flow/loading-animation";
+import { CitationList } from "~/components/deer-flow/citation";
+import { FavIcon } from "~/components/deer-flow/fav-icon";
 import { Markdown } from "~/components/deer-flow/markdown";
 import { RainbowText } from "~/components/deer-flow/rainbow-text";
 import { RollingText } from "~/components/deer-flow/rolling-text";
@@ -37,7 +43,7 @@ import {
   CollapsibleTrigger,
 } from "~/components/ui/collapsible";
 import { isPlannerAgent } from "~/core/messages";
-import type { Message, Option } from "~/core/messages";
+import type { Message, Option, ToolCallRuntime } from "~/core/messages";
 import {
   closeResearch,
   openResearch,
@@ -126,6 +132,7 @@ export function MessageListView({
             />
           </li>
         )}
+        <ToolActivityTimeline />
         <div className="flex h-8 w-full shrink-0"></div>
       </ul>
       {responding && (noOngoingResearch || !ongoingResearchIsOpen) && (
@@ -199,6 +206,8 @@ function MessageListItem({
   ) => void;
   onToggleSidebar?: () => void;
 }) {
+  const locale = useLocale();
+  const isSwedish = locale.startsWith("sv");
   const message = useMessage(messageId);
   const researchIds = useStore((state) => state.researchIds);
   const coderSessionIds = useStore((state) => state.coderSessionIds);
@@ -287,6 +296,15 @@ function MessageListItem({
                 >
                   {message?.content}
                 </Markdown>
+                {message.role !== "user" &&
+                  message.citations &&
+                  message.citations.length > 0 && (
+                    <CitationList
+                      citations={message.citations}
+                      title={isSwedish ? "Källor" : "Sources"}
+                      className="mt-4"
+                    />
+                  )}
               </div>
             </MessageBubble>
           </div>
@@ -335,6 +353,390 @@ function MessageBubble({
     >
       {children}
     </div>
+  );
+}
+
+const TOOL_LABELS: Record<string, { sv: string; en: string }> = {
+  web_search: { sv: "Webbsökning", en: "Web search" },
+  crawl_tool: { sv: "Läser sida", en: "Read page" },
+  python_repl_tool: { sv: "Python", en: "Python" },
+  local_search_tool: { sv: "Lokalsök", en: "Local search" },
+  file_system_tool: { sv: "Filer", en: "Files" },
+  bash_tool: { sv: "Terminal", en: "Terminal" },
+  react_sandbox_tool: { sv: "React-sandbox", en: "React sandbox" },
+  query_all_models: { sv: "Alla modeller", en: "All models" },
+  query_model_in_round: { sv: "Modell i runda", en: "Model in round" },
+  query_gpt35: { sv: "GPT-3.5", en: "GPT-3.5" },
+  query_gemini_flash: { sv: "Gemini 2.5 Flash", en: "Gemini 2.5 Flash" },
+  query_deepseek: { sv: "DeepSeek", en: "DeepSeek" },
+  query_grok4: { sv: "Grok-4", en: "Grok-4" },
+  query_oneseek_local: { sv: "OneSeek", en: "OneSeek" },
+  fact_check_responses: { sv: "Faktakoll", en: "Fact check" },
+  run_meta_analysis: { sv: "Meta-analys", en: "Meta analysis" },
+  synthesize_optimal_answer: { sv: "Syntes", en: "Synthesis" },
+  start_debate_round: { sv: "Debattrunda", en: "Debate round" },
+  collect_debate_votes: { sv: "Röstinsamling", en: "Collect votes" },
+};
+const TOOL_ACTIVITY_TEXT: Record<string, { sv: string; en: string }> = {
+  web_search: { sv: "Söker på webben", en: "Searching the web" },
+  crawl_tool: { sv: "Läser källor", en: "Reading sources" },
+  python_repl_tool: { sv: "Kör Python", en: "Running Python" },
+  local_search_tool: { sv: "Söker lokalt", en: "Searching locally" },
+  file_system_tool: { sv: "Hantera filer", en: "Working with files" },
+  bash_tool: { sv: "Kör kommandon", en: "Running commands" },
+  react_sandbox_tool: { sv: "Bygger preview", en: "Building preview" },
+  query_all_models: { sv: "Frågar modeller", en: "Querying models" },
+  query_model_in_round: { sv: "Frågar modell", en: "Querying model" },
+  query_gpt35: { sv: "Frågar GPT-3.5", en: "Querying GPT-3.5" },
+  query_gemini_flash: { sv: "Frågar Gemini", en: "Querying Gemini" },
+  query_deepseek: { sv: "Frågar DeepSeek", en: "Querying DeepSeek" },
+  query_grok4: { sv: "Frågar Grok-4", en: "Querying Grok-4" },
+  query_oneseek_local: { sv: "Frågar OneSeek", en: "Querying OneSeek" },
+  fact_check_responses: { sv: "Faktakollar", en: "Fact checking" },
+  run_meta_analysis: { sv: "Meta‑analyserar", en: "Running meta analysis" },
+  synthesize_optimal_answer: { sv: "Syntetiserar", en: "Synthesizing" },
+  start_debate_round: { sv: "Startar debatt", en: "Starting debate" },
+  collect_debate_votes: { sv: "Samlar röster", en: "Collecting votes" },
+};
+
+function formatToolLabel(name: string, isSwedish: boolean) {
+  const match = TOOL_LABELS[name];
+  if (match) {
+    return isSwedish ? match.sv : match.en;
+  }
+  const cleaned = name.replace(/_tool$/, "").replace(/_/g, " ").trim();
+  if (!cleaned) return name;
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+}
+
+function formatToolActivityText(name: string, isSwedish: boolean) {
+  const match = TOOL_ACTIVITY_TEXT[name];
+  if (match) {
+    return isSwedish ? match.sv : match.en;
+  }
+  return formatToolLabel(name, isSwedish);
+}
+
+function getToolDetail(toolCall: ToolCallRuntime) {
+  if (!toolCall.args || typeof toolCall.args !== "object") return null;
+  const args = toolCall.args as Record<string, unknown>;
+  const candidates = [
+    args.query,
+    args.url,
+    args.keywords,
+    args.path,
+    args.model_key,
+    args.display_name,
+    args.raw,
+    args.tool_input,
+    args.input,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      const trimmed = candidate.trim();
+      return trimmed.length > 80 ? `${trimmed.slice(0, 77)}...` : trimmed;
+    }
+  }
+  if (args._parsed && typeof args._parsed === "string" && args._parsed.trim()) {
+    const trimmed = args._parsed.trim();
+    return trimmed.length > 80 ? `${trimmed.slice(0, 77)}...` : trimmed;
+  }
+  return null;
+}
+
+function getToolStatus(toolCall: ToolCallRuntime) {
+  const status = toolCall.status?.toLowerCase();
+  if (status === "error" || status === "failed") return "error";
+  if (status === "running" || status === "pending" || status === "in_progress") {
+    return "running";
+  }
+  if (toolCall.result === undefined) return "running";
+  return "success";
+}
+
+function getToolStatusLabel(status: "running" | "success" | "error", isSwedish: boolean) {
+  if (status === "error") return isSwedish ? "Fel" : "Error";
+  if (status === "running") return isSwedish ? "Kör" : "Running";
+  return isSwedish ? "Klart" : "Done";
+}
+
+type SearchResult =
+  | {
+    type: "page";
+    title: string;
+    url: string;
+    content?: string;
+  }
+  | {
+    type: "image";
+    image_url: string;
+    image_description?: string;
+  };
+
+type ToolTimelineStep = {
+  id: string;
+  name: string;
+  status: "running" | "success" | "error";
+  label: string;
+  activity: string;
+  detail?: string;
+  results?: Array<{ title: string; url: string }>;
+  isThinking?: boolean;
+  progressText?: string;
+};
+
+function getDomainLabel(url?: string) {
+  if (!url) return "";
+  try {
+    const hostname = new URL(url).hostname;
+    return hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+function getWebSearchResults(result?: string) {
+  if (!result) return [];
+  const parsed = parseJSON<unknown>(result, null);
+  const normalizeItems = (items: unknown[]) => {
+    return items
+      .map((item) => {
+        if (!item || typeof item !== "object") return null;
+        const record = item as Record<string, unknown>;
+        const url =
+          (typeof record.url === "string" && record.url) ||
+          (typeof record.link === "string" && record.link) ||
+          (typeof record.source === "string" && record.source);
+        const title =
+          (typeof record.title === "string" && record.title) ||
+          (typeof record.name === "string" && record.name) ||
+          (typeof record.snippet === "string" && record.snippet);
+        if (!url) return null;
+        return { title: title || url, url };
+      })
+      .filter((item): item is { title: string; url: string } => item != null)
+      .slice(0, 6);
+  };
+  if (Array.isArray(parsed)) {
+    return normalizeItems(parsed);
+  }
+  if (parsed && typeof parsed === "object") {
+    const record = parsed as Record<string, unknown>;
+    const candidates = [
+      record.results,
+      record.items,
+      record.data,
+      record.pages,
+      record.sources,
+    ];
+    for (const candidate of candidates) {
+      if (Array.isArray(candidate)) {
+        return normalizeItems(candidate);
+      }
+    }
+  }
+  const urls = Array.from(new Set(result.match(/https?:\/\/[^\s")]+/g) ?? []));
+  return urls.slice(0, 6).map((url) => ({ title: url, url }));
+}
+
+function getCrawlResults(toolCall: ToolCallRuntime) {
+  const candidates: string[] = [];
+  if (toolCall.args && typeof toolCall.args === "object") {
+    const args = toolCall.args as Record<string, unknown>;
+    if (typeof args.url === "string") candidates.push(args.url);
+  }
+  if (toolCall.result) {
+    const urls = toolCall.result.match(/https?:\/\/[^\s")]+/g);
+    if (urls) {
+      candidates.push(...urls);
+    }
+  }
+  const unique = Array.from(new Set(candidates));
+  return unique.slice(0, 3).map((url) => ({ title: url, url }));
+}
+
+function ToolActivityTimeline() {
+  const locale = useLocale();
+  const isSwedish = locale.startsWith("sv");
+  const responding = useStore((state) => state.responding);
+  const { messageIds, messages } = useStore(
+    useShallow((state) => ({
+      messageIds: state.messageIds,
+      messages: state.messages,
+    })),
+  );
+  const toolCalls = useMemo(() => {
+    let lastUserIndex = -1;
+    for (let i = messageIds.length - 1; i >= 0; i -= 1) {
+      const message = messages.get(messageIds[i]!);
+      if (message?.role === "user") {
+        lastUserIndex = i;
+        break;
+      }
+    }
+    const calls: ToolCallRuntime[] = [];
+    const seen = new Set<string>();
+    for (let i = messageIds.length - 1; i > lastUserIndex; i -= 1) {
+      const message = messages.get(messageIds[i]!);
+      if (!message?.toolCalls?.length) continue;
+      for (const toolCall of message.toolCalls) {
+        if (seen.has(toolCall.id)) continue;
+        seen.add(toolCall.id);
+        calls.push(toolCall);
+      }
+    }
+    return calls.reverse();
+  }, [messageIds, messages]);
+
+  const steps = useMemo<ToolTimelineStep[]>(() => {
+    const crawlCalls = toolCalls.filter((toolCall) => toolCall.name === "crawl_tool");
+    return toolCalls.map((toolCall) => {
+      const status = getToolStatus(toolCall);
+      const label = formatToolLabel(toolCall.name ?? "tool", isSwedish);
+      const activity = formatToolActivityText(toolCall.name ?? "tool", isSwedish);
+      const detail = getToolDetail(toolCall) ?? undefined;
+      const results =
+        toolCall.name === "web_search"
+          ? getWebSearchResults(toolCall.result)
+          : toolCall.name === "crawl_tool"
+            ? getCrawlResults(toolCall)
+            : undefined;
+      let progressText: string | undefined;
+      if (toolCall.name === "crawl_tool" && crawlCalls.length > 0) {
+        const index = crawlCalls.findIndex((call) => call.id === toolCall.id);
+        if (index >= 0) {
+          progressText = isSwedish
+            ? `Hämtar ${index + 1}/${crawlCalls.length} källor...`
+            : `Fetching ${index + 1}/${crawlCalls.length} sources...`;
+        }
+      }
+      return {
+        id: toolCall.id,
+        name: toolCall.name ?? "tool",
+        status,
+        label,
+        activity,
+        detail,
+        results,
+        progressText,
+      };
+    });
+  }, [toolCalls, isSwedish]);
+
+  const shouldShow = responding || steps.some((step) => step.status === "running");
+  if (!shouldShow) return null;
+
+  const timelineSteps: ToolTimelineStep[] = responding
+    ? [
+        {
+          id: "thinking",
+          name: "thinking",
+          status: steps.length > 0 ? "success" : "running",
+          label: isSwedish ? "Tänker" : "Thinking",
+          activity: isSwedish ? "Tänker..." : "Thinking...",
+          isThinking: true,
+        },
+        ...steps,
+      ]
+    : steps;
+
+  return (
+    <li className="px-4 pb-3">
+      <div className="flex flex-col gap-4">
+        {timelineSteps.map((step, index) => {
+          const isLast = index === timelineSteps.length - 1;
+          const statusLabel = getToolStatusLabel(step.status, isSwedish);
+          const StatusIcon =
+            step.status === "running"
+              ? Loader2
+              : step.status === "error"
+                ? AlertTriangle
+                : CheckCircle2;
+          const statusClass =
+            step.status === "running"
+              ? "text-amber-500"
+              : step.status === "error"
+                ? "text-destructive"
+                : "text-emerald-500";
+          return (
+            <div key={step.id} className="relative flex gap-3">
+              <div className="relative flex flex-col items-center">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full border border-border/60 bg-background/70">
+                  <StatusIcon
+                    className={cn(
+                      "h-3 w-3",
+                      statusClass,
+                      step.status === "running" && "animate-spin",
+                    )}
+                  />
+                </span>
+                {!isLast && <span className="mt-1 h-full w-px bg-border/60" />}
+              </div>
+              <div className={cn("flex-1", !isLast && "pb-4")}>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    {step.label}
+                  </span>
+                  <span className="text-sm font-medium text-foreground">
+                    {step.activity}
+                  </span>
+                  <span className="rounded-full border border-border/60 px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                    {statusLabel}
+                  </span>
+                </div>
+                {step.detail && (
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {step.detail}
+                  </div>
+                )}
+                {step.progressText && (
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {step.progressText}
+                  </div>
+                )}
+                {step.results && step.results.length > 0 && (
+                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {step.results.map((result) => {
+                      const domainLabel = getDomainLabel(result.url);
+                      return (
+                        <a
+                          key={result.url}
+                          href={result.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-start gap-2 rounded-lg border border-border/60 bg-background/60 px-3 py-2 text-xs transition-colors hover:bg-background/80"
+                        >
+                          {domainLabel ? (
+                            <FavIcon url={result.url} title={result.title} className="mt-0.5" />
+                          ) : (
+                            <span className="mt-0.5 h-4 w-4 rounded-full bg-muted" />
+                          )}
+                          <div className="min-w-0">
+                            <div className="truncate font-medium text-foreground">
+                              {result.title}
+                            </div>
+                            <div className="truncate text-muted-foreground">
+                              {domainLabel || result.url}
+                            </div>
+                          </div>
+                        </a>
+                      );
+                    })}
+                  </div>
+                )}
+                {step.isThinking && step.status === "running" && (
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    {isSwedish
+                      ? "Förbereder nästa steg..."
+                      : "Preparing next step..."}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </li>
   );
 }
 

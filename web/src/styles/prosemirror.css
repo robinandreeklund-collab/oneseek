@@ -2,6 +2,18 @@
   max-width: inherit;
 }
 
+.grok-input .ProseMirror {
+  line-height: 1.6;
+}
+
+.grok-input .ProseMirror p {
+  margin: 0;
+}
+
+.grok-input .ProseMirror .is-editor-empty:first-child::before {
+  transform: translateY(1px);
+}
+
 .prose.inline-editor * {
   margin: 0;
 }

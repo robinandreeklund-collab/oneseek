@@ -84,10 +84,11 @@ export function ReportStyleDialog() {
       >
         <DialogTrigger asChild>
           <Button
-            className="!border-brand !text-brand rounded-2xl"
+            className="h-7 rounded-full border-border/60 bg-background/50 px-3 text-[11px] text-muted-foreground hover:bg-background/70 hover:text-foreground"
             variant="outline"
           >
-            <CurrentIcon className="h-4 w-4" /> {t(currentStyleConfig.labelKey)}
+            <CurrentIcon className="h-3.5 w-3.5" />
+            {t(currentStyleConfig.labelKey)}
           </Button>
         </DialogTrigger>
       </Tooltip>

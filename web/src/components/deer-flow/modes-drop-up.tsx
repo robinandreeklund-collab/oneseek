@@ -85,7 +85,7 @@ export function ModesDropUp() {
         variant="outline"
         size="sm"
         className={cn(
-          "h-8 gap-1.5 rounded-xl text-xs",
+          "h-7 gap-1.5 rounded-full border-border/60 bg-background/50 px-3 text-[11px] text-muted-foreground hover:bg-background/70 hover:text-foreground",
           activeModesCount > 0 && "!border-brand !text-brand",
         )}
         onClick={() => setIsOpen(!isOpen)}

@@ -30,7 +30,7 @@ export function TrendingQuestionsDropUp({
       <Button
         variant="outline"
         size="sm"
-        className="h-8 gap-1.5 rounded-xl text-xs"
+        className="h-7 gap-1.5 rounded-full border-border/60 bg-background/50 px-3 text-[11px] text-muted-foreground hover:bg-background/70 hover:text-foreground"
         onClick={() => setIsOpen(!isOpen)}
       >
         <TrendingUp className="h-3.5 w-3.5" />

@@ -200,6 +200,43 @@
   --novel-highlight-gray: #3a3a3a;
 }
 
+.grok-panel {
+  background: var(--card);
+  border-left: 1px solid var(--border);
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 0;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 24px 20px !important;
+  gap: 16px !important;
+}
+
+.grok-panel [data-slot="card"] {
+  background: color-mix(in oklab, var(--card) 86%, var(--background) 14%);
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  padding: 14px;
+  gap: 10px;
+  box-shadow: none;
+}
+
+.grok-panel [data-slot="card-header"],
+.grok-panel [data-slot="card-content"],
+.grok-panel [data-slot="card-footer"] {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.grok-panel [data-slot="card-header"] {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.grok-panel [data-slot="card-footer"] {
+  padding-top: 8px;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

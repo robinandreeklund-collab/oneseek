@@ -408,6 +408,21 @@ export async function sendMessage(
         const ongoingResearchId = useStore.getState().ongoingResearchId;
         if (ongoingResearchId && data.citations) {
           useStore.getState().setCitations(ongoingResearchId, data.citations);
+        } else if (data.citations && data.citations.length > 0) {
+          const state = useStore.getState();
+          let target = lastMessage;
+          if (!target || target.role !== "assistant") {
+            for (let i = state.messageIds.length - 1; i >= 0; i -= 1) {
+              const message = state.messages.get(state.messageIds[i]!);
+              if (message?.role === "assistant") {
+                target = message;
+                break;
+              }
+            }
+          }
+          if (target) {
+            state.updateMessage({ ...target, citations: data.citations });
+          }
         }
         continue;
       }

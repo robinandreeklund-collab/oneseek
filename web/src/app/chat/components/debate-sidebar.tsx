@@ -53,7 +53,7 @@ export function DebateSidebar({
   };
 
   return (
-    <div className={cn("h-full w-full", className)}>
+    <div className="h-full w-full">
       <Card className={cn("relative h-full w-full pt-4", className)}>
         <div className="absolute right-4 flex h-9 items-center justify-center">
           <Tooltip title={t("close")}>
