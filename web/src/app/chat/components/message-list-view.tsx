@@ -19,6 +19,7 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { LoadingAnimation } from "~/components/deer-flow/loading-animation";
+import { FavIcon } from "~/components/deer-flow/fav-icon";
 import { Markdown } from "~/components/deer-flow/markdown";
 import { RainbowText } from "~/components/deer-flow/rainbow-text";
 import { RollingText } from "~/components/deer-flow/rolling-text";
@@ -130,7 +131,7 @@ export function MessageListView({
             />
           </li>
         )}
-        <ToolActivityStream />
+        <ToolActivityTimeline />
         <div className="flex h-8 w-full shrink-0"></div>
       </ul>
       {responding && (noOngoingResearch || !ongoingResearchIsOpen) && (
@@ -440,7 +441,52 @@ function getToolStatusLabel(status: "running" | "success" | "error", isSwedish: 
   return isSwedish ? "Klart" : "Done";
 }
 
-function ToolActivityStream() {
+type SearchResult =
+  | {
+    type: "page";
+    title: string;
+    url: string;
+    content?: string;
+  }
+  | {
+    type: "image";
+    image_url: string;
+    image_description?: string;
+  };
+
+type ToolTimelineStep = {
+  id: string;
+  name: string;
+  status: "running" | "success" | "error";
+  label: string;
+  activity: string;
+  detail?: string;
+  results?: Array<{ title: string; url: string }>;
+  isThinking?: boolean;
+};
+
+function getDomainLabel(url?: string) {
+  if (!url) return "";
+  try {
+    const hostname = new URL(url).hostname;
+    return hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+function getWebSearchResults(result?: string) {
+  if (!result) return [];
+  const parsed = parseJSON<SearchResult[]>(result, []);
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .filter((item): item is Extract<SearchResult, { type: "page" }> => item.type === "page")
+    .filter((item) => Boolean(item.url))
+    .slice(0, 6)
+    .map((item) => ({ title: item.title || item.url, url: item.url }));
+}
+
+function ToolActivityTimeline() {
   const locale = useLocale();
   const isSwedish = locale.startsWith("sv");
   const responding = useStore((state) => state.responding);
@@ -473,54 +519,149 @@ function ToolActivityStream() {
     return calls.reverse();
   }, [messageIds, messages]);
 
-  if (!responding) return null;
+  const steps = useMemo<ToolTimelineStep[]>(() => {
+    return toolCalls.map((toolCall) => {
+      const status = getToolStatus(toolCall);
+      const label = formatToolLabel(toolCall.name ?? "tool", isSwedish);
+      const activity = formatToolActivityText(toolCall.name ?? "tool", isSwedish);
+      const detail = getToolDetail(toolCall) ?? undefined;
+      const results =
+        toolCall.name === "web_search"
+          ? getWebSearchResults(toolCall.result)
+          : undefined;
+      return {
+        id: toolCall.id,
+        name: toolCall.name ?? "tool",
+        status,
+        label,
+        activity,
+        detail,
+        results,
+      };
+    });
+  }, [toolCalls, isSwedish]);
 
-  const runningCalls = toolCalls.filter((toolCall) => getToolStatus(toolCall) === "running");
-  const currentTool = runningCalls.length > 0
-    ? runningCalls[runningCalls.length - 1]
-    : toolCalls[toolCalls.length - 1];
-  const status = currentTool ? getToolStatus(currentTool) : "running";
-  const detail = currentTool ? getToolDetail(currentTool) : null;
-  const activityText = currentTool
-    ? formatToolActivityText(currentTool.name ?? "tool", isSwedish)
-    : isSwedish
-      ? "Tänker..."
-      : "Thinking...";
-  const label = currentTool ? formatToolLabel(currentTool.name ?? "tool", isSwedish) : activityText;
-  const statusLabel = getToolStatusLabel(status, isSwedish);
-  const StatusIcon =
-    status === "running" ? Loader2 : status === "error" ? AlertTriangle : CheckCircle2;
-  const statusClass =
-    status === "running"
-      ? "text-amber-500"
-      : status === "error"
-        ? "text-destructive"
-        : "text-emerald-500";
+  const shouldShow = responding || steps.some((step) => step.status === "running");
+  if (!shouldShow) return null;
 
-  if (!currentTool && !responding) return null;
+  const timelineSteps: ToolTimelineStep[] = responding
+    ? [
+        {
+          id: "thinking",
+          name: "thinking",
+          status: steps.length > 0 ? "success" : "running",
+          label: isSwedish ? "Tänker" : "Thinking",
+          activity: isSwedish ? "Tänker..." : "Thinking...",
+          isThinking: true,
+        },
+        ...steps,
+      ]
+    : steps;
 
   return (
-    <li className="px-4 py-2">
-      <Tooltip title={detail ? `${label}: ${detail}` : label}>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <StatusIcon
-            className={cn(
-              "h-3.5 w-3.5",
-              statusClass,
-              status === "running" && "animate-spin",
-            )}
-          />
-          <span className="font-medium">{activityText}</span>
-          {detail && (
-            <span className="truncate text-muted-foreground/80">
-              {detail}
-            </span>
-          )}
-          <span className="rounded-full border border-border/60 px-2 py-0.5 text-[10px] uppercase tracking-wide">
-            {statusLabel}
-          </span>
+    <li className="px-4 py-3">
+      <div className="rounded-2xl border border-border/60 bg-card/50 px-4 py-3 shadow-sm backdrop-blur">
+        <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <Wrench size={12} />
+          {isSwedish ? "Verktygsflöde" : "Tool timeline"}
         </div>
-      </Tooltip>
+        <div className="flex flex-col gap-4">
+          {timelineSteps.map((step, index) => {
+            const isLast = index === timelineSteps.length - 1;
+            const statusLabel = getToolStatusLabel(step.status, isSwedish);
+            const StatusIcon =
+              step.status === "running"
+                ? Loader2
+                : step.status === "error"
+                  ? AlertTriangle
+                  : CheckCircle2;
+            const statusClass =
+              step.status === "running"
+                ? "text-amber-500"
+                : step.status === "error"
+                  ? "text-destructive"
+                  : "text-emerald-500";
+            return (
+              <div key={step.id} className="relative flex gap-3">
+                <div className="relative flex flex-col items-center">
+                  <span
+                    className={cn(
+                      "flex h-6 w-6 items-center justify-center rounded-full border border-border/60 bg-background/80",
+                      step.status === "running" && "shadow-[0_0_0_2px_rgba(251,191,36,0.15)]",
+                    )}
+                  >
+                    <StatusIcon
+                      className={cn(
+                        "h-3.5 w-3.5",
+                        statusClass,
+                        step.status === "running" && "animate-spin",
+                      )}
+                    />
+                  </span>
+                  {!isLast && (
+                    <span className="mt-1 h-full w-px bg-border/60" />
+                  )}
+                </div>
+                <div className={cn("flex-1", !isLast && "pb-4")}>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                      {step.label}
+                    </span>
+                    <span className="text-sm font-medium text-foreground">
+                      {step.activity}
+                    </span>
+                    <span className="rounded-full border border-border/60 px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                      {statusLabel}
+                    </span>
+                  </div>
+                  {step.detail && (
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {step.detail}
+                    </div>
+                  )}
+                  {step.results && step.results.length > 0 && (
+                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {step.results.map((result) => {
+                        const domainLabel = getDomainLabel(result.url);
+                        return (
+                          <a
+                            key={result.url}
+                            href={result.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-start gap-2 rounded-lg border border-border/60 bg-background/60 px-3 py-2 text-xs transition-colors hover:bg-background/80"
+                          >
+                            {domainLabel ? (
+                              <FavIcon url={result.url} title={result.title} className="mt-0.5" />
+                            ) : (
+                              <span className="mt-0.5 h-4 w-4 rounded-full bg-muted" />
+                            )}
+                            <div className="min-w-0">
+                              <div className="truncate font-medium text-foreground">
+                                {result.title}
+                              </div>
+                              <div className="truncate text-muted-foreground">
+                                {domainLabel || result.url}
+                              </div>
+                            </div>
+                          </a>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {step.isThinking && step.status === "running" && (
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      {isSwedish
+                        ? "Förbereder nästa steg..."
+                        : "Preparing next step..."}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </li>
   );
 }
