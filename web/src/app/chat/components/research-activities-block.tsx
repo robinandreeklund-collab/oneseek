@@ -64,7 +64,7 @@ export function ResearchActivitiesBlock({
         continue;
       }
       if (message.agent === "ai_compare_query" && message.toolCalls?.length) {
-        let responseId: string | undefined;
+        const candidateIds: string[] = [];
         for (let j = i + 1; j < activityIds.length; j += 1) {
           const nextId = activityIds[j];
           if (consumed.has(nextId)) continue;
@@ -77,15 +77,34 @@ export function ResearchActivitiesBlock({
             nextMessage.agent === "ai_compare_query"
             && !nextMessage.toolCalls?.length
           ) {
-            const contentKey = (nextMessage.content ?? "")
-              .replace(/\s+/g, " ")
-              .trim();
-            if (contentKey && !seenContent.has(contentKey)) {
-              responseId = nextId;
-              seenContent.add(contentKey);
-            }
+            candidateIds.push(nextId);
             consumed.add(nextId);
-            break;
+          }
+        }
+
+        let responseId: string | undefined;
+        let bestScore = -1;
+        for (const candidateId of candidateIds) {
+          const candidate = messages.get(candidateId);
+          if (!candidate) continue;
+          const content = (candidate.content ?? "").trim();
+          const contentKey = content.replace(/\s+/g, " ").trim();
+          if (!contentKey || seenContent.has(contentKey)) {
+            continue;
+          }
+          const hasHeading = /^###\s+/m.test(content);
+          const score = (hasHeading ? 10000 : 0) + content.length;
+          if (score > bestScore) {
+            bestScore = score;
+            responseId = candidateId;
+          }
+        }
+        if (responseId) {
+          const contentKey = (messages.get(responseId)?.content ?? "")
+            .replace(/\s+/g, " ")
+            .trim();
+          if (contentKey) {
+            seenContent.add(contentKey);
           }
         }
         items.push({ id: activityId, responseId });
@@ -307,9 +326,34 @@ PlanCard.displayName = "PlanCard";
 
 const ActivityListItem = React.memo(({ messageId }: { messageId: string }) => {
   const message = useMessage(messageId);
+  const aiCompareToolNames = new Set([
+    "query_all_models",
+    "query_model_in_round",
+    "query_gpt35",
+    "query_gemini_flash",
+    "query_deepseek",
+    "query_grok4",
+    "query_oneseek_local",
+  ]);
+  if (
+    message?.agent === "ai_compare_query" ||
+    message?.toolCalls?.some((toolCall) => aiCompareToolNames.has(toolCall.name))
+  ) {
+    return null;
+  }
   if (message) {
     if (message.toolCalls?.length) {
+      const aiCompareToolNames = new Set([
+        "query_all_models",
+        "query_model_in_round",
+        "query_gpt35",
+        "query_gemini_flash",
+        "query_deepseek",
+        "query_grok4",
+        "query_oneseek_local",
+      ]);
       const toolCallComponents = message.toolCalls
+        .filter(toolCall => !aiCompareToolNames.has(toolCall.name))
         .filter(toolCall => !(typeof toolCall.result === "string" && toolCall.result?.startsWith("Error")))
         .map(toolCall => {
           if (toolCall.name === "web_search") {
@@ -876,10 +920,21 @@ function MCPToolCall({ toolCall }: { toolCall: ToolCallRuntime }) {
     return entries;
   }, [toolCall.result]);
   const isAiCompareTool = useMemo(() => {
-    if (toolCall.name !== "query_model_in_round") return false;
-    if (!toolCall.args || typeof toolCall.args !== "object") return false;
-    const args = toolCall.args as { user_query?: string; round_number?: number };
-    return Boolean(args.user_query) && !args.round_number;
+    if (!toolCall.name) return false;
+    const aiCompareToolNames = new Set([
+      "query_all_models",
+      "query_model_in_round",
+      "query_gpt35",
+      "query_gemini_flash",
+      "query_deepseek",
+      "query_grok4",
+      "query_oneseek_local",
+    ]);
+    if (!aiCompareToolNames.has(toolCall.name)) return false;
+    if (toolCall.name !== "query_model_in_round") return true;
+    if (!toolCall.args || typeof toolCall.args !== "object") return true;
+    const args = toolCall.args as { round_number?: number };
+    return args.round_number === undefined;
   }, [toolCall.args, toolCall.name]);
   const isRunning = toolCall.result === undefined;
 
