@@ -28,7 +28,7 @@ export default function Main() {
     if (openResearchId !== null) {
       return (
         <ResearchBlock
-          className="h-full w-full pb-4 transition-all duration-300 ease-out"
+          className="grok-panel h-full w-full transition-all duration-300 ease-out"
           researchId={openResearchId}
         />
       );
@@ -36,7 +36,7 @@ export default function Main() {
     if (openCoderSessionId !== null) {
       return (
         <CoderSidebar
-          className="h-full w-full pb-4 transition-all duration-300 ease-out"
+          className="grok-panel h-full w-full transition-all duration-300 ease-out"
           sessionId={openCoderSessionId}
         />
       );
@@ -44,7 +44,7 @@ export default function Main() {
     if (openDebateSessionId !== null) {
       return (
         <DebateSidebar
-          className="h-full w-full pb-4 transition-all duration-300 ease-out"
+          className="grok-panel h-full w-full transition-all duration-300 ease-out"
           sessionId={openDebateSessionId}
         />
       );
@@ -115,7 +115,7 @@ export default function Main() {
         )}
       />
       {showSidebar && sidebarContent && (
-        <div className="relative h-full pr-4">
+        <div className="relative h-full">
           <div
             className="absolute left-0 top-0 h-full w-2 cursor-col-resize"
             onPointerDown={handleResizeStart}
@@ -123,7 +123,7 @@ export default function Main() {
           >
             <span className="absolute left-0 top-0 h-full w-px bg-border/60" />
           </div>
-          <div className="h-full pl-3">{sidebarContent}</div>
+          <div className="h-full pl-2">{sidebarContent}</div>
         </div>
       )}
     </div>

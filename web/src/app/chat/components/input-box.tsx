@@ -4,7 +4,7 @@
 import { MagicWandIcon } from "@radix-ui/react-icons";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowUp, Paperclip, X } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useRef, useState } from "react";
 
 import MessageInput, {
@@ -24,6 +24,7 @@ import { cn } from "~/lib/utils";
 
 export function InputBox({
   className,
+  variant = "default",
   responding,
   feedback,
   onSend,
@@ -31,6 +32,7 @@ export function InputBox({
   onRemoveFeedback,
 }: {
   className?: string;
+  variant?: "default" | "compact";
   size?: "large" | "normal";
   responding?: boolean;
   feedback?: { option: Option } | null;
@@ -46,11 +48,14 @@ export function InputBox({
 }) {
   const t = useTranslations("chat.inputBox");
   const tCommon = useTranslations("common");
+  const locale = useLocale();
+  const isSwedish = locale.startsWith("sv");
   const { config, loading } = useConfig();
   const reportStyle = useSettingsStore((state) => state.general.reportStyle);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<MessageInputRef>(null);
   const feedbackRef = useRef<HTMLDivElement>(null);
+  const isCompact = variant === "compact";
 
   // Enhancement state
   const [isEnhancing, setIsEnhancing] = useState(false);
@@ -119,7 +124,8 @@ export function InputBox({
     <div className="flex w-full flex-col items-center gap-3">
       <div
         className={cn(
-          "bg-card/70 relative flex w-full items-center gap-2 rounded-[22px] border border-border/70 px-3 py-2 shadow-lg backdrop-blur-sm",
+          "bg-card/85 relative flex w-full flex-col gap-3 rounded-[24px] border border-border/70 px-4 py-3 shadow-2xl backdrop-blur",
+          isCompact && "rounded-[18px] px-3 py-2 shadow-none",
           className,
         )}
         ref={containerRef}
@@ -190,65 +196,88 @@ export function InputBox({
             </motion.div>
           )}
         </AnimatePresence>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 rounded-full text-muted-foreground hover:bg-background/70 hover:text-foreground"
-          aria-label="Bilagor"
-        >
-          <Paperclip className="h-4 w-4" />
-        </Button>
         <MessageInput
           className={cn(
-            "oneseek-input flex-1 px-0 py-0",
-            feedback && "pt-3",
+            "grok-input flex-1 px-0 py-0",
+            feedback && "pt-2",
             isEnhanceAnimating && "transition-all duration-500",
           )}
-          contentClassName="max-h-[260px] overflow-auto pr-1"
-          editorClassName="text-sm leading-6"
+          contentClassName={cn(
+            "max-h-[260px] overflow-auto px-2",
+            isCompact ? "min-h-[64px] pt-3 pb-2" : "min-h-[84px] pt-5 pb-2",
+          )}
+          editorClassName="text-sm leading-6 text-foreground"
           ref={inputRef}
           loading={loading}
           config={config}
           onEnter={handleSendMessage}
           onChange={setCurrentPrompt}
         />
-        <div className="flex shrink-0 items-center gap-2">
-          <Tooltip title={t("enhancePrompt")}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Tooltip title={t("enhancePrompt")}>
+              <Button
+                variant="outline"
+                size="sm"
+                className={cn(
+                  "h-8 gap-2 rounded-xl border-border/70 bg-background/50 px-3 text-xs text-muted-foreground hover:bg-background/70 hover:text-foreground",
+                  isEnhancing && "animate-pulse",
+                )}
+                onClick={handleEnhancePrompt}
+                disabled={isEnhancing || currentPrompt.trim() === ""}
+              >
+                {isEnhancing ? (
+                  <div className="flex items-center gap-2">
+                    <div className="bg-foreground h-2 w-2 animate-bounce rounded-full opacity-70" />
+                    <span>{isSwedish ? "Förbättrar..." : "Enhancing..."}</span>
+                  </div>
+                ) : (
+                  <>
+                    <MagicWandIcon className="text-brand" />
+                    <span>{isSwedish ? "Förbättra text" : "Enhance text"}</span>
+                  </>
+                )}
+              </Button>
+            </Tooltip>
             <Button
-              variant="ghost"
-              size="icon"
-              className={cn(
-                "h-8 w-8 rounded-full text-muted-foreground hover:bg-background/70 hover:text-foreground",
-                isEnhancing && "animate-pulse",
-              )}
-              onClick={handleEnhancePrompt}
-              disabled={isEnhancing || currentPrompt.trim() === ""}
+              variant="outline"
+              size="sm"
+              className="h-8 gap-2 rounded-xl border-border/70 bg-background/50 px-3 text-xs text-muted-foreground hover:bg-background/70 hover:text-foreground"
+              aria-label={isSwedish ? "Bifoga" : "Attach"}
+              type="button"
             >
-              {isEnhancing ? (
-                <div className="flex h-8 w-8 items-center justify-center">
-                  <div className="bg-foreground h-2.5 w-2.5 animate-bounce rounded-full opacity-70" />
-                </div>
-              ) : (
-                <MagicWandIcon className="text-brand" />
-              )}
+              <Paperclip className="h-3.5 w-3.5" />
+              <span>{isSwedish ? "Bifoga" : "Attach"}</span>
             </Button>
-          </Tooltip>
+          </div>
           <Tooltip title={responding ? tCommon("stop") : tCommon("send")}>
             <Button
               variant="outline"
               size="icon"
-              className="h-8 w-8 rounded-full border-foreground/40 bg-foreground text-background hover:bg-foreground/90"
+              className="h-10 w-10 rounded-full border-brand/40 bg-brand/20 text-foreground hover:bg-brand/30"
               onClick={() => inputRef.current?.submit()}
             >
               {responding ? (
-                <div className="flex h-8 w-8 items-center justify-center">
-                  <div className="bg-background h-3 w-3 rounded-sm opacity-70" />
+                <div className="flex h-10 w-10 items-center justify-center">
+                  <div className="bg-foreground h-4 w-4 rounded-sm opacity-70" />
                 </div>
               ) : (
                 <ArrowUp className="h-4 w-4" />
               )}
             </Button>
           </Tooltip>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <ModesDropUp />
+          <TrendingQuestionsDropUp
+            onSelectQuestion={(question) => {
+              if (inputRef.current) {
+                inputRef.current.setContent(question);
+                setCurrentPrompt(question);
+              }
+            }}
+          />
+          <ReportStyleDialog />
         </div>
         {isEnhancing && (
           <>
@@ -265,18 +294,6 @@ export function InputBox({
             />
           </>
         )}
-      </div>
-      <div className="flex flex-wrap items-center justify-center gap-2 px-2">
-        <ModesDropUp />
-        <TrendingQuestionsDropUp
-          onSelectQuestion={(question) => {
-            if (inputRef.current) {
-              inputRef.current.setContent(question);
-              setCurrentPrompt(question);
-            }
-          }}
-        />
-        <ReportStyleDialog />
       </div>
     </div>
   );

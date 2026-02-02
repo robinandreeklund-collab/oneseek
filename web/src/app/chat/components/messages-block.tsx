@@ -112,7 +112,8 @@ export function MessagesBlock({ className }: { className?: string }) {
           {!isReplay && (
             <div className="relative flex shrink-0 pb-4">
               <InputBox
-                className="mx-auto w-full max-w-2xl"
+                className="mx-auto w-full max-w-[880px]"
+                variant="compact"
                 responding={responding}
                 feedback={feedback}
                 onSend={handleSend}
@@ -134,9 +135,10 @@ export function MessagesBlock({ className }: { className?: string }) {
               priority
             />
           </div>
-          <div className="w-full max-w-xl">
+          <div className="w-full max-w-[880px]">
             <InputBox
-              className="w-full shadow-2xl"
+              className="w-full max-w-[880px]"
+              variant="default"
               responding={responding}
               feedback={feedback}
               onSend={handleSend}
