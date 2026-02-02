@@ -72,6 +72,8 @@ export function parseJSON<T>(json: string | null | undefined, fallback: T) {
       .replace(/^```plaintext\s*/, "")
       .replace(/^```\s*/, "")
       .replace(/\s*```$/, "");
+
+    raw = raw.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
     
     // First attempt: try to extract valid JSON to remove extra tokens
     if (raw.startsWith("{") || raw.startsWith("[")) {

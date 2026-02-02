@@ -598,9 +598,10 @@ function PlanCard({
     return parseJSON(message.content ?? "", {});
   }, [message.content]);
 
-  const reasoningContent = message.reasoningContent;
+  const reasoningContent = message.reasoningContent ?? "";
+  const planThought = (plan.thought ?? "").trim();
   const hasMainContent = Boolean(
-    message.content && message.content.trim() !== "",
+    plan.title || planThought || (plan.steps && plan.steps.length > 0),
   );
   const isDebatePlan = useMemo(() => {
     const title = plan.title ?? "";
@@ -633,7 +634,10 @@ function PlanCard({
   }, [isDebatePlan, message.agent, t, isSwedish]);
 
   // Check if thinking: has reasoning content but no main content yet
-  const isThinking = Boolean(reasoningContent && !hasMainContent);
+  const hasReasoning = reasoningContent.trim().length > 0;
+  const thoughtContent = hasReasoning ? reasoningContent : planThought;
+  const thoughtChunks = hasReasoning ? message.reasoningContentChunks : undefined;
+  const isThinking = Boolean(hasReasoning && !hasMainContent);
 
   // Show plan if we have content OR if we're still streaming (to show loading state)
   const shouldShowPlan = hasMainContent || message.isStreaming;
@@ -663,12 +667,12 @@ function PlanCard({
   }, [isDebatePlan, onSendMessage, selectedModels, isSwedish]);
   return (
     <div className={cn("w-full", className)}>
-      {reasoningContent && (
+      {thoughtContent && (
         <ThoughtBlock
-          content={reasoningContent}
+          content={thoughtContent}
           isStreaming={isThinking}
           hasMainContent={hasMainContent}
-          contentChunks={message.reasoningContentChunks}
+          contentChunks={thoughtChunks}
         />
       )}
       {shouldShowPlan && (
@@ -699,10 +703,12 @@ function PlanCard({
                 </div>
               )}
               {hasMainContent && (
-                <div style={{ wordBreak: 'break-all', whiteSpace: 'normal' }}>
-                  <Markdown className="opacity-80" animated={false}>
-                    {plan.thought}
-                  </Markdown>
+                <div style={{ wordBreak: "break-all", whiteSpace: "normal" }}>
+                  {planThought && !hasReasoning && (
+                    <Markdown className="opacity-80" animated={false}>
+                      {planThought}
+                    </Markdown>
+                  )}
                   {isDebatePlan && (
                     <div className="mt-4 rounded-md border border-border/60 bg-muted/40 p-3">
                       <div className="text-sm font-semibold">

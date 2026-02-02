@@ -68,6 +68,35 @@ ALLOWED_LLM_CONFIG_KEYS = {
 }
 
 
+OPENAI_COMPAT_PLATFORMS = {
+    "openai_compat",
+    "openai-compatible",
+    "openai_compatible",
+    "openai",
+}
+
+
+def _is_openai_compat_platform(platform: str) -> bool:
+    return platform in OPENAI_COMPAT_PLATFORMS
+
+
+def _is_local_openai_base(base_url: str | None) -> bool:
+    if not base_url:
+        return False
+    lowered = str(base_url).lower()
+    return any(
+        host in lowered
+        for host in (
+            "localhost",
+            "127.0.0.1",
+            "0.0.0.0",
+            "lmstudio",
+            "lm-studio",
+            "vllm",
+        )
+    )
+
+
 def _get_config_file_path() -> str:
     """Get the path to the configuration file."""
     return str((Path(__file__).parent.parent.parent.parent / "conf.yaml").resolve())
@@ -181,6 +210,9 @@ def _create_llm_use_conf(llm_type: LLMType, conf: Dict[str, Any]) -> BaseChatMod
         return ChatDashscope(**merged_conf)
 
     if llm_type == "reasoning":
+        base_url = merged_conf.get("base_url")
+        if _is_openai_compat_platform(platform) or _is_local_openai_base(base_url):
+            return ChatOpenAI(**merged_conf)
         merged_conf["api_base"] = merged_conf.pop("base_url", None)
         return ChatDeepSeek(**merged_conf)
     else:

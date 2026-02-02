@@ -674,6 +674,9 @@ def _create_event_stream_message(
             "reasoning_content"
         ]
 
+    if message_chunk.additional_kwargs.get("skip_frontend_content"):
+        event_stream_message["content"] = ""
+
     if message_chunk.response_metadata.get("finish_reason"):
         event_stream_message["finish_reason"] = message_chunk.response_metadata.get(
             "finish_reason"
