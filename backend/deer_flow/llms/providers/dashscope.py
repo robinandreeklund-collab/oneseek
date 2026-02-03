@@ -8,6 +8,7 @@ from typing import Any, Dict, Iterator, List, Mapping, Optional, Type, Union, ca
 import openai
 from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.messages import (
+    AIMessage,
     AIMessageChunk,
     BaseMessage,
     BaseMessageChunk,
@@ -218,6 +219,24 @@ class ChatDashscope(ChatOpenAI):
                     ] = reasoning_content
         except (IndexError, AttributeError):
             # If reasoning content extraction fails, continue without it
+            pass
+
+        # Parse XML-style <think>/<tool_call> content as a fallback
+        try:
+            from backend.deer_flow.utils.llm_output_parser import parse_llm_output
+            for generation in chat_result.generations:
+                message = generation.message
+                if not isinstance(message, AIMessage):
+                    continue
+                content = message.content if isinstance(message.content, str) else str(message.content)
+                parsed = parse_llm_output(content)
+                if parsed.reasoning_content and not message.additional_kwargs.get("reasoning_content"):
+                    message.additional_kwargs["reasoning_content"] = parsed.reasoning_content
+                if parsed.tool_calls and not message.tool_calls:
+                    message.tool_calls = parsed.tool_calls
+                if parsed.content != content:
+                    message.content = parsed.content
+        except Exception:
             pass
 
         return chat_result

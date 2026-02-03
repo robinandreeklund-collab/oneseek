@@ -48,6 +48,7 @@ from backend.deer_flow.tools.debate_tools import get_debate_tools
 from backend.deer_flow.tools.search import LoggedTavilySearch
 from backend.deer_flow.utils.context_manager import ContextManager, validate_message_content
 from backend.deer_flow.utils.json_utils import repair_json_output, sanitize_tool_response
+from backend.deer_flow.utils.llm_output_parser import parse_llm_output
 
 from ..config import SELECTED_SEARCH_ENGINE, SearchEngine
 from .types import State
@@ -220,6 +221,20 @@ def normalize_json_response(content: str) -> str:
     if extracted and is_json_like(extracted):
         return extracted
     return cleaned
+
+
+def apply_llm_output_parsing(response: AIMessage) -> AIMessage:
+    if not response or not hasattr(response, "content"):
+        return response
+    content = response.content if isinstance(response.content, str) else str(response.content)
+    parsed = parse_llm_output(content)
+    if parsed.reasoning_content and not response.additional_kwargs.get("reasoning_content"):
+        response.additional_kwargs["reasoning_content"] = parsed.reasoning_content
+    if parsed.tool_calls and not response.tool_calls:
+        response.tool_calls = parsed.tool_calls
+    if parsed.content != content:
+        response.content = parsed.content
+    return response
 
 
 @tool
@@ -1314,6 +1329,7 @@ def coordinator_node(
             .bind_tools(tools)
             .invoke(messages)
         )
+        response = apply_llm_output_parsing(response)
 
         goto = "__end__"
         locale = state.get("locale", "en-US")
@@ -1470,6 +1486,7 @@ def coordinator_node(
             .bind_tools(tools)
             .invoke(messages)
         )
+        response = apply_llm_output_parsing(response)
         logger.debug(f"Current state messages: {state['messages']}")
 
         # Initialize response processing variables
