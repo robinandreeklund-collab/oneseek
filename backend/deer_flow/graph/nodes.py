@@ -73,9 +73,42 @@ def is_json_like(content: str) -> bool:
     return stripped.startswith('{') or stripped.startswith('[')
 
 
+def strip_markdown_code_fences(content: str) -> str:
+    """
+    Strip markdown code fences and return the fenced content if present.
+    """
+    if not content:
+        return content
+    match = re.search(r"```(?:json)?\s*(.*?)```", content, re.S | re.I)
+    if match:
+        return match.group(1).strip()
+    stripped = content.strip()
+    if not stripped.startswith("```"):
+        return content
+    lines = stripped.split("\n")
+    if lines:
+        lines = lines[1:]
+    if lines and lines[-1].strip() == "```":
+        lines = lines[:-1]
+    return "\n".join(lines).strip()
+
+
+def _extract_json_substring(content: str) -> str | None:
+    """
+    Extract JSON substring starting from the first '{' or '['.
+    """
+    if not content:
+        return None
+    start_positions = [pos for pos in (content.find("{"), content.find("[")) if pos != -1]
+    if not start_positions:
+        return None
+    start = min(start_positions)
+    return content[start:].strip()
+
+
 def strip_think_tags(content: str, expect_json: bool = False) -> str:
     """
-    Strip <think> tags from content, intelligently handling different placements.
+    Strip <think> tags or [thinking] markers from content, handling different placements.
     
     This function handles multiple cases:
     1. Standard case: Content after </think> tag (e.g., "<think>...</think>actual content")
@@ -83,6 +116,7 @@ def strip_think_tags(content: str, expect_json: bool = False) -> str:
     3. Edge case: Content before <think> tag (e.g., "actual content<think>...</think>")
     4. No tags: Returns content as-is
     5. Only tags with no content: Returns empty string
+    6. [thinking] markers: prefer content after the last marker
     
     For JSON responses (when expect_json=True), it tries content after </think> first,
     then falls back to content inside tags if the after-content is empty or invalid JSON.
@@ -95,8 +129,56 @@ def strip_think_tags(content: str, expect_json: bool = False) -> str:
     Returns:
         Content with <think> tags stripped appropriately
     """
-    if not content or '<think>' not in content or '</think>' not in content:
+    if not content:
         return content
+
+    if "[thinking]" in content:
+        segments = [segment.strip() for segment in content.split("[thinking]")]
+        segments = [segment for segment in segments if segment]
+        if not segments:
+            return ""
+        if expect_json:
+            for segment in reversed(segments):
+                candidate = strip_markdown_code_fences(segment)
+                if is_json_like(candidate):
+                    return candidate
+            return segments[-1]
+        return segments[-1]
+
+    if '<think>' not in content or '</think>' not in content:
+        return content
+
+    think_start = content.find('<think>')
+    think_end = content.find('</think>')
+
+    # Validate that tags are in correct order
+    if think_start >= think_end or think_start < 0 or think_end < 0:
+        # Invalid tag ordering, return content as-is
+        return content
+
+    # Extract all potential content locations
+    content_before = content[:think_start].strip()
+    content_inside = content[think_start + len('<think>'):think_end].strip()
+    content_after = content[think_end + len('</think>'):].strip()
+
+    if expect_json:
+        # For JSON: prefer after, but fall back to inside if after is not valid JSON
+        for segment in (content_after, content_inside, content_before):
+            candidate = strip_markdown_code_fences(segment)
+            if candidate and is_json_like(candidate):
+                return candidate
+        # Fallback to after even if empty/invalid (will be caught by validation)
+        return content_after
+    else:
+        # For non-JSON: prefer after, then before, then inside
+        if content_after:
+            return content_after
+        if content_before:
+            return content_before
+        if content_inside:
+            return content_inside
+        # Fallback: return empty string to avoid showing just the tags
+        return ""
 
 
 def _parse_json_content(content: str) -> dict[str, Any]:
@@ -117,40 +199,27 @@ def _parse_json_content(content: str) -> dict[str, Any]:
         return json.loads(repair_json_output(content))
     except Exception:
         return {}
-    
-    think_start = content.find('<think>')
-    think_end = content.find('</think>')
-    
-    # Validate that tags are in correct order
-    if think_start >= think_end or think_start < 0 or think_end < 0:
-        # Invalid tag ordering, return content as-is
+
+
+def normalize_json_response(content: str) -> str:
+    """
+    Normalize a model response that should contain JSON.
+    """
+    if not content:
         return content
-    
-    # Extract all potential content locations
-    content_before = content[:think_start].strip()
-    content_inside = content[think_start + len('<think>'):think_end].strip()
-    content_after = content[think_end + len('</think>'):].strip()
-    
-    if expect_json:
-        # For JSON: prefer after, but fall back to inside if after is not valid JSON
-        if content_after and is_json_like(content_after):
-            return content_after
-        if content_inside and is_json_like(content_inside):
-            return content_inside
-        if content_before and is_json_like(content_before):
-            return content_before
-        # Fallback to after even if empty/invalid (will be caught by validation)
-        return content_after
-    else:
-        # For non-JSON: prefer after, then before, then inside
-        if content_after:
-            return content_after
-        if content_before:
-            return content_before
-        if content_inside:
-            return content_inside
-        # Fallback: return empty string to avoid showing just the tags
-        return ""
+    cleaned = strip_think_tags(content, expect_json=True)
+    if not cleaned:
+        cleaned = content
+    cleaned = strip_markdown_code_fences(cleaned)
+    if is_json_like(cleaned):
+        return cleaned
+    extracted = _extract_json_substring(cleaned)
+    if extracted and is_json_like(extracted):
+        return extracted
+    extracted = _extract_json_substring(content)
+    if extracted and is_json_like(extracted):
+        return extracted
+    return cleaned
 
 
 @tool
@@ -631,11 +700,11 @@ def planner_node(
     logger.debug(f"Current state messages: {state['messages']}")
     logger.info(f"Planner response: {full_response}")
 
-    # Strip <think> tags if present (from deep thinking mode)
+    # Normalize response to JSON-only content (handles think tags/markers and code fences)
     original_response = full_response
-    full_response = strip_think_tags(full_response, expect_json=True)
-    if '<think>' in original_response and '<think>' not in full_response:  # Tags were stripped
-        logger.debug(f"Stripped think tags, result: {full_response[:100]}...")
+    full_response = normalize_json_response(full_response)
+    if full_response != original_response:
+        logger.debug(f"Normalized planner response to JSON: {full_response[:100]}...")
 
     # Validate explicitly that response content is valid JSON before proceeding to parse it
     if not is_json_like(full_response):
@@ -747,24 +816,11 @@ def debate_planner_node(
     
     logger.info(f"Debate planner response: {full_response}")
     
-    # Strip <think> tags if present (matching planner_node behavior)
+    # Normalize response to JSON-only content (handles think tags/markers and code fences)
     original_response = full_response
-    full_response = strip_think_tags(full_response, expect_json=True)
-    if '<think>' in original_response and '<think>' not in full_response:
-        logger.debug(f"Stripped think tags from debate planner response")
-    
-    # Strip markdown code fences if present (LLM sometimes wraps JSON in ```json ... ```)
-    full_response = full_response.strip()
-    if full_response.startswith("```"):
-        # Remove opening fence (e.g., ```json or just ```)
-        lines = full_response.split('\n')
-        if len(lines) > 0:
-            lines = lines[1:]  # Remove first line with ```
-        # Remove closing fence
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        full_response = '\n'.join(lines).strip()
-        logger.debug(f"Stripped markdown code fences from debate planner response")
+    full_response = normalize_json_response(full_response)
+    if full_response != original_response:
+        logger.debug("Normalized debate planner response to JSON")
     
     # Validate explicitly that response content is valid JSON before proceeding
     if not is_json_like(full_response):
@@ -872,24 +928,11 @@ def code_planner_node(
     
     logger.info(f"Code planner response: {full_response}")
     
-    # Strip <think> tags if present (matching planner_node behavior)
+    # Normalize response to JSON-only content (handles think tags/markers and code fences)
     original_response = full_response
-    full_response = strip_think_tags(full_response, expect_json=True)
-    if '<think>' in original_response and '<think>' not in full_response:
-        logger.debug(f"Stripped think tags from code planner response")
-    
-    # Strip markdown code fences if present (LLM sometimes wraps JSON in ```json ... ```)
-    full_response = full_response.strip()
-    if full_response.startswith("```"):
-        # Remove opening fence (e.g., ```json or just ```)
-        lines = full_response.split('\n')
-        if len(lines) > 0:
-            lines = lines[1:]  # Remove first line with ```
-        # Remove closing fence
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        full_response = '\n'.join(lines).strip()
-        logger.debug(f"Stripped markdown code fences from code planner response")
+    full_response = normalize_json_response(full_response)
+    if full_response != original_response:
+        logger.debug("Normalized code planner response to JSON")
     
     # Validate explicitly that response content is valid JSON before proceeding
     if not is_json_like(full_response):
