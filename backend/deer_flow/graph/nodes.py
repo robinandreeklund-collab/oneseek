@@ -227,6 +227,8 @@ def normalize_json_response(content: str) -> str:
 def apply_llm_output_parsing(response: AIMessage) -> AIMessage:
     if not response or not hasattr(response, "content"):
         return response
+    if not response.tool_calls and response.additional_kwargs.get("tool_calls"):
+        response.tool_calls = response.additional_kwargs.get("tool_calls") or []
     content = response.content if isinstance(response.content, str) else str(response.content)
     parsed = parse_llm_output(content)
     if parsed.reasoning_content and not response.additional_kwargs.get("reasoning_content"):
@@ -713,6 +715,10 @@ def planner_node(
         response = llm.stream(messages)
         for chunk in response:
             full_response += chunk.content
+        if not full_response.strip():
+            logger.warning("Planner stream yielded empty content; retrying with invoke()")
+            response = llm.invoke(messages)
+            full_response = get_message_content(response) or ""
     logger.debug(f"Current state messages: {state['messages']}")
     logger.info(f"Planner response: {full_response}")
 
@@ -829,6 +835,10 @@ def debate_planner_node(
         response = llm.stream(messages)
         for chunk in response:
             full_response += chunk.content
+        if not full_response.strip():
+            logger.warning("Debate planner stream yielded empty content; retrying with invoke()")
+            response = llm.invoke(messages)
+            full_response = get_message_content(response) or ""
     
     logger.info(f"Debate planner response: {full_response}")
     
@@ -941,6 +951,10 @@ def code_planner_node(
         response = llm.stream(messages)
         for chunk in response:
             full_response += chunk.content
+        if not full_response.strip():
+            logger.warning("Code planner stream yielded empty content; retrying with invoke()")
+            response = llm.invoke(messages)
+            full_response = get_message_content(response) or ""
     
     logger.info(f"Code planner response: {full_response}")
     
