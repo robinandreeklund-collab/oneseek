@@ -133,8 +133,9 @@ def strip_think_tags(content: str, expect_json: bool = False) -> str:
     if not content:
         return content
 
-    if "[thinking]" in content:
-        segments = [segment.strip() for segment in content.split("[thinking]")]
+    if re.search(r"\[(think|thinking)\]", content, re.I):
+        segments = [segment.strip() for segment in re.split(r"\[(think|thinking)\]", content, flags=re.I)]
+        segments = [segment for segment in segments if segment and segment.lower() not in ("think", "thinking")]
         segments = [segment for segment in segments if segment]
         if not segments:
             return ""
@@ -1559,7 +1560,7 @@ def coordinator_node(
     # Final: Build and return Command
     # ============================================================
     messages = list(state.get("messages", []) or [])
-    if response.content:
+    if response.content and not response.tool_calls:
         # Strip think tags from coordinator response before adding to messages
         coordinator_content = strip_think_tags(response.content)
         messages.append(HumanMessage(content=coordinator_content, name="coordinator"))

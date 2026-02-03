@@ -15,8 +15,8 @@ _THINK_TAG_PATTERNS = [
     re.compile(r"\[(think|thinking)\](.*?)\[/\1\]", re.I | re.S),
 ]
 _TOOL_CALL_TAG_PATTERNS = [
-    re.compile(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", re.I | re.S),
-    re.compile(r"\[tool_call\]\s*(\{.*?\})\s*\[/tool_call\]", re.I | re.S),
+    re.compile(r"<tool_call>(.*?)</tool_call>", re.I | re.S),
+    re.compile(r"\[tool_call\](.*?)\[/tool_call\]", re.I | re.S),
 ]
 
 
@@ -27,12 +27,28 @@ class ParsedLlmOutput:
     tool_calls: list[dict[str, Any]]
 
 
+def _extract_json_substring(content: str) -> str | None:
+    if not content:
+        return None
+    start_positions = [pos for pos in (content.find("{"), content.find("[")) if pos != -1]
+    if not start_positions:
+        return None
+    start = min(start_positions)
+    return content[start:].strip()
+
+
 def _parse_tool_payload(payload_text: str) -> dict[str, Any] | None:
     if not payload_text:
         return None
     try:
         return json.loads(repair_json_output(payload_text))
     except Exception:
+        extracted = _extract_json_substring(payload_text)
+        if extracted:
+            try:
+                return json.loads(repair_json_output(extracted))
+            except Exception:
+                return None
         return None
 
 
