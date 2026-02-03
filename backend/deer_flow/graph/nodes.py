@@ -262,6 +262,74 @@ def extract_json_from_tool_calls(tool_calls: list[dict[str, Any]]) -> str | None
     return None
 
 
+def _normalize_tool_call_entry(raw_call: Any) -> dict[str, Any] | None:
+    if not raw_call:
+        return None
+    if isinstance(raw_call, dict):
+        if "name" in raw_call:
+            return {
+                "id": raw_call.get("id", ""),
+                "name": raw_call.get("name", ""),
+                "args": raw_call.get("args") or raw_call.get("arguments"),
+            }
+        function = raw_call.get("function")
+        if isinstance(function, dict):
+            return {
+                "id": raw_call.get("id", ""),
+                "name": function.get("name", ""),
+                "args": function.get("arguments") or function.get("args"),
+            }
+        return None
+    name = getattr(raw_call, "name", "") if hasattr(raw_call, "name") else ""
+    args = getattr(raw_call, "args", None) if hasattr(raw_call, "args") else None
+    call_id = getattr(raw_call, "id", "") if hasattr(raw_call, "id") else ""
+    if not name and hasattr(raw_call, "function"):
+        function = getattr(raw_call, "function", None)
+        name = getattr(function, "name", "")
+        args = getattr(function, "arguments", None) or getattr(function, "args", None)
+    if not name:
+        return None
+    return {"id": call_id, "name": name, "args": args}
+
+
+def _normalize_tool_call_chunk(chunk: Any) -> dict[str, Any]:
+    if isinstance(chunk, dict):
+        return chunk
+    return {
+        "id": getattr(chunk, "id", ""),
+        "name": getattr(chunk, "name", ""),
+        "args": getattr(chunk, "args", ""),
+        "index": getattr(chunk, "index", 0),
+        "type": getattr(chunk, "type", ""),
+    }
+
+
+def _merge_tool_call_chunks(chunks: list[Any]) -> list[dict[str, Any]]:
+    if not chunks:
+        return []
+    chunk_by_index: dict[int, dict[str, Any]] = {}
+    for chunk in chunks:
+        data = _normalize_tool_call_chunk(chunk)
+        index = data.get("index")
+        if index is None:
+            index = 0
+        entry = chunk_by_index.setdefault(
+            index,
+            {"id": data.get("id", ""), "name": "", "args": ""},
+        )
+        if data.get("name") and not entry["name"]:
+            entry["name"] = data.get("name", "")
+        if data.get("id") and not entry["id"]:
+            entry["id"] = data.get("id", "")
+        if data.get("args"):
+            entry["args"] += str(data.get("args", ""))
+    merged = []
+    for index in sorted(chunk_by_index.keys()):
+        entry = chunk_by_index[index]
+        merged.append({"id": entry["id"], "name": entry["name"], "args": entry["args"]})
+    return merged
+
+
 def apply_llm_output_parsing(response: AIMessage) -> AIMessage:
     if not response or not hasattr(response, "content"):
         return response
@@ -747,21 +815,45 @@ def planner_node(
 
     full_response = ""
     response = None
+    stream_tool_calls: list[dict[str, Any]] = []
+    stream_tool_call_chunks: list[Any] = []
+    stream_tool_calls: list[dict[str, Any]] = []
+    stream_tool_call_chunks: list[Any] = []
     if AGENT_LLM_MAP["planner"] == "basic" and not configurable.enable_deep_thinking:
         response = llm.invoke(messages)
         full_response = get_message_content(response) or ""
     else:
         stream_response = llm.stream(messages)
         for chunk in stream_response:
-            full_response += chunk.content
+            if chunk.content:
+                full_response += chunk.content
+            raw_tool_calls = getattr(chunk, "tool_calls", None) or getattr(chunk, "additional_kwargs", {}).get("tool_calls")
+            if raw_tool_calls:
+                for raw_call in raw_tool_calls:
+                    normalized = _normalize_tool_call_entry(raw_call)
+                    if normalized:
+                        stream_tool_calls.append(normalized)
+            raw_tool_call_chunks = getattr(chunk, "tool_call_chunks", None)
+            if raw_tool_call_chunks:
+                stream_tool_call_chunks.extend(raw_tool_call_chunks)
         if not full_response.strip():
             logger.warning("Planner stream yielded empty content; retrying with invoke()")
             response = llm.invoke(messages)
             full_response = get_message_content(response) or ""
 
-    if not full_response.strip() and response:
-        tool_calls = getattr(response, "tool_calls", None) or response.additional_kwargs.get("tool_calls")
-        recovered = extract_json_from_tool_calls(tool_calls or [])
+    recovered_calls: list[dict[str, Any]] = []
+    if response:
+        raw_calls = getattr(response, "tool_calls", None) or response.additional_kwargs.get("tool_calls")
+        if raw_calls:
+            for raw_call in raw_calls:
+                normalized = _normalize_tool_call_entry(raw_call)
+                if normalized:
+                    recovered_calls.append(normalized)
+    if stream_tool_call_chunks:
+        recovered_calls.extend(_merge_tool_call_chunks(stream_tool_call_chunks))
+    recovered_calls.extend(stream_tool_calls)
+    if (not full_response.strip() or not is_json_like(normalize_json_response(full_response))) and recovered_calls:
+        recovered = extract_json_from_tool_calls(recovered_calls)
         if recovered:
             logger.info("Recovered planner response from tool call payloads")
             full_response = recovered
@@ -881,15 +973,35 @@ def debate_planner_node(
     else:
         stream_response = llm.stream(messages)
         for chunk in stream_response:
-            full_response += chunk.content
+            if chunk.content:
+                full_response += chunk.content
+            raw_tool_calls = getattr(chunk, "tool_calls", None) or getattr(chunk, "additional_kwargs", {}).get("tool_calls")
+            if raw_tool_calls:
+                for raw_call in raw_tool_calls:
+                    normalized = _normalize_tool_call_entry(raw_call)
+                    if normalized:
+                        stream_tool_calls.append(normalized)
+            raw_tool_call_chunks = getattr(chunk, "tool_call_chunks", None)
+            if raw_tool_call_chunks:
+                stream_tool_call_chunks.extend(raw_tool_call_chunks)
         if not full_response.strip():
             logger.warning("Debate planner stream yielded empty content; retrying with invoke()")
             response = llm.invoke(messages)
             full_response = get_message_content(response) or ""
 
-    if not full_response.strip() and response:
-        tool_calls = getattr(response, "tool_calls", None) or response.additional_kwargs.get("tool_calls")
-        recovered = extract_json_from_tool_calls(tool_calls or [])
+    recovered_calls: list[dict[str, Any]] = []
+    if response:
+        raw_calls = getattr(response, "tool_calls", None) or response.additional_kwargs.get("tool_calls")
+        if raw_calls:
+            for raw_call in raw_calls:
+                normalized = _normalize_tool_call_entry(raw_call)
+                if normalized:
+                    recovered_calls.append(normalized)
+    if stream_tool_call_chunks:
+        recovered_calls.extend(_merge_tool_call_chunks(stream_tool_call_chunks))
+    recovered_calls.extend(stream_tool_calls)
+    if (not full_response.strip() or not is_json_like(normalize_json_response(full_response))) and recovered_calls:
+        recovered = extract_json_from_tool_calls(recovered_calls)
         if recovered:
             logger.info("Recovered debate planner response from tool call payloads")
             full_response = recovered
@@ -999,21 +1111,43 @@ def code_planner_node(
     # Invoke/stream LLM to get code plan (EXACT match to planner_node logic)
     full_response = ""
     response = None
+    stream_tool_calls: list[dict[str, Any]] = []
+    stream_tool_call_chunks: list[Any] = []
     if AGENT_LLM_MAP.get("code_planner") == "basic" and not configurable.enable_deep_thinking:
         response = llm.invoke(messages)
         full_response = get_message_content(response) or ""
     else:
         stream_response = llm.stream(messages)
         for chunk in stream_response:
-            full_response += chunk.content
+            if chunk.content:
+                full_response += chunk.content
+            raw_tool_calls = getattr(chunk, "tool_calls", None) or getattr(chunk, "additional_kwargs", {}).get("tool_calls")
+            if raw_tool_calls:
+                for raw_call in raw_tool_calls:
+                    normalized = _normalize_tool_call_entry(raw_call)
+                    if normalized:
+                        stream_tool_calls.append(normalized)
+            raw_tool_call_chunks = getattr(chunk, "tool_call_chunks", None)
+            if raw_tool_call_chunks:
+                stream_tool_call_chunks.extend(raw_tool_call_chunks)
         if not full_response.strip():
             logger.warning("Code planner stream yielded empty content; retrying with invoke()")
             response = llm.invoke(messages)
             full_response = get_message_content(response) or ""
 
-    if not full_response.strip() and response:
-        tool_calls = getattr(response, "tool_calls", None) or response.additional_kwargs.get("tool_calls")
-        recovered = extract_json_from_tool_calls(tool_calls or [])
+    recovered_calls: list[dict[str, Any]] = []
+    if response:
+        raw_calls = getattr(response, "tool_calls", None) or response.additional_kwargs.get("tool_calls")
+        if raw_calls:
+            for raw_call in raw_calls:
+                normalized = _normalize_tool_call_entry(raw_call)
+                if normalized:
+                    recovered_calls.append(normalized)
+    if stream_tool_call_chunks:
+        recovered_calls.extend(_merge_tool_call_chunks(stream_tool_call_chunks))
+    recovered_calls.extend(stream_tool_calls)
+    if (not full_response.strip() or not is_json_like(normalize_json_response(full_response))) and recovered_calls:
+        recovered = extract_json_from_tool_calls(recovered_calls)
         if recovered:
             logger.info("Recovered code planner response from tool call payloads")
             full_response = recovered
