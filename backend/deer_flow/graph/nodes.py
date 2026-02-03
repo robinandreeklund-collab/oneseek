@@ -821,6 +821,8 @@ def planner_node(
     stream_tool_call_chunks: list[Any] = []
     stream_tool_calls: list[dict[str, Any]] = []
     stream_tool_call_chunks: list[Any] = []
+    stream_tool_calls: list[dict[str, Any]] = []
+    stream_tool_call_chunks: list[Any] = []
     if AGENT_LLM_MAP["planner"] == "basic" and not configurable.enable_deep_thinking:
         response = llm.invoke(messages)
         full_response = get_message_content(response) or ""
