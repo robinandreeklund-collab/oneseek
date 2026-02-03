@@ -119,6 +119,7 @@ def extract_tool_calls(content: str) -> tuple[list[dict[str, Any]], str]:
 
         cleaned = pattern.sub(_replace, cleaned)
 
+    cleaned = re.sub(r"</?tool_call>", "", cleaned, flags=re.I)
     return tool_calls, cleaned.strip()
 
 

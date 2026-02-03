@@ -212,6 +212,7 @@ def normalize_json_response(content: str) -> str:
     cleaned = strip_think_tags(content, expect_json=True)
     if not cleaned:
         cleaned = content
+    cleaned = re.sub(r"</?tool_call>", "", cleaned, flags=re.I)
     cleaned = strip_markdown_code_fences(cleaned)
     if is_json_like(cleaned):
         return cleaned
@@ -222,6 +223,43 @@ def normalize_json_response(content: str) -> str:
     if extracted and is_json_like(extracted):
         return extracted
     return cleaned
+
+
+def extract_json_from_tool_calls(tool_calls: list[dict[str, Any]]) -> str | None:
+    """
+    Attempt to recover JSON content from tool call payloads.
+    """
+    if not tool_calls:
+        return None
+
+    for tool_call in tool_calls:
+        args = None
+        if isinstance(tool_call, dict):
+            if "args" in tool_call:
+                args = tool_call.get("args")
+            elif "arguments" in tool_call:
+                args = tool_call.get("arguments")
+            elif isinstance(tool_call.get("function"), dict):
+                args = tool_call["function"].get("arguments") or tool_call["function"].get("args")
+
+        if isinstance(args, dict):
+            try:
+                return json.dumps(args, ensure_ascii=False)
+            except Exception:
+                return str(args)
+
+        if isinstance(args, str):
+            candidate = args.strip()
+            if not candidate:
+                continue
+            repaired = repair_json_output(candidate)
+            if is_json_like(repaired):
+                return repaired
+            extracted = _extract_json_substring(candidate)
+            if extracted and is_json_like(extracted):
+                return extracted
+
+    return None
 
 
 def apply_llm_output_parsing(response: AIMessage) -> AIMessage:
@@ -708,17 +746,25 @@ def planner_node(
         )
 
     full_response = ""
+    response = None
     if AGENT_LLM_MAP["planner"] == "basic" and not configurable.enable_deep_thinking:
         response = llm.invoke(messages)
         full_response = get_message_content(response) or ""
     else:
-        response = llm.stream(messages)
-        for chunk in response:
+        stream_response = llm.stream(messages)
+        for chunk in stream_response:
             full_response += chunk.content
         if not full_response.strip():
             logger.warning("Planner stream yielded empty content; retrying with invoke()")
             response = llm.invoke(messages)
             full_response = get_message_content(response) or ""
+
+    if not full_response.strip() and response:
+        tool_calls = getattr(response, "tool_calls", None) or response.additional_kwargs.get("tool_calls")
+        recovered = extract_json_from_tool_calls(tool_calls or [])
+        if recovered:
+            logger.info("Recovered planner response from tool call payloads")
+            full_response = recovered
     logger.debug(f"Current state messages: {state['messages']}")
     logger.info(f"Planner response: {full_response}")
 
@@ -828,17 +874,25 @@ def debate_planner_node(
     # Invoke/stream LLM to get debate plan (EXACT match to planner_node logic)
     # CRITICAL: Use the same invoke/stream logic as planner_node for frontend streaming
     full_response = ""
+    response = None
     if AGENT_LLM_MAP.get("debate_planner") == "basic" and not configurable.enable_deep_thinking:
         response = llm.invoke(messages)
         full_response = get_message_content(response) or ""
     else:
-        response = llm.stream(messages)
-        for chunk in response:
+        stream_response = llm.stream(messages)
+        for chunk in stream_response:
             full_response += chunk.content
         if not full_response.strip():
             logger.warning("Debate planner stream yielded empty content; retrying with invoke()")
             response = llm.invoke(messages)
             full_response = get_message_content(response) or ""
+
+    if not full_response.strip() and response:
+        tool_calls = getattr(response, "tool_calls", None) or response.additional_kwargs.get("tool_calls")
+        recovered = extract_json_from_tool_calls(tool_calls or [])
+        if recovered:
+            logger.info("Recovered debate planner response from tool call payloads")
+            full_response = recovered
     
     logger.info(f"Debate planner response: {full_response}")
     
@@ -944,17 +998,25 @@ def code_planner_node(
     
     # Invoke/stream LLM to get code plan (EXACT match to planner_node logic)
     full_response = ""
+    response = None
     if AGENT_LLM_MAP.get("code_planner") == "basic" and not configurable.enable_deep_thinking:
         response = llm.invoke(messages)
         full_response = get_message_content(response) or ""
     else:
-        response = llm.stream(messages)
-        for chunk in response:
+        stream_response = llm.stream(messages)
+        for chunk in stream_response:
             full_response += chunk.content
         if not full_response.strip():
             logger.warning("Code planner stream yielded empty content; retrying with invoke()")
             response = llm.invoke(messages)
             full_response = get_message_content(response) or ""
+
+    if not full_response.strip() and response:
+        tool_calls = getattr(response, "tool_calls", None) or response.additional_kwargs.get("tool_calls")
+        recovered = extract_json_from_tool_calls(tool_calls or [])
+        if recovered:
+            logger.info("Recovered code planner response from tool call payloads")
+            full_response = recovered
     
     logger.info(f"Code planner response: {full_response}")
     
