@@ -68,8 +68,6 @@ logger = logging.getLogger(__name__)
 # Debate fact-checking configuration constants
 DEBATE_RAG_ITEM_MAX_LENGTH = 200  # Max chars to display per RAG document
 DEBATE_RAG_MAX_ITEMS = 3  # Max number of RAG items to include
-DEBATE_PRIMARY_SEARCH_ITEMS = None  # Use configurable.max_search_results
-DEBATE_CLAIM_SEARCH_ITEMS = 2  # Fewer results for targeted claim searches
 
 
 def is_json_like(content: str) -> bool:
@@ -4905,8 +4903,9 @@ async def fact_checker_node(
     current_round = state.get("debate_round", 1)
     user_query = state.get("research_topic", "")
     
-    # Hybrid search strategy: Query-based + selective claim verification
-    max_search_calls = int(os.getenv("DEBATE_WEB_SEARCH_MAX_CALLS", "3"))
+    # LLM-driven search strategy: Let the model decide what to verify
+    # Provide initial context and let fact_checker agent use tools as needed
+    max_search_calls = int(os.getenv("DEBATE_WEB_SEARCH_MAX_CALLS", "5"))
     search_summaries: list[str] = []
     
     # Step 1: Broad search on original user query (primary context)
@@ -4938,24 +4937,6 @@ async def fact_checker_node(
                     ])
         except Exception as exc:
             logger.warning("RAG retrieval failed during fact-checking: %s", exc)
-    
-    # Step 3: Targeted claim search for critical claims only
-    claims = extract_claim_sentences(state.get("external_ai_responses", ""))
-    max_claims = int(os.getenv("DEBATE_FACT_CHECK_MAX_CLAIMS", "2"))
-    
-    for claim in claims[:max_claims]:
-        try:
-            if not debate_flow.record_debate_search(current_round, max_search_calls):
-                logger.info("Debate search limit reached; skipping claim search")
-                break
-            logger.info(f"Performing targeted claim search: {claim[:100]}...")
-            results = debate_flow.cached_web_search(claim, current_round)
-            # Use fewer items for targeted claim searches vs. broad query search
-            formatted = debate_flow._format_search_results(results, max_items=DEBATE_CLAIM_SEARCH_ITEMS)
-            if formatted:
-                search_summaries.append(f"Kritiskt påstående: {claim}\n{formatted}")
-        except Exception as exc:
-            logger.warning("Debate fact-check claim search failed: %s", exc)
     
     # Create tools for fact_checker agent
     @tool("web_search")
@@ -4999,17 +4980,22 @@ async def fact_checker_node(
             "content": f"Uppladdade dokument och källor:\n\n{rag_summary}",
         })
     
-    if claims:
-        # Display up to max_claims for context (consistent with search limit)
-        claims_text = "\n".join(f"- {claim}" for claim in claims[:max_claims])
-        messages.append({
-            "role": "system",
-            "content": (
-                "Identifierade påståenden att verifiera:\n\n"
-                f"{claims_text}\n\n"
-                "Du kan använda web_search verktyget för ytterligare verifiering vid behov."
-            ),
-        })
+    # Encourage LLM to identify and verify claims using tools
+    messages.append({
+        "role": "system",
+        "content": (
+            "Du har tillgång till web_search och crawl verktyg.\n\n"
+            "**Din uppgift:**\n"
+            "1. Analysera svaren från de externa AI-modellerna\n"
+            "2. Identifiera påståenden som behöver verifieras (fakta, statistik, studier, etc.)\n"
+            "3. Använd web_search verktyget för att verifiera viktiga påståenden\n"
+            "4. Prioritera påståenden som är:\n"
+            "   - Konkreta och verifierbara\n"
+            "   - Centrala för argumenten\n"
+            "   - Potentiellt kontroversiella eller tveksamma\n\n"
+            "Du bestämmer själv vilka påståenden som är viktigast att kontrollera."
+        ),
+    })
     
     # Create agent for fact_checker with tools
     llm_token_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["fact_checker"])

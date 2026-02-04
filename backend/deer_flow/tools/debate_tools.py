@@ -273,7 +273,7 @@ def get_debate_tools() -> List[Any]:
             if not query or not str(query).strip():
                 return "Sökfel: tom sökfråga."
 
-            max_calls = int(os.getenv("DEBATE_WEB_SEARCH_MAX_CALLS", "3"))
+            max_calls = int(os.getenv("DEBATE_WEB_SEARCH_MAX_CALLS", "5"))
             current_round = debate_flow.current_round or 1
             if not debate_flow.record_debate_search(current_round, max_calls):
                 return (
