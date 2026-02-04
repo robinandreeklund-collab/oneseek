@@ -982,6 +982,66 @@ class ToolActionTracker:
             return text[:max_chars] + "... [truncated]"
         return text
 
+    def _normalize_web_search_output(self, output_text: str) -> str:
+        """Trim web_search JSON to keep it valid for UI preview."""
+        if not output_text:
+            return output_text
+        try:
+            data = json.loads(output_text)
+        except (json.JSONDecodeError, TypeError):
+            return self._truncate(output_text, self.max_output_chars)
+
+        if not isinstance(data, list):
+            return self._truncate(output_text, self.max_output_chars)
+
+        def build_trimmed(
+            content_len: int,
+            image_len: int,
+            max_pages: int,
+            max_images: int,
+        ) -> str:
+            pages = []
+            images = []
+            for item in data:
+                if not isinstance(item, dict):
+                    continue
+                item_type = item.get("type")
+                if item_type == "page" and len(pages) < max_pages:
+                    content = (item.get("content") or "").strip()
+                    if content_len > 0 and len(content) > content_len:
+                        content = content[:content_len] + "..."
+                    pages.append(
+                        {
+                            "type": "page",
+                            "title": item.get("title", ""),
+                            "url": item.get("url", ""),
+                            "content": content,
+                        }
+                    )
+                elif item_type == "image" and len(images) < max_images:
+                    desc = (item.get("image_description") or "").strip()
+                    if image_len > 0 and len(desc) > image_len:
+                        desc = desc[:image_len] + "..."
+                    images.append(
+                        {
+                            "type": "image",
+                            "image_url": item.get("image_url", ""),
+                            "image_description": desc,
+                        }
+                    )
+            return json.dumps(pages + images, ensure_ascii=False)
+
+        candidates = [
+            build_trimmed(500, 160, 6, 6),
+            build_trimmed(300, 120, 4, 4),
+            build_trimmed(200, 100, 3, 3),
+            build_trimmed(0, 80, 4, 4),
+        ]
+        for candidate in candidates:
+            if len(candidate) <= self.max_output_chars:
+                return candidate
+        return candidates[-1]
+
     def _is_error_output(self, tool_output: Any) -> bool:
         if tool_output is None:
             return False
@@ -1016,8 +1076,12 @@ class ToolActionTracker:
     def add_tool_result(self, tool_call_id: str, tool_output: Any) -> Optional[dict]:
         """Record the result for a tool call and return updated action if found."""
         if tool_call_id in self.tool_calls:
+            tool_name = self.tool_calls[tool_call_id].get("tool_name", "")
             tool_output_text = str(tool_output) if tool_output else ""
-            tool_output_text = self._truncate(tool_output_text, self.max_output_chars)
+            if tool_name == "web_search":
+                tool_output_text = self._normalize_web_search_output(tool_output_text)
+            else:
+                tool_output_text = self._truncate(tool_output_text, self.max_output_chars)
             self.tool_calls[tool_call_id]["tool_output"] = tool_output_text
             self.tool_calls[tool_call_id]["status"] = (
                 "error" if self._is_error_output(tool_output_text) else "success"
