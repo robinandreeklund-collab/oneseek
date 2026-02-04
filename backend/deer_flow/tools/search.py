@@ -70,9 +70,10 @@ def _limit_web_search_calls(tool):
 
     original_run = getattr(tool, "_run")
     original_arun = getattr(tool, "_arun", None)
+    response_format = getattr(tool, "response_format", None)
 
-    def _make_limit_response(query: str, reason: str) -> str:
-        payload = {
+    def _make_limit_payload(query: str, reason: str) -> dict:
+        return {
             "status": "limit_reached",
             "reason": reason,
             "query": query,
@@ -80,7 +81,13 @@ def _limit_web_search_calls(tool):
                 "Web search limit reached. Use existing results and proceed to answer."
             ),
         }
-        return json.dumps(payload, ensure_ascii=False)
+
+    def _make_limit_response(query: str, reason: str):
+        payload = _make_limit_payload(query, reason)
+        content = json.dumps(payload, ensure_ascii=False)
+        if response_format == "content_and_artifact":
+            return content, payload
+        return content
 
     def limited_run(query: str, *args, **kwargs):
         run_id = get_current_run_id()
