@@ -4863,8 +4863,8 @@ async def external_ai_caller_node(
 async def fact_checker_node(
     state: State, config: RunnableConfig
 ) -> Command[Literal["synthesizer"]]:
-    """Fact checker node - verifies claims from external AI models."""
-    logger.info("Fact checker verifying external AI claims")
+    """Fact checker node - verifies claims from external AI models with improved search strategy."""
+    logger.info("Fact checker verifying external AI claims with agent architecture")
     configurable = Configuration.from_runnable_config(config)
     thread_id = get_thread_id_from_config(config)
     locale = state.get("locale", "en-US")
@@ -4876,74 +4876,171 @@ async def fact_checker_node(
         thread_id=thread_id,
     )
     current_round = state.get("debate_round", 1)
+    user_query = state.get("research_topic", "")
     
-    # Controlled claim extraction
-    claims = extract_claim_sentences(state.get("external_ai_responses", ""))
-    
-    max_claims = int(os.getenv("DEBATE_FACT_CHECK_MAX_CLAIMS", "2"))
-    max_search_calls = int(os.getenv("DEBATE_WEB_SEARCH_MAX_CALLS", "2"))
+    # Hybrid search strategy: Query-based + selective claim verification
+    max_search_calls = int(os.getenv("DEBATE_WEB_SEARCH_MAX_CALLS", "3"))
     search_summaries: list[str] = []
+    
+    # Step 1: Broad search on original user query (primary context)
+    try:
+        if debate_flow.record_debate_search(current_round, max_search_calls):
+            logger.info(f"Performing primary query-based search: {user_query}")
+            results = debate_flow.cached_web_search(user_query, current_round)
+            formatted = debate_flow._format_search_results(results, max_items=configurable.max_search_results)
+            if formatted:
+                search_summaries.append(f"Huvudsökning på originalfråga:\n{formatted}")
+        else:
+            logger.info("Debate search limit reached; skipping query search")
+    except Exception as exc:
+        logger.warning("Debate fact-check query search failed: %s", exc)
+    
+    # Step 2: RAG retrieval if resources available
+    rag_summary = ""
+    if debate_flow.retriever_tool:
+        try:
+            logger.info("Retrieving relevant documents from RAG")
+            rag_results = await debate_flow.retriever_tool.ainvoke(user_query)
+            if rag_results:
+                rag_items = rag_results if isinstance(rag_results, list) else [rag_results]
+                if rag_items:
+                    rag_summary = f"RAG-dokument ({len(rag_items)} källor):\n"
+                    rag_summary += "\n".join([str(item)[:200] for item in rag_items[:3]])
+        except Exception as exc:
+            logger.warning("RAG retrieval failed during fact-checking: %s", exc)
+    
+    # Step 3: Targeted claim search for critical claims only
+    claims = extract_claim_sentences(state.get("external_ai_responses", ""))
+    max_claims = int(os.getenv("DEBATE_FACT_CHECK_MAX_CLAIMS", "1"))
+    
     for claim in claims[:max_claims]:
         try:
             if not debate_flow.record_debate_search(current_round, max_search_calls):
-                logger.info("Debate search limit reached; skipping fact-check search")
+                logger.info("Debate search limit reached; skipping claim search")
                 break
+            logger.info(f"Performing targeted claim search: {claim[:100]}...")
             results = debate_flow.cached_web_search(claim, current_round)
-            formatted = debate_flow._format_search_results(results, max_items=3)
+            formatted = debate_flow._format_search_results(results, max_items=2)
             if formatted:
-                search_summaries.append(f"Påstående: {claim}\n{formatted}")
+                search_summaries.append(f"Kritiskt påstående: {claim}\n{formatted}")
         except Exception as exc:
-            logger.warning("Debate fact-check web search failed: %s", exc)
-
-    # Build prompt for fact_checker
+            logger.warning("Debate fact-check claim search failed: %s", exc)
+    
+    # Create tools for fact_checker agent
+    @tool("web_search")
+    def fact_check_web_search(query: str) -> str:
+        """Search the web for fact verification. Limited to prevent loops."""
+        try:
+            if not debate_flow.record_debate_search(current_round, max_search_calls):
+                return "SEARCH_LIMIT_REACHED: Max searches reached for this round. Use existing context."
+            logger.info(f"Fact-checker agent performing web search: {query}")
+            results = debate_flow.cached_web_search(query, current_round)
+            return debate_flow._format_search_results(results, max_items=3)
+        except Exception as e:
+            return f"Search error: {str(e)}"
+    
+    @tool("crawl")
+    def fact_check_crawl(url: str) -> str:
+        """Crawl a URL for detailed fact verification."""
+        try:
+            logger.info(f"Fact-checker agent crawling: {url}")
+            return debate_flow.cached_crawl(url, current_round)
+        except Exception as e:
+            return f"Crawl error: {str(e)}"
+    
+    tools = [fact_check_web_search, fact_check_crawl]
+    
+    # Build prompt for fact_checker with enriched context
     messages = apply_prompt_template("fact_checker", state, configurable, locale)
-    if claims:
-        claims_text = "\n".join(f"- {claim}" for claim in claims)
-        messages.append({
-            "role": "system",
-            "content": (
-                "Verifiera endast följande explicit formulerade påståenden. "
-                "Undvik att söka på nya eller vaga påståenden.\n\n"
-                f"{claims_text}"
-            ),
-        })
+    
     if search_summaries:
         messages.append({
             "role": "system",
             "content": (
-                "Här är begränsade webbsökningsresultat för de viktigaste påståendena:\n\n"
-                + "\n\n".join(search_summaries)
+                "Här är webbsökningsresultat för faktakontroll:\n\n"
+                + "\n\n---\n\n".join(search_summaries)
             ),
         })
     
-    fact_checker_llm = get_llm_by_type(AGENT_LLM_MAP["fact_checker"])
+    if rag_summary:
+        messages.append({
+            "role": "system",
+            "content": f"Uppladdade dokument och källor:\n\n{rag_summary}",
+        })
+    
+    if claims:
+        claims_text = "\n".join(f"- {claim}" for claim in claims[:5])
+        messages.append({
+            "role": "system",
+            "content": (
+                "Identifierade påståenden att verifiera:\n\n"
+                f"{claims_text}\n\n"
+                "Du kan använda web_search verktyget för ytterligare verifiering vid behov."
+            ),
+        })
+    
+    # Create agent for fact_checker with tools
+    llm_token_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["fact_checker"])
+    pre_model_hook = partial(ContextManager(llm_token_limit, 3).compress_messages)
+    fact_checker_agent = create_agent(
+        "fact_checker",
+        "fact_checker",
+        tools,
+        "fact_checker",
+        pre_model_hook,
+        interrupt_before_tools=configurable.interrupt_before_tools,
+        locale=locale,
+    )
 
-    # Build synthesizer prompt (run in parallel)
+    # Build synthesizer agent with tools (run in parallel)
     synth_messages = apply_prompt_template("synthesizer", state, configurable, locale)
+    
     if search_summaries:
         synth_messages.append({
             "role": "system",
             "content": (
-                "Använd följande webbsökningsresultat som faktabackning vid syntes:\n\n"
-                + "\n\n".join(search_summaries)
+                "Använd följande webbsökningsresultat som faktabackning:\n\n"
+                + "\n\n---\n\n".join(search_summaries)
             ),
         })
-    synth_llm = get_llm_by_type(AGENT_LLM_MAP["synthesizer"])
+    
+    if rag_summary:
+        synth_messages.append({
+            "role": "system",
+            "content": f"Uppladdade dokument och källor:\n\n{rag_summary}",
+        })
+    
+    synth_llm_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["synthesizer"])
+    synth_pre_hook = partial(ContextManager(synth_llm_limit, 3).compress_messages)
+    synth_agent = create_agent(
+        "synthesizer",
+        "synthesizer",
+        tools,
+        "synthesizer",
+        synth_pre_hook,
+        interrupt_before_tools=configurable.interrupt_before_tools,
+        locale=locale,
+    )
     
     # Execute both agents concurrently
+    synth_state = {**state, "messages": synth_messages}
     result, synth_result = await asyncio.gather(
-        fact_checker_llm.ainvoke(messages),
-        synth_llm.ainvoke(synth_messages),
+        fact_checker_agent.ainvoke(state, config),
+        synth_agent.ainvoke(synth_state, config),
     )
     
     # Extract responses
     response_content = ""
-    if result and hasattr(result, "content"):
-        response_content = result.content
+    if result and "messages" in result and len(result["messages"]) > 0:
+        last_msg = result["messages"][-1]
+        if hasattr(last_msg, "content"):
+            response_content = last_msg.content
     
     synth_content = ""
-    if synth_result and hasattr(synth_result, "content"):
-        synth_content = synth_result.content
+    if synth_result and "messages" in synth_result and len(synth_result["messages"]) > 0:
+        synth_msg = synth_result["messages"][-1]
+        if hasattr(synth_msg, "content"):
+            synth_content = synth_msg.content
     
     logger.info(f"Fact checker response length: {len(response_content)}")
     logger.info(f"Synthesizer response length: {len(synth_content)}")
@@ -4958,14 +5055,8 @@ async def fact_checker_node(
         logger.warning(f"Failed to store internal fact/synth: {e}")
     
     combined_messages = []
-    if result:
-        combined_messages.append(
-            AIMessage(content=str(response_content or ""), name="fact_checker")
-        )
-    if synth_result:
-        combined_messages.append(
-            AIMessage(content=str(synth_content or ""), name="synthesizer")
-        )
+    combined_messages.extend(result.get("messages", []) if result else [])
+    combined_messages.extend(synth_result.get("messages", []) if synth_result else [])
     
     return Command(
         update={
