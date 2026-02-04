@@ -4357,18 +4357,18 @@ async def ai_compare_reporter_node(
 
 async def debate_orchestrator_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["external_ai_caller", "reporter"]]:
+) -> Command[Literal["debate_team", "reporter"]]:
     """
     Debate orchestrator node - manages rounds, scores, and exit criteria.
     
     This is the conductor that:
     1. Tracks current round number
-    2. Routes to external_ai_caller to get real AI model responses
+    2. Routes to debate_team supervisor to execute the pipeline
     3. Collects scores from moderator after each round
     4. Determines when to exit (rounds complete, knockout, significant score lead)
     5. Routes to reporter when debate is complete
     
-    NEW FLOW: orchestrator → external_ai_caller → fact_checker → synthesizer → moderator → orchestrator
+    NEW FLOW: orchestrator → debate_team (supervisor) → external_ai_caller/fact_checker/synthesizer/moderator → debate_team → orchestrator
     """
     logger.info("Debate orchestrator starting")
     configurable = Configuration.from_runnable_config(config)
@@ -4588,12 +4588,13 @@ async def debate_orchestrator_node(
         "debate_model_order": [],
         "external_ai_responses": "",
         "debate_pending_model": None,
+        "debate_last_node": "debate_orchestrator",  # Track last node for supervisor routing
     }
     logger.info(f"Orchestrator: Final state_update has debate_round={state_update.get('debate_round')}")
     
     return Command(
         update=state_update,
-        goto="external_ai_caller"  # Calls Grok, Gemini, ChatGPT, DeepSeek
+        goto="debate_team"  # Route to supervisor, not directly to external_ai_caller
     )
 
 
@@ -4807,8 +4808,9 @@ async def external_ai_caller_node(
                     "debate_model_order": model_order,
                     "debate_model_index": model_index,
                     "debate_pending_model": None,
+                    "debate_last_node": "external_ai_caller",  # Track completion
                 },
-                goto="fact_checker",
+                goto="debate_team",  # Return to supervisor
             )
         
         if model_index >= len(model_order):
@@ -4820,8 +4822,9 @@ async def external_ai_caller_node(
                     "debate_model_order": model_order,
                     "debate_model_index": model_index,
                     "debate_pending_model": None,
+                    "debate_last_node": "external_ai_caller",  # Track completion
                 },
-                goto="fact_checker",
+                goto="debate_team",  # Return to supervisor
             )
         
         model_key = model_order[model_index]
@@ -4866,7 +4869,7 @@ async def external_ai_caller_node(
                     "model_index": model_index,
                 },
             },
-            goto="external_ai_caller",
+            goto="debate_team",  # Return to supervisor which will loop back to external_ai_caller
         )
     except Exception as e:
         logger.error(f"Error in external_ai_caller per-model flow: {e}", exc_info=True)
@@ -4880,14 +4883,15 @@ async def external_ai_caller_node(
                 **preserve_state_meta_fields(state),
                 "messages": [error_message],
                 "debate_pending_model": None,
+                "debate_last_node": "external_ai_caller",  # Track completion even on error
             },
-            goto="fact_checker",
+            goto="debate_team",  # Return to supervisor
         )
 
 
 async def fact_checker_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["synthesizer"]]:
+) -> Command[Literal["debate_team"]]:
     """Fact checker node - verifies claims from external AI models with improved search strategy."""
     logger.info("Fact checker verifying external AI claims with agent architecture")
     configurable = Configuration.from_runnable_config(config)
@@ -5115,21 +5119,25 @@ async def fact_checker_node(
             "messages": combined_messages,
             "fact_checker_response": response_content,
             "synthesizer_response": synth_content,
+            "debate_last_node": "fact_checker",  # Track completion
         },
-        goto="synthesizer"  # synthesizer node will skip if already present
+        goto="debate_team"  # Return to supervisor
     )
 
 
 async def synthesizer_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["moderator"]]:
+) -> Command[Literal["debate_team"]]:
     """Synthesizer node - creates superior synthesis from both sides."""
     logger.info("Synthesizer creating integrated position")
     if state.get("synthesizer_response"):
         logger.info("Synthesizer already computed in parallel step, skipping.")
         return Command(
-            update=preserve_state_meta_fields(state),
-            goto="moderator",
+            update={
+                **preserve_state_meta_fields(state),
+                "debate_last_node": "synthesizer",  # Track completion
+            },
+            goto="debate_team",  # Return to supervisor
         )
     configurable = Configuration.from_runnable_config(config)
     thread_id = get_thread_id_from_config(config)
@@ -5159,8 +5167,9 @@ async def synthesizer_node(
             **preserve_state_meta_fields(state),
             "messages": [AIMessage(content=response_content, name="synthesizer")],
             "synthesizer_response": response_content,
+            "debate_last_node": "synthesizer",  # Track completion
         },
-        goto="moderator"
+        goto="debate_team"  # Return to supervisor
     )
 
 
@@ -5261,14 +5270,15 @@ Svara INTE med vanlig text eller markdown. Endast ren JSON!"""
             "messages": [summary_msg],
             "debate_scores": scores,
             "debate_knockout": knockout,
+            "debate_last_node": "moderator",  # Track completion
             # DO NOT set debate_round here - let orchestrator manage it
         }
         
-        logger.info(f"Moderator: Returning scores={scores}, knockout={knockout} to orchestrator")
+        logger.info(f"Moderator: Returning scores={scores}, knockout={knockout} to debate_team")
         
         return Command(
             update=state_update,
-            goto="debate_orchestrator"  # Route back for next round
+            goto="debate_team"  # Route back to supervisor (which routes to orchestrator)
         )
         
     except (json.JSONDecodeError, KeyError) as e:
@@ -5288,6 +5298,7 @@ Svara INTE med vanlig text eller markdown. Endast ren JSON!"""
                 "debate_scores": scores,
                 "debate_knockout": False,
                 "debate_round": current_round,  # CRITICAL: Preserve round number even on error!
+                "debate_last_node": "moderator",  # Track completion
             },
-            goto="debate_orchestrator"  # Route back for next round
+            goto="debate_team"  # Route back to supervisor
         )
