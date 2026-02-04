@@ -2458,10 +2458,10 @@ async def _execute_agent_step(
     web_search_validated = True
     should_validate = agent_name == "researcher"
     validation_info = ""
+    auto_search_note = ""
+    configurable = Configuration.from_runnable_config(config) if config else Configuration()
 
     if should_validate:
-        # Check if enforcement is enabled in configuration
-        configurable = Configuration.from_runnable_config(config) if config else Configuration()
         # Skip validation if web search is disabled (user intentionally disabled it)
         if configurable.enforce_researcher_search and configurable.enable_web_search:
             web_search_validated = validate_web_search_usage(result["messages"], agent_name)
@@ -2487,6 +2487,37 @@ async def _execute_agent_step(
         f"{agent_name.capitalize()} returned {len(agent_messages)} messages. "
         f"Message types: {[type(msg).__name__ for msg in agent_messages]}"
     )
+
+    # If researcher skipped web_search, perform a single auto-search for fallback
+    if should_validate and not web_search_validated and configurable.enforce_researcher_search and configurable.enable_web_search:
+        try:
+            query_parts = [plan_title, current_step.title, current_step.description]
+            query = " ".join([part for part in query_parts if part]).strip()
+            if query:
+                web_search_tool = get_web_search_tool(configurable.max_search_results)
+                logger.info(
+                    "[AUTO WEB SEARCH] Running fallback web_search with query: %s",
+                    query[:200],
+                )
+                tool_result = web_search_tool.invoke({"query": query})
+                if not isinstance(tool_result, str):
+                    tool_result = json.dumps(tool_result, ensure_ascii=False)
+                tool_message = ToolMessage(
+                    content=tool_result,
+                    tool_call_id=uuid4().hex,
+                    name="web_search",
+                )
+                agent_messages.append(tool_message)
+                web_search_validated = True
+                preview = tool_result[:1200]
+                auto_search_note = (
+                    "\n\n[AUTO WEB SEARCH] Query: "
+                    + query
+                    + "\nResults (truncated):\n"
+                    + preview
+                )
+        except Exception as exc:
+            logger.warning("[AUTO WEB SEARCH] Failed to run fallback web_search: %s", exc)
     
     # Count tool messages for logging
     tool_message_count = sum(1 for msg in agent_messages if isinstance(msg, ToolMessage))
@@ -2559,7 +2590,7 @@ async def _execute_agent_step(
         update={
             **preserve_state_meta_fields(state),
             "messages": agent_messages,
-            "observations": observations + [response_content + validation_info],
+            "observations": observations + [response_content + validation_info + auto_search_note],
             "citations": merged_citations,  # Store merged citations based on existing state and new tool results
         },
         goto=team_goto,
