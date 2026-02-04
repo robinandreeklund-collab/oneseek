@@ -4803,7 +4803,6 @@ async def external_ai_caller_node(
             logger.warning("No debate models available; skipping to fact_checker")
             return Command(
                 update={
-                    **preserve_state_meta_fields(state),
                     "debate_round_started": round_started,
                     "debate_model_order": model_order,
                     "debate_model_index": model_index,
@@ -4817,7 +4816,6 @@ async def external_ai_caller_node(
             logger.info("All models already processed for this round")
             return Command(
                 update={
-                    **preserve_state_meta_fields(state),
                     "debate_round_started": round_started,
                     "debate_model_order": model_order,
                     "debate_model_index": model_index,
@@ -4858,7 +4856,6 @@ async def external_ai_caller_node(
         
         return Command(
             update={
-                **preserve_state_meta_fields(state),
                 "messages": [response_message, *tool_results],
                 "debate_round_started": round_started,
                 "debate_model_order": model_order,
@@ -4880,7 +4877,6 @@ async def external_ai_caller_node(
         )
         return Command(
             update={
-                **preserve_state_meta_fields(state),
                 "messages": [error_message],
                 "debate_pending_model": None,
                 "debate_last_node": "external_ai_caller",  # Track completion even on error
@@ -5115,7 +5111,6 @@ async def fact_checker_node(
     
     return Command(
         update={
-            **preserve_state_meta_fields(state),
             "messages": combined_messages,
             "fact_checker_response": response_content,
             "synthesizer_response": synth_content,
@@ -5134,7 +5129,6 @@ async def synthesizer_node(
         logger.info("Synthesizer already computed in parallel step, skipping.")
         return Command(
             update={
-                **preserve_state_meta_fields(state),
                 "debate_last_node": "synthesizer",  # Track completion
             },
             goto="debate_team",  # Return to supervisor
@@ -5164,7 +5158,6 @@ async def synthesizer_node(
     
     return Command(
         update={
-            **preserve_state_meta_fields(state),
             "messages": [AIMessage(content=response_content, name="synthesizer")],
             "synthesizer_response": response_content,
             "debate_last_node": "synthesizer",  # Track completion
@@ -5266,7 +5259,6 @@ Svara INTE med vanlig text eller markdown. Endast ren JSON!"""
         # Build state update - moderator only updates scores and knockout
         # debate_round is managed ONLY by debate_orchestrator to avoid conflicts
         state_update = {
-            **preserve_state_meta_fields(state),
             "messages": [summary_msg],
             "debate_scores": scores,
             "debate_knockout": knockout,
@@ -5293,7 +5285,6 @@ Svara INTE med vanlig text eller markdown. Endast ren JSON!"""
         
         return Command(
             update={
-                **preserve_state_meta_fields(state),
                 "messages": [summary_msg],
                 "debate_scores": scores,
                 "debate_knockout": False,
