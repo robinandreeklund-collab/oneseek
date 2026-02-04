@@ -759,6 +759,27 @@ def extract_claim_sentences(text: str, max_claims: int = 8) -> list[str]:
     return claims
 
 
+def extract_agent_response_content(agent_result: dict | None) -> str:
+    """
+    Extract response content from an agent result dict.
+    
+    Args:
+        agent_result: Agent invocation result containing messages
+        
+    Returns:
+        Extracted text content from the last message, or empty string
+    """
+    if not agent_result:
+        return ""
+    messages = agent_result.get("messages", [])
+    if not messages:
+        return ""
+    last_msg = messages[-1]
+    if hasattr(last_msg, "content"):
+        return last_msg.content
+    return ""
+
+
 def validate_and_fix_plan(plan: dict, enforce_web_search: bool = False, enable_web_search: bool = True) -> dict:
     """
     Validate and fix a plan to ensure it meets requirements.
@@ -4896,6 +4917,7 @@ async def fact_checker_node(
         logger.warning("Debate fact-check query search failed: %s", exc)
     
     # Step 2: RAG retrieval if resources available
+    RAG_ITEM_MAX_LENGTH = 200  # Maximum chars to display per RAG item
     rag_summary = ""
     if debate_flow.retriever_tool:
         try:
@@ -4905,7 +4927,7 @@ async def fact_checker_node(
                 rag_items = rag_results if isinstance(rag_results, list) else [rag_results]
                 if rag_items:
                     rag_summary = f"RAG-dokument ({len(rag_items)} källor):\n"
-                    rag_summary += "\n".join([str(item)[:200] for item in rag_items[:3]])
+                    rag_summary += "\n".join([str(item)[:RAG_ITEM_MAX_LENGTH] for item in rag_items[:3]])
         except Exception as exc:
             logger.warning("RAG retrieval failed during fact-checking: %s", exc)
     
@@ -4932,12 +4954,12 @@ async def fact_checker_node(
         """Search the web for fact verification. Limited to prevent loops."""
         try:
             if not debate_flow.record_debate_search(current_round, max_search_calls):
-                return "SEARCH_LIMIT_REACHED: Max searches reached for this round. Use existing context."
+                return "SÖKGRÄNS_NÅDD: Max antal sökningar nådda för denna runda. Använd befintlig kontext."
             logger.info(f"Fact-checker agent performing web search: {query}")
             results = debate_flow.cached_web_search(query, current_round)
             return debate_flow._format_search_results(results, max_items=3)
         except Exception as e:
-            return f"Search error: {str(e)}"
+            return f"Sökfel: {str(e)}"
     
     @tool("crawl")
     def fact_check_crawl(url: str) -> str:
@@ -4946,7 +4968,7 @@ async def fact_checker_node(
             logger.info(f"Fact-checker agent crawling: {url}")
             return debate_flow.cached_crawl(url, current_round)
         except Exception as e:
-            return f"Crawl error: {str(e)}"
+            return f"Crawl-fel: {str(e)}"
     
     tools = [fact_check_web_search, fact_check_crawl]
     
@@ -4969,7 +4991,8 @@ async def fact_checker_node(
         })
     
     if claims:
-        claims_text = "\n".join(f"- {claim}" for claim in claims[:5])
+        # Display up to max_claims for context (consistent with search limit)
+        claims_text = "\n".join(f"- {claim}" for claim in claims[:max_claims])
         messages.append({
             "role": "system",
             "content": (
@@ -5031,18 +5054,9 @@ async def fact_checker_node(
         synth_agent.ainvoke(synth_state, config),
     )
     
-    # Extract responses
-    response_content = ""
-    if result and "messages" in result and len(result["messages"]) > 0:
-        last_msg = result["messages"][-1]
-        if hasattr(last_msg, "content"):
-            response_content = last_msg.content
-    
-    synth_content = ""
-    if synth_result and "messages" in synth_result and len(synth_result["messages"]) > 0:
-        synth_msg = synth_result["messages"][-1]
-        if hasattr(synth_msg, "content"):
-            synth_content = synth_msg.content
+    # Extract responses using helper function
+    response_content = extract_agent_response_content(result)
+    synth_content = extract_agent_response_content(synth_result)
     
     logger.info(f"Fact checker response length: {len(response_content)}")
     logger.info(f"Synthesizer response length: {len(synth_content)}")
