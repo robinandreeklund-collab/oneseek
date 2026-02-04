@@ -65,6 +65,12 @@ from .utils import (
 
 logger = logging.getLogger(__name__)
 
+# Debate fact-checking configuration constants
+DEBATE_RAG_ITEM_MAX_LENGTH = 200  # Max chars to display per RAG document
+DEBATE_RAG_MAX_ITEMS = 3  # Max number of RAG items to include
+DEBATE_PRIMARY_SEARCH_ITEMS = None  # Use configurable.max_search_results
+DEBATE_CLAIM_SEARCH_ITEMS = 2  # Fewer results for targeted claim searches
+
 
 def is_json_like(content: str) -> bool:
     """
@@ -4917,7 +4923,6 @@ async def fact_checker_node(
         logger.warning("Debate fact-check query search failed: %s", exc)
     
     # Step 2: RAG retrieval if resources available
-    RAG_ITEM_MAX_LENGTH = 200  # Maximum chars to display per RAG item
     rag_summary = ""
     if debate_flow.retriever_tool:
         try:
@@ -4927,7 +4932,10 @@ async def fact_checker_node(
                 rag_items = rag_results if isinstance(rag_results, list) else [rag_results]
                 if rag_items:
                     rag_summary = f"RAG-dokument ({len(rag_items)} källor):\n"
-                    rag_summary += "\n".join([str(item)[:RAG_ITEM_MAX_LENGTH] for item in rag_items[:3]])
+                    rag_summary += "\n".join([
+                        str(item)[:DEBATE_RAG_ITEM_MAX_LENGTH] 
+                        for item in rag_items[:DEBATE_RAG_MAX_ITEMS]
+                    ])
         except Exception as exc:
             logger.warning("RAG retrieval failed during fact-checking: %s", exc)
     
@@ -4942,7 +4950,8 @@ async def fact_checker_node(
                 break
             logger.info(f"Performing targeted claim search: {claim[:100]}...")
             results = debate_flow.cached_web_search(claim, current_round)
-            formatted = debate_flow._format_search_results(results, max_items=2)
+            # Use fewer items for targeted claim searches vs. broad query search
+            formatted = debate_flow._format_search_results(results, max_items=DEBATE_CLAIM_SEARCH_ITEMS)
             if formatted:
                 search_summaries.append(f"Kritiskt påstående: {claim}\n{formatted}")
         except Exception as exc:
