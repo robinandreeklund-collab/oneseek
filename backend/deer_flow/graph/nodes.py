@@ -4989,34 +4989,12 @@ async def synthesizer_node(
     thread_id = get_thread_id_from_config(config)
     locale = state.get("locale", "en-US")
     
-    # Get web search and other tools for additional context
-    tools = [get_web_search_tool(configurable.max_search_results), crawl_tool]
-    
     # Build prompt for synthesizer
     messages = apply_prompt_template("synthesizer", state, configurable, locale)
-    
-    # Create agent for synthesizer
-    llm_token_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["synthesizer"])
-    pre_model_hook = partial(ContextManager(llm_token_limit, 3).compress_messages)
-    agent = create_agent(
-        "synthesizer",
-        "synthesizer",
-        tools,
-        "synthesizer",
-        pre_model_hook,
-        interrupt_before_tools=configurable.interrupt_before_tools,
-        locale=locale,
-    )
-    
-    # Execute agent
-    result = await agent.ainvoke(state, config)
-    
-    # Extract response - agent returns dict with "messages" key
-    response_content = ""
-    if result and "messages" in result and len(result["messages"]) > 0:
-        last_msg = result["messages"][-1]
-        if hasattr(last_msg, 'content'):
-            response_content = last_msg.content
+
+    llm = get_llm_by_type(AGENT_LLM_MAP["synthesizer"])
+    response = await llm.ainvoke(messages)
+    response_content = strip_think_tags(get_message_content(response) or "")
     
     logger.info(f"Synthesizer response length: {len(response_content)}")
     
@@ -5033,7 +5011,7 @@ async def synthesizer_node(
     return Command(
         update={
             **preserve_state_meta_fields(state),
-            "messages": result.get("messages", []),
+            "messages": [AIMessage(content=response_content, name="synthesizer")],
             "synthesizer_response": response_content,
         },
         goto="moderator"

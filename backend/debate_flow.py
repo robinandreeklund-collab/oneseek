@@ -76,6 +76,7 @@ class DebateFlow:
         self.search_tool = None
         self.retriever_tool = None
         self.max_search_results = max_search_results
+        self.debater_search_calls: dict[int, int] = {}
         
         # Debate state
         self.current_round = 0
@@ -428,7 +429,18 @@ class DebateFlow:
         self.search_cache = {}
         self.crawl_cache = {}
         self.context_by_tool_call_id = {}
+        self.debater_search_calls = {}
         logger.info("DebateFlow state reset")
+
+    def record_debater_search(self, round_number: int, max_calls: int) -> bool:
+        """Track and limit debater web_search calls per round."""
+        if max_calls <= 0:
+            return False
+        current = self.debater_search_calls.get(round_number, 0)
+        if current >= max_calls:
+            return False
+        self.debater_search_calls[round_number] = current + 1
+        return True
 
     def add_fact(self, fact: str, source: str = "web_search"):
         """
@@ -959,8 +971,8 @@ _debate_flow_instances: Dict[str, DebateFlow] = {}
 
 
 def get_debate_flow(
-    max_search_results: int = 3,
-    resources: List[Any] = None,
+    max_search_results: int | None = None,
+    resources: List[Any] | None = None,
     thread_id: str | None = None,
     reset: bool = False,
 ) -> DebateFlow:
@@ -968,12 +980,18 @@ def get_debate_flow(
     global _debate_flow_instances
     thread_key = str(thread_id) if thread_id else "default"
     if thread_key not in _debate_flow_instances:
-        _debate_flow_instances[thread_key] = DebateFlow(max_search_results, resources)
+        init_max = max_search_results if isinstance(max_search_results, int) and max_search_results > 0 else 3
+        _debate_flow_instances[thread_key] = DebateFlow(init_max, resources)
     elif reset:
         _debate_flow_instances[thread_key].reset()
-        _debate_flow_instances[thread_key].update_search_settings(max_search_results, resources)
-    else:
-        _debate_flow_instances[thread_key].update_search_settings(max_search_results, resources)
+
+    if max_search_results is not None or resources is not None:
+        effective_max = (
+            max_search_results
+            if isinstance(max_search_results, int) and max_search_results > 0
+            else _debate_flow_instances[thread_key].max_search_results
+        )
+        _debate_flow_instances[thread_key].update_search_settings(effective_max, resources)
     return _debate_flow_instances[thread_key]
 
 
