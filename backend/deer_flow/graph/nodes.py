@@ -4911,7 +4911,7 @@ async def fact_checker_node(
     
     # Step 3: Targeted claim search for critical claims only
     claims = extract_claim_sentences(state.get("external_ai_responses", ""))
-    max_claims = int(os.getenv("DEBATE_FACT_CHECK_MAX_CLAIMS", "1"))
+    max_claims = int(os.getenv("DEBATE_FACT_CHECK_MAX_CLAIMS", "2"))
     
     for claim in claims[:max_claims]:
         try:
@@ -5012,20 +5012,22 @@ async def fact_checker_node(
     
     synth_llm_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["synthesizer"])
     synth_pre_hook = partial(ContextManager(synth_llm_limit, 3).compress_messages)
+    # Synthesizer doesn't need search tools - it works with provided context only
     synth_agent = create_agent(
         "synthesizer",
         "synthesizer",
-        tools,
+        [],  # No tools - synthesizer uses provided context only
         "synthesizer",
         synth_pre_hook,
         interrupt_before_tools=configurable.interrupt_before_tools,
         locale=locale,
     )
     
-    # Execute both agents concurrently
+    # Execute both agents concurrently with properly formatted states
+    fact_state = {**state, "messages": messages}
     synth_state = {**state, "messages": synth_messages}
     result, synth_result = await asyncio.gather(
-        fact_checker_agent.ainvoke(state, config),
+        fact_checker_agent.ainvoke(fact_state, config),
         synth_agent.ainvoke(synth_state, config),
     )
     
