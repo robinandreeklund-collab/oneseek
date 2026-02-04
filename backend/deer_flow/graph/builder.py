@@ -173,6 +173,42 @@ def continue_to_running_ai_compare_team(state: State):
     return END
 
 
+def continue_to_running_debate_team(state: State):
+    """
+    Route to the next debate step in the pipeline.
+    Mirrors research_team supervisor pattern but for debate flow.
+    
+    Pipeline: external_ai_caller → fact_checker → synthesizer → moderator → orchestrator
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    last_node = state.get("debate_last_node", "")
+    
+    logger.debug(f"[debate_team] Routing from last_node={last_node}")
+    
+    # Pipeline routing based on last completed node
+    if not last_node or last_node == "debate_orchestrator":
+        logger.debug("[debate_team] Starting pipeline, routing to external_ai_caller")
+        return "external_ai_caller"
+    elif last_node == "external_ai_caller":
+        logger.debug("[debate_team] After external_ai_caller, routing to fact_checker")
+        return "fact_checker"
+    elif last_node == "fact_checker":
+        logger.debug("[debate_team] After fact_checker, routing to synthesizer")
+        return "synthesizer"
+    elif last_node == "synthesizer":
+        logger.debug("[debate_team] After synthesizer, routing to moderator")
+        return "moderator"
+    elif last_node == "moderator":
+        logger.debug("[debate_team] After moderator, routing back to debate_orchestrator")
+        return "debate_orchestrator"
+    
+    # Fallback - should not reach here
+    logger.warning(f"[debate_team] Unknown last_node={last_node}, routing to debate_orchestrator")
+    return "debate_orchestrator"
+
+
 def _build_debate_team_subgraph():
     """
     Build the debate team sub-graph with specialized debate nodes.
@@ -230,8 +266,9 @@ def _build_base_graph():
     builder.add_node("ai_compare_reporter", ai_compare_reporter_node)
     builder.add_node("human_feedback", human_feedback_node)
     
-    # Add debate chain nodes (using real external AI models)
+    # Add debate chain nodes (using real external AI models) with supervisor pattern
     builder.add_node("debate_orchestrator", debate_orchestrator_node)
+    builder.add_node("debate_team", debate_team_node)  # Supervisor node
     builder.add_node("external_ai_caller", external_ai_caller_node)  # Calls Grok, Gemini, ChatGPT, DeepSeek
     builder.add_node("fact_checker", fact_checker_node)
     builder.add_node("synthesizer", synthesizer_node)
@@ -241,9 +278,11 @@ def _build_base_graph():
     builder.add_edge("background_investigator", "planner")
     # AI comparison uses a separate ai_compare_team chain with dedicated agents.
     #
-    # NEW: Separate debate chain:
-    # coordinator → debate_planner → human_feedback → debate_orchestrator → debate_team (proponent → opponent → fact_checker → synthesizer → moderator) → debate_orchestrator → reporter
-    # debate_orchestrator manages rounds and routes between debate_team and reporter
+    # NEW: Debate chain with supervisor pattern (mirrors research_team):
+    # coordinator → debate_planner → human_feedback → debate_orchestrator → debate_team (supervisor) → 
+    #   → external_ai_caller → debate_team → fact_checker → debate_team → synthesizer → debate_team → 
+    #   → moderator → debate_team → debate_orchestrator → reporter
+    # debate_team is the supervisor that routes between nodes using conditional_edges
     #
     # Code planner mode follows structured code development workflow:
     # coordinator → code_planner → human_feedback → code_team → coder/code_architect/code_reviewer/code_refiner/code_tester → reporter
@@ -252,17 +291,26 @@ def _build_base_graph():
     # coordinator → coder → __end__ (direct response)
     # The coder node determines whether to go to __end__ or code_team based on context
     
-    # Debate chain edges - all routing is dynamic via Command objects
-    # debate_planner routes to human_feedback
-    # human_feedback routes to debate_orchestrator for debate mode
-    # debate_orchestrator dispatches to parallel nodes (proponent, opponent, fact_checker) and synthesizer
-    # Debate chain edges - enforce correct flow after EACH round
-    # Flow: orchestrator → external_ai_caller → fact_checker → synthesizer → moderator → orchestrator (loop)
-    # external_ai_caller routes dynamically via Command (can loop), so we don't add a static edge
-    builder.add_edge("fact_checker", "synthesizer")
-    builder.add_edge("synthesizer", "moderator")
-    builder.add_edge("moderator", "debate_orchestrator")
-    # debate_orchestrator uses Command to route to external_ai_caller (next round) or reporter (complete)
+    # Debate chain edges with supervisor pattern
+    # Each debate node returns to debate_team supervisor
+    builder.add_edge("external_ai_caller", "debate_team")
+    builder.add_edge("fact_checker", "debate_team")
+    builder.add_edge("synthesizer", "debate_team")
+    builder.add_edge("moderator", "debate_team")
+    # debate_orchestrator can route to debate_team or reporter
+    
+    # debate_team supervisor uses conditional routing (like research_team)
+    builder.add_conditional_edges(
+        "debate_team",
+        continue_to_running_debate_team,
+        [
+            "external_ai_caller",
+            "fact_checker",
+            "synthesizer",
+            "moderator",
+            "debate_orchestrator",
+        ],
+    )
     
     builder.add_conditional_edges(
         "research_team",

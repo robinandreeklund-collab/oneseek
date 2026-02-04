@@ -65,6 +65,10 @@ from .utils import (
 
 logger = logging.getLogger(__name__)
 
+# Debate fact-checking configuration constants
+DEBATE_RAG_ITEM_MAX_LENGTH = 200  # Max chars to display per RAG document
+DEBATE_RAG_MAX_ITEMS = 3  # Max number of RAG items to include
+
 
 def is_json_like(content: str) -> bool:
     """
@@ -757,6 +761,27 @@ def extract_claim_sentences(text: str, max_claims: int = 8) -> list[str]:
         if len(claims) >= max_claims:
             break
     return claims
+
+
+def extract_agent_response_content(agent_result: dict | None) -> str:
+    """
+    Extract response content from an agent result dict.
+    
+    Args:
+        agent_result: Agent invocation result containing messages
+        
+    Returns:
+        Extracted text content from the last message, or empty string
+    """
+    if not agent_result:
+        return ""
+    messages = agent_result.get("messages", [])
+    if not messages:
+        return ""
+    last_msg = messages[-1]
+    if hasattr(last_msg, "content"):
+        return last_msg.content
+    return ""
 
 
 def validate_and_fix_plan(plan: dict, enforce_web_search: bool = False, enable_web_search: bool = True) -> dict:
@@ -4332,18 +4357,18 @@ async def ai_compare_reporter_node(
 
 async def debate_orchestrator_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["external_ai_caller", "reporter"]]:
+) -> Command[Literal["debate_team", "reporter"]]:
     """
     Debate orchestrator node - manages rounds, scores, and exit criteria.
     
     This is the conductor that:
     1. Tracks current round number
-    2. Routes to external_ai_caller to get real AI model responses
+    2. Routes to debate_team supervisor to execute the pipeline
     3. Collects scores from moderator after each round
     4. Determines when to exit (rounds complete, knockout, significant score lead)
     5. Routes to reporter when debate is complete
     
-    NEW FLOW: orchestrator → external_ai_caller → fact_checker → synthesizer → moderator → orchestrator
+    NEW FLOW: orchestrator → debate_team (supervisor) → external_ai_caller/fact_checker/synthesizer/moderator → debate_team → orchestrator
     """
     logger.info("Debate orchestrator starting")
     configurable = Configuration.from_runnable_config(config)
@@ -4563,12 +4588,13 @@ async def debate_orchestrator_node(
         "debate_model_order": [],
         "external_ai_responses": "",
         "debate_pending_model": None,
+        "debate_last_node": "debate_orchestrator",  # Track last node for supervisor routing
     }
     logger.info(f"Orchestrator: Final state_update has debate_round={state_update.get('debate_round')}")
     
     return Command(
         update=state_update,
-        goto="external_ai_caller"  # Calls Grok, Gemini, ChatGPT, DeepSeek
+        goto="debate_team"  # Route to supervisor, not directly to external_ai_caller
     )
 
 
@@ -4777,26 +4803,26 @@ async def external_ai_caller_node(
             logger.warning("No debate models available; skipping to fact_checker")
             return Command(
                 update={
-                    **preserve_state_meta_fields(state),
                     "debate_round_started": round_started,
                     "debate_model_order": model_order,
                     "debate_model_index": model_index,
                     "debate_pending_model": None,
+                    "debate_last_node": "external_ai_caller",  # Track completion
                 },
-                goto="fact_checker",
+                goto="debate_team",  # Return to supervisor
             )
         
         if model_index >= len(model_order):
             logger.info("All models already processed for this round")
             return Command(
                 update={
-                    **preserve_state_meta_fields(state),
                     "debate_round_started": round_started,
                     "debate_model_order": model_order,
                     "debate_model_index": model_index,
                     "debate_pending_model": None,
+                    "debate_last_node": "external_ai_caller",  # Track completion
                 },
-                goto="fact_checker",
+                goto="debate_team",  # Return to supervisor
             )
         
         model_key = model_order[model_index]
@@ -4830,7 +4856,6 @@ async def external_ai_caller_node(
         
         return Command(
             update={
-                **preserve_state_meta_fields(state),
                 "messages": [response_message, *tool_results],
                 "debate_round_started": round_started,
                 "debate_model_order": model_order,
@@ -4841,7 +4866,7 @@ async def external_ai_caller_node(
                     "model_index": model_index,
                 },
             },
-            goto="external_ai_caller",
+            goto="debate_team",  # Return to supervisor which will loop back to external_ai_caller
         )
     except Exception as e:
         logger.error(f"Error in external_ai_caller per-model flow: {e}", exc_info=True)
@@ -4852,19 +4877,19 @@ async def external_ai_caller_node(
         )
         return Command(
             update={
-                **preserve_state_meta_fields(state),
                 "messages": [error_message],
                 "debate_pending_model": None,
+                "debate_last_node": "external_ai_caller",  # Track completion even on error
             },
-            goto="fact_checker",
+            goto="debate_team",  # Return to supervisor
         )
 
 
 async def fact_checker_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["synthesizer"]]:
-    """Fact checker node - verifies claims from external AI models."""
-    logger.info("Fact checker verifying external AI claims")
+) -> Command[Literal["debate_team"]]:
+    """Fact checker node - verifies claims from external AI models with improved search strategy."""
+    logger.info("Fact checker verifying external AI claims with agent architecture")
     configurable = Configuration.from_runnable_config(config)
     thread_id = get_thread_id_from_config(config)
     locale = state.get("locale", "en-US")
@@ -4876,74 +4901,197 @@ async def fact_checker_node(
         thread_id=thread_id,
     )
     current_round = state.get("debate_round", 1)
+    user_query = state.get("research_topic", "")
     
-    # Controlled claim extraction
-    claims = extract_claim_sentences(state.get("external_ai_responses", ""))
-    
-    max_claims = int(os.getenv("DEBATE_FACT_CHECK_MAX_CLAIMS", "2"))
-    max_search_calls = int(os.getenv("DEBATE_WEB_SEARCH_MAX_CALLS", "2"))
+    # LLM-driven search strategy: Let the model decide what to verify
+    # Provide initial context and let fact_checker agent use tools as needed
+    # Limit searches to prevent infinite loops
+    max_search_calls = int(os.getenv("DEBATE_WEB_SEARCH_MAX_CALLS", "3"))
     search_summaries: list[str] = []
-    for claim in claims[:max_claims]:
-        try:
-            if not debate_flow.record_debate_search(current_round, max_search_calls):
-                logger.info("Debate search limit reached; skipping fact-check search")
-                break
-            results = debate_flow.cached_web_search(claim, current_round)
-            formatted = debate_flow._format_search_results(results, max_items=3)
+    
+    # Step 1: Broad search on original user query (primary context)
+    try:
+        if debate_flow.record_debate_search(current_round, max_search_calls):
+            logger.info(f"Performing primary query-based search: {user_query}")
+            results = debate_flow.cached_web_search(user_query, current_round)
+            formatted = debate_flow._format_search_results(results, max_items=configurable.max_search_results)
             if formatted:
-                search_summaries.append(f"Påstående: {claim}\n{formatted}")
+                search_summaries.append(f"Huvudsökning på originalfråga:\n{formatted}")
+        else:
+            logger.info("Debate search limit reached; skipping query search")
+    except Exception as exc:
+        logger.warning("Debate fact-check query search failed: %s", exc)
+    
+    # Step 2: RAG retrieval if resources available
+    rag_summary = ""
+    if debate_flow.retriever_tool:
+        try:
+            logger.info("Retrieving relevant documents from RAG")
+            rag_results = await debate_flow.retriever_tool.ainvoke(user_query)
+            if rag_results:
+                rag_items = rag_results if isinstance(rag_results, list) else [rag_results]
+                if rag_items:
+                    rag_summary = f"RAG-dokument ({len(rag_items)} källor):\n"
+                    rag_summary += "\n".join([
+                        str(item)[:DEBATE_RAG_ITEM_MAX_LENGTH] + ("..." if len(str(item)) > DEBATE_RAG_ITEM_MAX_LENGTH else "")
+                        for item in rag_items[:DEBATE_RAG_MAX_ITEMS]
+                    ])
         except Exception as exc:
-            logger.warning("Debate fact-check web search failed: %s", exc)
-
-    # Build prompt for fact_checker
+            logger.warning("RAG retrieval failed during fact-checking: %s", exc)
+    
+    # Create tools for fact_checker agent with call tracking
+    tool_call_count = {"count": 0, "max": 3}  # Strict limit on tool calls
+    
+    @tool("web_search")
+    def fact_check_web_search(query: str) -> str:
+        """Search the web for fact verification. Limited to prevent loops."""
+        try:
+            # Track tool calls to prevent infinite loops
+            tool_call_count["count"] += 1
+            if tool_call_count["count"] > tool_call_count["max"]:
+                logger.warning(f"Tool call limit reached ({tool_call_count['max']}). Stopping further searches.")
+                return (
+                    "VERKTYG_GRÄNS_NÅDD: Du har redan gjort 3 sökningar. "
+                    "Använd den information du har för att ge ditt slutgiltiga svar NU. "
+                    "Gör INGA fler sökningar."
+                )
+            
+            if not debate_flow.record_debate_search(current_round, max_search_calls):
+                return "SÖKGRÄNS_NÅDD: Max antal sökningar nådda för denna runda. Använd befintlig kontext för att ge ditt slutgiltiga svar."
+            
+            logger.info(f"Fact-checker agent performing web search ({tool_call_count['count']}/{tool_call_count['max']}): {query}")
+            results = debate_flow.cached_web_search(query, current_round)
+            formatted_results = debate_flow._format_search_results(results, max_items=3)
+            
+            # Add reminder to finish after each search
+            if tool_call_count["count"] >= 2:
+                formatted_results += "\n\nNOTIS: Du har nu gjort flera sökningar. Överväg att ge ditt slutgiltiga svar baserat på denna information."
+            
+            return formatted_results
+        except Exception as e:
+            return f"Sökfel: {str(e)}"
+    
+    @tool("crawl")
+    def fact_check_crawl(url: str) -> str:
+        """Crawl a URL for detailed fact verification."""
+        try:
+            # Track tool calls to prevent infinite loops
+            tool_call_count["count"] += 1
+            if tool_call_count["count"] > tool_call_count["max"]:
+                logger.warning(f"Tool call limit reached ({tool_call_count['max']}). Stopping further crawls.")
+                return (
+                    "VERKTYG_GRÄNS_NÅDD: Du har redan gjort 3 verktygsanrop. "
+                    "Ge ditt slutgiltiga svar NU baserat på tillgänglig information."
+                )
+            
+            logger.info(f"Fact-checker agent crawling ({tool_call_count['count']}/{tool_call_count['max']}): {url}")
+            result = debate_flow.cached_crawl(url, current_round)
+            
+            # Add reminder to finish after each crawl
+            if tool_call_count["count"] >= 2:
+                result += "\n\nNOTIS: Du har nu använt flera verktyg. Överväg att ge ditt slutgiltiga svar baserat på denna information."
+            
+            return result
+        except Exception as e:
+            return f"Crawl-fel: {str(e)}"
+    
+    tools = [fact_check_web_search, fact_check_crawl]
+    
+    # Build prompt for fact_checker with enriched context
     messages = apply_prompt_template("fact_checker", state, configurable, locale)
-    if claims:
-        claims_text = "\n".join(f"- {claim}" for claim in claims)
-        messages.append({
-            "role": "system",
-            "content": (
-                "Verifiera endast följande explicit formulerade påståenden. "
-                "Undvik att söka på nya eller vaga påståenden.\n\n"
-                f"{claims_text}"
-            ),
-        })
+    
     if search_summaries:
         messages.append({
             "role": "system",
             "content": (
-                "Här är begränsade webbsökningsresultat för de viktigaste påståendena:\n\n"
-                + "\n\n".join(search_summaries)
+                "Här är webbsökningsresultat för faktakontroll:\n\n"
+                + "\n\n---\n\n".join(search_summaries)
             ),
         })
     
-    fact_checker_llm = get_llm_by_type(AGENT_LLM_MAP["fact_checker"])
+    if rag_summary:
+        messages.append({
+            "role": "system",
+            "content": f"Uppladdade dokument och källor:\n\n{rag_summary}",
+        })
+    
+    # Encourage LLM to identify and verify claims using tools with clear stopping conditions
+    messages.append({
+        "role": "system",
+        "content": (
+            "Du har tillgång till web_search och crawl verktyg.\n\n"
+            "**Din uppgift:**\n"
+            "1. Analysera svaren från de externa AI-modellerna\n"
+            "2. Identifiera de 2-3 VIKTIGASTE påståendena som behöver verifieras\n"
+            "3. Använd web_search verktyget SPARSMAKAT (max 2-3 sökningar)\n"
+            "4. När du fått tillräcklig information, GE DITT SVAR DIREKT utan fler sökningar\n\n"
+            "**Prioritera påståenden som är:**\n"
+            "- Konkreta och verifierbara (siffror, statistik, studier)\n"
+            "- Centrala för argumenten\n"
+            "- Potentiellt kontroversiella eller tveksamma\n\n"
+            "**VIKTIGT:**\n"
+            "- Gör INTE fler än 2-3 sökningar totalt\n"
+            "- När du fått svar på dina sökningar, GE DITT SLUTGILTIGA SVAR DIREKT\n"
+            "- Om verktyget säger 'SÖKGRÄNS_NÅDD', använd den information du redan har\n"
+            "- Försök INTE söka igen om du redan fått tillräcklig information"
+        ),
+    })
+    
+    # Create agent for fact_checker with tools
+    llm_token_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["fact_checker"])
+    pre_model_hook = partial(ContextManager(llm_token_limit, 3).compress_messages)
+    fact_checker_agent = create_agent(
+        "fact_checker",
+        "fact_checker",
+        tools,
+        "fact_checker",
+        pre_model_hook,
+        interrupt_before_tools=configurable.interrupt_before_tools,
+        locale=locale,
+    )
 
-    # Build synthesizer prompt (run in parallel)
+    # Build synthesizer agent with tools (run in parallel)
     synth_messages = apply_prompt_template("synthesizer", state, configurable, locale)
+    
     if search_summaries:
         synth_messages.append({
             "role": "system",
             "content": (
-                "Använd följande webbsökningsresultat som faktabackning vid syntes:\n\n"
-                + "\n\n".join(search_summaries)
+                "Använd följande webbsökningsresultat som faktabackning:\n\n"
+                + "\n\n---\n\n".join(search_summaries)
             ),
         })
-    synth_llm = get_llm_by_type(AGENT_LLM_MAP["synthesizer"])
     
-    # Execute both agents concurrently
-    result, synth_result = await asyncio.gather(
-        fact_checker_llm.ainvoke(messages),
-        synth_llm.ainvoke(synth_messages),
+    if rag_summary:
+        synth_messages.append({
+            "role": "system",
+            "content": f"Uppladdade dokument och källor:\n\n{rag_summary}",
+        })
+    
+    synth_llm_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["synthesizer"])
+    synth_pre_hook = partial(ContextManager(synth_llm_limit, 3).compress_messages)
+    # Synthesizer doesn't need search tools - it works with provided context only
+    synth_agent = create_agent(
+        "synthesizer",
+        "synthesizer",
+        [],  # No tools - synthesizer uses provided context only
+        "synthesizer",
+        synth_pre_hook,
+        interrupt_before_tools=configurable.interrupt_before_tools,
+        locale=locale,
     )
     
-    # Extract responses
-    response_content = ""
-    if result and hasattr(result, "content"):
-        response_content = result.content
+    # Execute both agents concurrently with properly formatted states
+    fact_state = {**state, "messages": messages}
+    synth_state = {**state, "messages": synth_messages}
+    result, synth_result = await asyncio.gather(
+        fact_checker_agent.ainvoke(fact_state, config),
+        synth_agent.ainvoke(synth_state, config),
+    )
     
-    synth_content = ""
-    if synth_result and hasattr(synth_result, "content"):
-        synth_content = synth_result.content
+    # Extract responses using helper function
+    response_content = extract_agent_response_content(result)
+    synth_content = extract_agent_response_content(synth_result)
     
     logger.info(f"Fact checker response length: {len(response_content)}")
     logger.info(f"Synthesizer response length: {len(synth_content)}")
@@ -4958,36 +5106,32 @@ async def fact_checker_node(
         logger.warning(f"Failed to store internal fact/synth: {e}")
     
     combined_messages = []
-    if result:
-        combined_messages.append(
-            AIMessage(content=str(response_content or ""), name="fact_checker")
-        )
-    if synth_result:
-        combined_messages.append(
-            AIMessage(content=str(synth_content or ""), name="synthesizer")
-        )
+    combined_messages.extend(result.get("messages", []) if result else [])
+    combined_messages.extend(synth_result.get("messages", []) if synth_result else [])
     
     return Command(
         update={
-            **preserve_state_meta_fields(state),
             "messages": combined_messages,
             "fact_checker_response": response_content,
             "synthesizer_response": synth_content,
+            "debate_last_node": "fact_checker",  # Track completion
         },
-        goto="synthesizer"  # synthesizer node will skip if already present
+        goto="debate_team"  # Return to supervisor
     )
 
 
 async def synthesizer_node(
     state: State, config: RunnableConfig
-) -> Command[Literal["moderator"]]:
+) -> Command[Literal["debate_team"]]:
     """Synthesizer node - creates superior synthesis from both sides."""
     logger.info("Synthesizer creating integrated position")
     if state.get("synthesizer_response"):
         logger.info("Synthesizer already computed in parallel step, skipping.")
         return Command(
-            update=preserve_state_meta_fields(state),
-            goto="moderator",
+            update={
+                "debate_last_node": "synthesizer",  # Track completion
+            },
+            goto="debate_team",  # Return to supervisor
         )
     configurable = Configuration.from_runnable_config(config)
     thread_id = get_thread_id_from_config(config)
@@ -5014,11 +5158,11 @@ async def synthesizer_node(
     
     return Command(
         update={
-            **preserve_state_meta_fields(state),
             "messages": [AIMessage(content=response_content, name="synthesizer")],
             "synthesizer_response": response_content,
+            "debate_last_node": "synthesizer",  # Track completion
         },
-        goto="moderator"
+        goto="debate_team"  # Return to supervisor
     )
 
 
@@ -5115,18 +5259,18 @@ Svara INTE med vanlig text eller markdown. Endast ren JSON!"""
         # Build state update - moderator only updates scores and knockout
         # debate_round is managed ONLY by debate_orchestrator to avoid conflicts
         state_update = {
-            **preserve_state_meta_fields(state),
             "messages": [summary_msg],
             "debate_scores": scores,
             "debate_knockout": knockout,
+            "debate_last_node": "moderator",  # Track completion
             # DO NOT set debate_round here - let orchestrator manage it
         }
         
-        logger.info(f"Moderator: Returning scores={scores}, knockout={knockout} to orchestrator")
+        logger.info(f"Moderator: Returning scores={scores}, knockout={knockout} to debate_team")
         
         return Command(
             update=state_update,
-            goto="debate_orchestrator"  # Route back for next round
+            goto="debate_team"  # Route back to supervisor (which routes to orchestrator)
         )
         
     except (json.JSONDecodeError, KeyError) as e:
@@ -5141,11 +5285,11 @@ Svara INTE med vanlig text eller markdown. Endast ren JSON!"""
         
         return Command(
             update={
-                **preserve_state_meta_fields(state),
                 "messages": [summary_msg],
                 "debate_scores": scores,
                 "debate_knockout": False,
                 "debate_round": current_round,  # CRITICAL: Preserve round number even on error!
+                "debate_last_node": "moderator",  # Track completion
             },
-            goto="debate_orchestrator"  # Route back for next round
+            goto="debate_team"  # Route back to supervisor
         )
