@@ -4905,7 +4905,8 @@ async def fact_checker_node(
     
     # LLM-driven search strategy: Let the model decide what to verify
     # Provide initial context and let fact_checker agent use tools as needed
-    max_search_calls = int(os.getenv("DEBATE_WEB_SEARCH_MAX_CALLS", "5"))
+    # Limit searches to prevent infinite loops
+    max_search_calls = int(os.getenv("DEBATE_WEB_SEARCH_MAX_CALLS", "3"))
     search_summaries: list[str] = []
     
     # Step 1: Broad search on original user query (primary context)
@@ -4938,16 +4939,35 @@ async def fact_checker_node(
         except Exception as exc:
             logger.warning("RAG retrieval failed during fact-checking: %s", exc)
     
-    # Create tools for fact_checker agent
+    # Create tools for fact_checker agent with call tracking
+    tool_call_count = {"count": 0, "max": 3}  # Strict limit on tool calls
+    
     @tool("web_search")
     def fact_check_web_search(query: str) -> str:
         """Search the web for fact verification. Limited to prevent loops."""
         try:
+            # Track tool calls to prevent infinite loops
+            tool_call_count["count"] += 1
+            if tool_call_count["count"] > tool_call_count["max"]:
+                logger.warning(f"Tool call limit reached ({tool_call_count['max']}). Stopping further searches.")
+                return (
+                    "VERKTYG_GRÄNS_NÅDD: Du har redan gjort 3 sökningar. "
+                    "Använd den information du har för att ge ditt slutgiltiga svar NU. "
+                    "Gör INGA fler sökningar."
+                )
+            
             if not debate_flow.record_debate_search(current_round, max_search_calls):
-                return "SÖKGRÄNS_NÅDD: Max antal sökningar nådda för denna runda. Använd befintlig kontext."
-            logger.info(f"Fact-checker agent performing web search: {query}")
+                return "SÖKGRÄNS_NÅDD: Max antal sökningar nådda för denna runda. Använd befintlig kontext för att ge ditt slutgiltiga svar."
+            
+            logger.info(f"Fact-checker agent performing web search ({tool_call_count['count']}/{tool_call_count['max']}): {query}")
             results = debate_flow.cached_web_search(query, current_round)
-            return debate_flow._format_search_results(results, max_items=3)
+            formatted_results = debate_flow._format_search_results(results, max_items=3)
+            
+            # Add reminder to finish after each search
+            if tool_call_count["count"] >= 2:
+                formatted_results += "\n\nNOTIS: Du har nu gjort flera sökningar. Överväg att ge ditt slutgiltiga svar baserat på denna information."
+            
+            return formatted_results
         except Exception as e:
             return f"Sökfel: {str(e)}"
     
@@ -4955,8 +4975,23 @@ async def fact_checker_node(
     def fact_check_crawl(url: str) -> str:
         """Crawl a URL for detailed fact verification."""
         try:
-            logger.info(f"Fact-checker agent crawling: {url}")
-            return debate_flow.cached_crawl(url, current_round)
+            # Track tool calls to prevent infinite loops
+            tool_call_count["count"] += 1
+            if tool_call_count["count"] > tool_call_count["max"]:
+                logger.warning(f"Tool call limit reached ({tool_call_count['max']}). Stopping further crawls.")
+                return (
+                    "VERKTYG_GRÄNS_NÅDD: Du har redan gjort 3 verktygsanrop. "
+                    "Ge ditt slutgiltiga svar NU baserat på tillgänglig information."
+                )
+            
+            logger.info(f"Fact-checker agent crawling ({tool_call_count['count']}/{tool_call_count['max']}): {url}")
+            result = debate_flow.cached_crawl(url, current_round)
+            
+            # Add reminder to finish after each crawl
+            if tool_call_count["count"] >= 2:
+                result += "\n\nNOTIS: Du har nu använt flera verktyg. Överväg att ge ditt slutgiltiga svar baserat på denna information."
+            
+            return result
         except Exception as e:
             return f"Crawl-fel: {str(e)}"
     
@@ -4980,20 +5015,25 @@ async def fact_checker_node(
             "content": f"Uppladdade dokument och källor:\n\n{rag_summary}",
         })
     
-    # Encourage LLM to identify and verify claims using tools
+    # Encourage LLM to identify and verify claims using tools with clear stopping conditions
     messages.append({
         "role": "system",
         "content": (
             "Du har tillgång till web_search och crawl verktyg.\n\n"
             "**Din uppgift:**\n"
             "1. Analysera svaren från de externa AI-modellerna\n"
-            "2. Identifiera påståenden som behöver verifieras (fakta, statistik, studier, etc.)\n"
-            "3. Använd web_search verktyget för att verifiera viktiga påståenden\n"
-            "4. Prioritera påståenden som är:\n"
-            "   - Konkreta och verifierbara\n"
-            "   - Centrala för argumenten\n"
-            "   - Potentiellt kontroversiella eller tveksamma\n\n"
-            "Du bestämmer själv vilka påståenden som är viktigast att kontrollera."
+            "2. Identifiera de 2-3 VIKTIGASTE påståendena som behöver verifieras\n"
+            "3. Använd web_search verktyget SPARSMAKAT (max 2-3 sökningar)\n"
+            "4. När du fått tillräcklig information, GE DITT SVAR DIREKT utan fler sökningar\n\n"
+            "**Prioritera påståenden som är:**\n"
+            "- Konkreta och verifierbara (siffror, statistik, studier)\n"
+            "- Centrala för argumenten\n"
+            "- Potentiellt kontroversiella eller tveksamma\n\n"
+            "**VIKTIGT:**\n"
+            "- Gör INTE fler än 2-3 sökningar totalt\n"
+            "- När du fått svar på dina sökningar, GE DITT SLUTGILTIGA SVAR DIREKT\n"
+            "- Om verktyget säger 'SÖKGRÄNS_NÅDD', använd den information du redan har\n"
+            "- Försök INTE söka igen om du redan fått tillräcklig information"
         ),
     })
     

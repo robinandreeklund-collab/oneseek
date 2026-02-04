@@ -328,7 +328,7 @@ class DebateFlow:
         """Run a lightweight internal web search before OneSeek's first response."""
         if not self.search_tool:
             return ""
-        max_calls = int(os.getenv("DEBATE_WEB_SEARCH_MAX_CALLS", "5"))
+        max_calls = int(os.getenv("DEBATE_WEB_SEARCH_MAX_CALLS", "3"))
         if not self.record_debate_search(self.current_round or 1, max_calls):
             logger.info("Debate search limit reached; skipping round 1 presearch")
             return ""
@@ -748,7 +748,7 @@ class DebateFlow:
             # Simple fact-check via web search if available
             if self.search_tool and len(resp["response"]) > 100:
                 try:
-                    max_calls = int(os.getenv("DEBATE_WEB_SEARCH_MAX_CALLS", "5"))
+                    max_calls = int(os.getenv("DEBATE_WEB_SEARCH_MAX_CALLS", "3"))
                     if not self.record_debate_search(self.current_round or 1, max_calls):
                         logger.info("Debate search limit reached; skipping internal analysis search")
                         break
