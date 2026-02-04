@@ -10,7 +10,7 @@ from uuid import uuid4
 from functools import partial
 from typing import Annotated, Any, Literal
 
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 # MCP adapters import moved to conditional block where it's used
@@ -303,6 +303,64 @@ def build_fallback_plan(state: State, configurable: Configuration, raw_text: str
             }
         ],
     }
+
+
+def attempt_plan_json_rewrite(
+    llm,
+    raw_text: str,
+    locale: str,
+    max_chars: int = 4000,
+) -> str | None:
+    if not raw_text:
+        return None
+    trimmed = raw_text.strip()
+    if max_chars > 0 and len(trimmed) > max_chars:
+        trimmed = trimmed[:max_chars]
+
+    system_prompt = (
+        "You are a JSON generator. Convert the provided text into a JSON object that "
+        "matches this schema exactly:\n"
+        "{\n"
+        '  "locale": "sv-SE",\n'
+        '  "has_enough_context": true|false,\n'
+        '  "thought": "string",\n'
+        '  "title": "string",\n'
+        '  "steps": [\n'
+        "    {\n"
+        '      "need_search": true|false,\n'
+        '      "title": "string",\n'
+        '      "description": "string",\n'
+        '      "step_type": "research|analysis|processing|testing|review|refactor|ai_query|ai_fact_check|ai_meta|ai_synth|ai_report"\n'
+        "    }\n"
+        "  ]\n"
+        "}\n"
+        "Return ONLY valid JSON. Do not include any explanations."
+    )
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=f"Locale: {locale}\n\nText:\n{trimmed}"),
+    ]
+
+    try:
+        json_llm = llm.bind(response_format={"type": "json_object"}, temperature=0)
+        response = json_llm.invoke(messages)
+        content = get_message_content(response) or ""
+        normalized = normalize_json_response(content)
+        if is_json_like(normalized):
+            return normalized
+    except Exception as exc:
+        logger.warning("Planner JSON rewrite failed with response_format: %s", exc)
+
+    try:
+        response = llm.invoke(messages)
+        content = get_message_content(response) or ""
+        normalized = normalize_json_response(content)
+        if is_json_like(normalized):
+            return normalized
+    except Exception as exc:
+        logger.warning("Planner JSON rewrite failed without response_format: %s", exc)
+
+    return None
 
 
 def _normalize_tool_call_entry(raw_call: Any) -> dict[str, Any] | None:
@@ -912,6 +970,16 @@ def planner_node(
     full_response = normalize_json_response(full_response)
     if full_response != original_response:
         logger.debug(f"Normalized planner response to JSON: {full_response[:100]}...")
+
+    if not is_json_like(full_response):
+        rewritten = attempt_plan_json_rewrite(
+            llm,
+            original_response,
+            state.get("locale", "en-US"),
+        )
+        if rewritten:
+            logger.info("Planner JSON rewrite succeeded")
+            full_response = rewritten
 
     # Validate explicitly that response content is valid JSON before proceeding to parse it
     if not is_json_like(full_response):
