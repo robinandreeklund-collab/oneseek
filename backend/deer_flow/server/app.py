@@ -991,8 +991,42 @@ class ToolActionTracker:
         except (json.JSONDecodeError, TypeError):
             return self._truncate(output_text, self.max_output_chars)
 
+        if isinstance(data, dict):
+            results = data.get("results", [])
+            images = data.get("images", [])
+            if isinstance(results, list) and isinstance(images, list):
+                data = results + images
         if not isinstance(data, list):
             return self._truncate(output_text, self.max_output_chars)
+
+        pages_by_url: dict[str, dict] = {}
+        images_by_url: dict[str, dict] = {}
+
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            item_type = item.get("type")
+            if item_type == "image_url":
+                item_type = "image"
+            if item_type == "page":
+                url = (item.get("url") or "").strip()
+                if not url or url in pages_by_url:
+                    continue
+                pages_by_url[url] = item
+            elif item_type == "image":
+                image_url = item.get("image_url")
+                if isinstance(image_url, dict):
+                    image_url = image_url.get("url")
+                if not isinstance(image_url, str):
+                    continue
+                image_url = image_url.strip()
+                if not image_url or image_url in images_by_url:
+                    continue
+                normalized = item.copy()
+                normalized["image_url"] = image_url
+                images_by_url[image_url] = normalized
+
+        data = list(pages_by_url.values()) + list(images_by_url.values())
 
         def build_trimmed(
             content_len: int,
@@ -1006,8 +1040,14 @@ class ToolActionTracker:
                 if not isinstance(item, dict):
                     continue
                 item_type = item.get("type")
+                if item_type == "image_url":
+                    item_type = "image"
                 if item_type == "page" and len(pages) < max_pages:
                     content = (item.get("content") or "").strip()
+                    if not content:
+                        content = (item.get("raw_content") or "").strip()
+                    if not content:
+                        content = (item.get("title") or "").strip()
                     if content_len > 0 and len(content) > content_len:
                         content = content[:content_len] + "..."
                     pages.append(
