@@ -64,6 +64,7 @@ You coordinate a **3-round debate** where all available AI models (including One
    
 4. **debater_web_search(query)**
    - Performs web search to verify claims and add context
+   - **Max 1–2 searches per round** (if you receive `SEARCH_LIMIT_REACHED`, stop searching)
    - Results are shared internally for OneSeek synthesis
    
 5. **collect_debate_votes(user_query)**
@@ -154,6 +155,11 @@ After ALL three rounds and voting are complete, present results in structured fo
   - All internal analyses from web search
   - Identified errors and contradictions
   - Source references from fact-checks
+
+## Search Discipline (CRITICAL)
+- Call **debater_web_search** sparingly (max 1–2 per round)
+- If the tool returns `SEARCH_LIMIT_REACHED`, do **not** search again
+- Use existing results and continue the debate
 
 ## Voting Rules
 - **All models**, including OneSeek, vote

@@ -328,6 +328,10 @@ class DebateFlow:
         """Run a lightweight internal web search before OneSeek's first response."""
         if not self.search_tool:
             return ""
+        max_calls = int(os.getenv("DEBATE_WEB_SEARCH_MAX_CALLS", "2"))
+        if not self.record_debate_search(self.current_round or 1, max_calls):
+            logger.info("Debate search limit reached; skipping round 1 presearch")
+            return ""
         try:
             search_results = await asyncio.wait_for(
                 asyncio.to_thread(self.cached_web_search, user_query, self.current_round),
@@ -400,6 +404,7 @@ class DebateFlow:
             round_number: Round number (1, 2, or 3)
         """
         self.current_round = round_number
+        self.debater_search_calls[round_number] = 0
         
         # Save previous round before clearing
         if self.chain_so_far:
@@ -432,8 +437,8 @@ class DebateFlow:
         self.debater_search_calls = {}
         logger.info("DebateFlow state reset")
 
-    def record_debater_search(self, round_number: int, max_calls: int) -> bool:
-        """Track and limit debater web_search calls per round."""
+    def record_debate_search(self, round_number: int, max_calls: int) -> bool:
+        """Track and limit debate web_search calls per round."""
         if max_calls <= 0:
             return False
         current = self.debater_search_calls.get(round_number, 0)
@@ -743,6 +748,10 @@ class DebateFlow:
             # Simple fact-check via web search if available
             if self.search_tool and len(resp["response"]) > 100:
                 try:
+                    max_calls = int(os.getenv("DEBATE_WEB_SEARCH_MAX_CALLS", "2"))
+                    if not self.record_debate_search(self.current_round or 1, max_calls):
+                        logger.info("Debate search limit reached; skipping internal analysis search")
+                        break
                     # Extract key claims (simplified - just take first 200 chars)
                     claim = resp["response"][:200]
                     search_query = f"{user_query} {claim}"

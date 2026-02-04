@@ -275,7 +275,7 @@ def get_debate_tools() -> List[Any]:
 
             max_calls = int(os.getenv("DEBATE_WEB_SEARCH_MAX_CALLS", "2"))
             current_round = debate_flow.current_round or 1
-            if not debate_flow.record_debater_search(current_round, max_calls):
+            if not debate_flow.record_debate_search(current_round, max_calls):
                 return (
                     f"SEARCH_LIMIT_REACHED: Max {max_calls} webbsökningar per runda. "
                     "Använd befintliga resultat och fortsätt."

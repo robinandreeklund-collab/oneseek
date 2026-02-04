@@ -22,7 +22,7 @@ You MUST create a plan with EXACTLY 4 steps that orchestrate a multi-model debat
 
 ## Step 3: Round 3 - Final Positions and Synthesis
 - Title: "Round 3: Final Positions and Synthesis"
-- Description: All AI models present their final positions. OneSeek provides a comprehensive synthesis that weighs all perspectives, fact-checks claims via web search, and presents a balanced conclusion.
+- Description: All AI models present their final positions. OneSeek provides a comprehensive synthesis that weighs all perspectives, fact-checks claims with **limited** web search (max 1–2), and presents a balanced conclusion.
 - step_type: "research"
 - need_search: false
 
@@ -37,7 +37,7 @@ You MUST create a plan with EXACTLY 4 steps that orchestrate a multi-model debat
 For debate mode:
 - ALWAYS set `has_enough_context` to false (the debate itself will generate the context)
 - The debate tools will handle all model interactions, not web search
-- OneSeek will perform internal fact-checking during Round 3 using its own research tools
+- OneSeek will perform **limited** internal fact-checking during Round 3 (max 1–2 web searches, reuse existing results)
 
 ## Required Planning Structure
 
@@ -84,7 +84,7 @@ You MUST create a plan with EXACTLY 4 steps following this JSON schema:
 - Adjust the language (Swedish/English) based on the locale
 - The researcher will execute these steps using specialized debate tools
 - Each AI model will be queried as a separate tool call during execution
-- OneSeek will perform internal fact-checking using web search during Round 3
+- OneSeek will perform **limited** internal fact-checking using web search during Round 3 (max 1–2 searches)
 - **DO NOT** create additional research steps or modify the 4-step structure
 
 ## Language and Locale

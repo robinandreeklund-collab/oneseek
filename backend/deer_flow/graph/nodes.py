@@ -4881,9 +4881,13 @@ async def fact_checker_node(
     claims = extract_claim_sentences(state.get("external_ai_responses", ""))
     
     max_claims = int(os.getenv("DEBATE_FACT_CHECK_MAX_CLAIMS", "2"))
+    max_search_calls = int(os.getenv("DEBATE_WEB_SEARCH_MAX_CALLS", "2"))
     search_summaries: list[str] = []
     for claim in claims[:max_claims]:
         try:
+            if not debate_flow.record_debate_search(current_round, max_search_calls):
+                logger.info("Debate search limit reached; skipping fact-check search")
+                break
             results = debate_flow.cached_web_search(claim, current_round)
             formatted = debate_flow._format_search_results(results, max_items=3)
             if formatted:
