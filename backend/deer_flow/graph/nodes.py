@@ -4844,7 +4844,11 @@ async def fact_checker_node(
     locale = state.get("locale", "en-US")
     
     from backend.debate_flow import get_debate_flow
-    debate_flow = get_debate_flow(thread_id=thread_id)
+    debate_flow = get_debate_flow(
+        max_search_results=configurable.max_search_results,
+        resources=state.get("resources", []),
+        thread_id=thread_id,
+    )
     current_round = state.get("debate_round", 1)
     
     # Controlled claim extraction

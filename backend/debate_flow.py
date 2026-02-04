@@ -75,6 +75,7 @@ class DebateFlow:
         self.models = self._initialize_models()
         self.search_tool = None
         self.retriever_tool = None
+        self.max_search_results = max_search_results
         
         # Debate state
         self.current_round = 0
@@ -112,6 +113,25 @@ class DebateFlow:
                 logger.info("Retriever tool initialized for debate")
         except Exception as e:
             logger.warning(f"Could not initialize retriever tool: {e}")
+
+    def update_search_settings(self, max_search_results: int, resources: List[Any] | None = None) -> None:
+        """Update debate tools when UI settings or resources change."""
+        if max_search_results and max_search_results != self.max_search_results:
+            self.max_search_results = max_search_results
+            try:
+                self.search_tool = get_web_search_tool(max_search_results=max_search_results)
+                logger.info("Debate web search tool updated (max_results=%s)", max_search_results)
+            except Exception as e:
+                logger.warning(f"Could not update web search tool: {e}")
+        if resources is not None:
+            try:
+                if resources:
+                    self.retriever_tool = get_retriever_tool(resources=resources)
+                    logger.info("Debate retriever tool updated")
+                else:
+                    self.retriever_tool = None
+            except Exception as e:
+                logger.warning(f"Could not update retriever tool: {e}")
 
     def _initialize_models(self) -> Dict[str, Any]:
         """Initialize available AI models based on API keys."""
@@ -951,6 +971,9 @@ def get_debate_flow(
         _debate_flow_instances[thread_key] = DebateFlow(max_search_results, resources)
     elif reset:
         _debate_flow_instances[thread_key].reset()
+        _debate_flow_instances[thread_key].update_search_settings(max_search_results, resources)
+    else:
+        _debate_flow_instances[thread_key].update_search_settings(max_search_results, resources)
     return _debate_flow_instances[thread_key]
 
 
