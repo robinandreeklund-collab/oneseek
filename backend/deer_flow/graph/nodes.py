@@ -4933,7 +4933,7 @@ async def fact_checker_node(
                 if rag_items:
                     rag_summary = f"RAG-dokument ({len(rag_items)} källor):\n"
                     rag_summary += "\n".join([
-                        str(item)[:DEBATE_RAG_ITEM_MAX_LENGTH] 
+                        str(item)[:DEBATE_RAG_ITEM_MAX_LENGTH] + ("..." if len(str(item)) > DEBATE_RAG_ITEM_MAX_LENGTH else "")
                         for item in rag_items[:DEBATE_RAG_MAX_ITEMS]
                     ])
         except Exception as exc:
