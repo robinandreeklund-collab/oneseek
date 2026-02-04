@@ -4850,27 +4850,17 @@ async def fact_checker_node(
     # Controlled claim extraction
     claims = extract_claim_sentences(state.get("external_ai_responses", ""))
     
-    # Cached tools
-    base_search_tool = get_web_search_tool(configurable.max_search_results)
+    max_claims = int(os.getenv("DEBATE_FACT_CHECK_MAX_CLAIMS", "2"))
+    search_summaries: list[str] = []
+    for claim in claims[:max_claims]:
+        try:
+            results = debate_flow.cached_web_search(claim, current_round)
+            formatted = debate_flow._format_search_results(results, max_items=3)
+            if formatted:
+                search_summaries.append(f"Påstående: {claim}\n{formatted}")
+        except Exception as exc:
+            logger.warning("Debate fact-check web search failed: %s", exc)
 
-    search_count = 0
-
-    @tool("web_search")
-    def cached_web_search(query: str) -> str:
-        """Cached web search for fact checking (max 2)."""
-        nonlocal search_count
-        if search_count >= 2:
-            return "SEARCH_LIMIT_REACHED: Max 2 web searches per round."
-        search_count += 1
-        return debate_flow.cached_web_search(query, current_round)
-
-    @tool("crawl_tool")
-    def cached_crawl(url: str) -> str:
-        """Cached crawl for fact checking."""
-        return debate_flow.cached_crawl(url, current_round)
-
-    tools = [cached_web_search]
-    
     # Build prompt for fact_checker
     messages = apply_prompt_template("fact_checker", state, configurable, locale)
     if claims:
@@ -4883,54 +4873,43 @@ async def fact_checker_node(
                 f"{claims_text}"
             ),
         })
+    if search_summaries:
+        messages.append({
+            "role": "system",
+            "content": (
+                "Här är begränsade webbsökningsresultat för de viktigaste påståendena:\n\n"
+                + "\n\n".join(search_summaries)
+            ),
+        })
     
-    # Create agent for fact_checker
-    llm_token_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["fact_checker"])
-    pre_model_hook = partial(ContextManager(llm_token_limit, 3).compress_messages)
-    agent = create_agent(
-        "fact_checker",
-        "fact_checker",
-        tools,
-        "fact_checker",
-        pre_model_hook,
-        interrupt_before_tools=configurable.interrupt_before_tools,
-        locale=locale,
-    )
-    
-    # Build synthesizer agent (run in parallel)
-    synth_tools = [cached_web_search]
+    fact_checker_llm = get_llm_by_type(AGENT_LLM_MAP["fact_checker"])
+
+    # Build synthesizer prompt (run in parallel)
     synth_messages = apply_prompt_template("synthesizer", state, configurable, locale)
-    synth_llm_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["synthesizer"])
-    synth_pre_hook = partial(ContextManager(synth_llm_limit, 3).compress_messages)
-    synth_agent = create_agent(
-        "synthesizer",
-        "synthesizer",
-        synth_tools,
-        "synthesizer",
-        synth_pre_hook,
-        interrupt_before_tools=configurable.interrupt_before_tools,
-        locale=locale,
-    )
+    if search_summaries:
+        synth_messages.append({
+            "role": "system",
+            "content": (
+                "Använd följande webbsökningsresultat som faktabackning vid syntes:\n\n"
+                + "\n\n".join(search_summaries)
+            ),
+        })
+    synth_llm = get_llm_by_type(AGENT_LLM_MAP["synthesizer"])
     
     # Execute both agents concurrently
-    synth_state = {**state, "messages": synth_messages}
     result, synth_result = await asyncio.gather(
-        agent.ainvoke(state, config),
-        synth_agent.ainvoke(synth_state, config),
+        fact_checker_llm.ainvoke(messages),
+        synth_llm.ainvoke(synth_messages),
     )
     
     # Extract responses
     response_content = ""
-    if result and "messages" in result and len(result["messages"]) > 0:
-        last_msg = result["messages"][-1]
-        if hasattr(last_msg, "content"):
-            response_content = last_msg.content
+    if result and hasattr(result, "content"):
+        response_content = result.content
     
     synth_content = ""
-    if synth_result and "messages" in synth_result and len(synth_result["messages"]) > 0:
-        synth_msg = synth_result["messages"][-1]
-        if hasattr(synth_msg, "content"):
-            synth_content = synth_msg.content
+    if synth_result and hasattr(synth_result, "content"):
+        synth_content = synth_result.content
     
     logger.info(f"Fact checker response length: {len(response_content)}")
     logger.info(f"Synthesizer response length: {len(synth_content)}")
@@ -4945,8 +4924,14 @@ async def fact_checker_node(
         logger.warning(f"Failed to store internal fact/synth: {e}")
     
     combined_messages = []
-    combined_messages.extend(result.get("messages", []) if result else [])
-    combined_messages.extend(synth_result.get("messages", []) if synth_result else [])
+    if result:
+        combined_messages.append(
+            AIMessage(content=str(response_content or ""), name="fact_checker")
+        )
+    if synth_result:
+        combined_messages.append(
+            AIMessage(content=str(synth_content or ""), name="synthesizer")
+        )
     
     return Command(
         update={
