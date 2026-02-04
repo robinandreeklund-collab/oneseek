@@ -38,6 +38,21 @@ _web_search_calls_by_run: dict[str, dict[str, int]] = {}
 _web_search_total_by_run: dict[str, int] = {}
 _DEFAULT_MAX_WEB_SEARCH_CALLS = int(os.getenv("WEB_SEARCH_MAX_CALLS", "6"))
 _DEFAULT_MAX_WEB_SEARCH_DUPLICATES = int(os.getenv("WEB_SEARCH_MAX_DUPLICATE_CALLS", "2"))
+_DEFAULT_MAX_WEB_SEARCH_QUERY_CHARS = int(os.getenv("WEB_SEARCH_MAX_QUERY_CHARS", "400"))
+
+
+def _sanitize_web_search_query(query: str) -> str:
+    if query is None:
+        return ""
+    text = " ".join(str(query).split())
+    if _DEFAULT_MAX_WEB_SEARCH_QUERY_CHARS > 0 and len(text) > _DEFAULT_MAX_WEB_SEARCH_QUERY_CHARS:
+        logger.warning(
+            "Web search query truncated from %s to %s chars",
+            len(text),
+            _DEFAULT_MAX_WEB_SEARCH_QUERY_CHARS,
+        )
+        text = text[:_DEFAULT_MAX_WEB_SEARCH_QUERY_CHARS]
+    return text
 
 
 def _record_web_search_call(run_id: str, query: str) -> tuple[int, int]:
@@ -69,7 +84,8 @@ def _limit_web_search_calls(tool):
 
     def limited_run(query: str, *args, **kwargs):
         run_id = get_current_run_id()
-        total, duplicates = _record_web_search_call(run_id, query)
+        sanitized_query = _sanitize_web_search_query(query)
+        total, duplicates = _record_web_search_call(run_id, sanitized_query)
         if total > _DEFAULT_MAX_WEB_SEARCH_CALLS:
             logger.warning(
                 "Web search limit exceeded (run_id=%s total=%s query=%s)",
@@ -77,7 +93,7 @@ def _limit_web_search_calls(tool):
                 total,
                 query,
             )
-            return _make_limit_response(query, "max_calls")
+            return _make_limit_response(sanitized_query, "max_calls")
         if duplicates > _DEFAULT_MAX_WEB_SEARCH_DUPLICATES:
             logger.warning(
                 "Web search duplicate limit exceeded (run_id=%s query=%s count=%s)",
@@ -85,12 +101,13 @@ def _limit_web_search_calls(tool):
                 query,
                 duplicates,
             )
-            return _make_limit_response(query, "duplicate_query")
-        return original_run(query, *args, **kwargs)
+            return _make_limit_response(sanitized_query, "duplicate_query")
+        return original_run(sanitized_query, *args, **kwargs)
 
     async def limited_arun(query: str, *args, **kwargs):
         run_id = get_current_run_id()
-        total, duplicates = _record_web_search_call(run_id, query)
+        sanitized_query = _sanitize_web_search_query(query)
+        total, duplicates = _record_web_search_call(run_id, sanitized_query)
         if total > _DEFAULT_MAX_WEB_SEARCH_CALLS:
             logger.warning(
                 "Web search limit exceeded (run_id=%s total=%s query=%s)",
@@ -98,7 +115,7 @@ def _limit_web_search_calls(tool):
                 total,
                 query,
             )
-            return _make_limit_response(query, "max_calls")
+            return _make_limit_response(sanitized_query, "max_calls")
         if duplicates > _DEFAULT_MAX_WEB_SEARCH_DUPLICATES:
             logger.warning(
                 "Web search duplicate limit exceeded (run_id=%s query=%s count=%s)",
@@ -106,10 +123,10 @@ def _limit_web_search_calls(tool):
                 query,
                 duplicates,
             )
-            return _make_limit_response(query, "duplicate_query")
+            return _make_limit_response(sanitized_query, "duplicate_query")
         if original_arun:
-            return await original_arun(query, *args, **kwargs)
-        return original_run(query, *args, **kwargs)
+            return await original_arun(sanitized_query, *args, **kwargs)
+        return original_run(sanitized_query, *args, **kwargs)
 
     object.__setattr__(tool, "_run", limited_run)
     if original_arun:

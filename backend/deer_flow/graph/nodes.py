@@ -2491,7 +2491,11 @@ async def _execute_agent_step(
     # If researcher skipped web_search, perform a single auto-search for fallback
     if should_validate and not web_search_validated and configurable.enforce_researcher_search and configurable.enable_web_search:
         try:
-            query_parts = [plan_title, current_step.title, current_step.description]
+            query_parts = [plan_title, current_step.title]
+            description = (current_step.description or "").strip()
+            if description:
+                description = description.split(".")[0]
+                query_parts.append(description)
             query = " ".join([part for part in query_parts if part]).strip()
             if query:
                 web_search_tool = get_web_search_tool(configurable.max_search_results)
@@ -2502,11 +2506,17 @@ async def _execute_agent_step(
                 tool_result = web_search_tool.invoke({"query": query})
                 if not isinstance(tool_result, str):
                     tool_result = json.dumps(tool_result, ensure_ascii=False)
+                tool_call_id = uuid4().hex
+                tool_call_message = AIMessage(
+                    content="",
+                    tool_calls=[{"id": tool_call_id, "name": "web_search", "args": {"query": query}}],
+                )
                 tool_message = ToolMessage(
                     content=tool_result,
-                    tool_call_id=uuid4().hex,
+                    tool_call_id=tool_call_id,
                     name="web_search",
                 )
+                agent_messages.append(tool_call_message)
                 agent_messages.append(tool_message)
                 web_search_validated = True
                 preview = tool_result[:1200]
