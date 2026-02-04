@@ -966,9 +966,19 @@ def extract_citations_from_event(event: Any, safe_thread_id: str = "unknown") ->
 class ToolActionTracker:
     """Tracks tool calls and results to emit tool_actions in frontend format."""
     
-    def __init__(self, thread_id: str, run_id: Optional[str] = None):
+    def __init__(
+        self,
+        thread_id: str,
+        run_id: Optional[str] = None,
+        max_web_search_results: Optional[int] = None,
+    ):
         self.thread_id = thread_id
         self.run_id = run_id or thread_id
+        self.max_web_search_results = (
+            max_web_search_results
+            if isinstance(max_web_search_results, int) and max_web_search_results > 0
+            else None
+        )
         self.tool_calls = {}  # tool_call_id -> {tool_name, tool_input, timestamp}
         self.tool_actions = []  # List of completed tool actions
         self.pending_calls = set()  # Set of tool_call_ids waiting for results
@@ -1071,11 +1081,15 @@ class ToolActionTracker:
                     )
             return json.dumps(pages + images, ensure_ascii=False)
 
+        max_pages = self.max_web_search_results or 6
+        max_images = self.max_web_search_results or 6
+        half_pages = max(1, max_pages // 2)
+        half_images = max(1, max_images // 2)
         candidates = [
-            build_trimmed(500, 160, 6, 6),
-            build_trimmed(300, 120, 4, 4),
-            build_trimmed(200, 100, 3, 3),
-            build_trimmed(0, 80, 4, 4),
+            build_trimmed(500, 160, max_pages, max_images),
+            build_trimmed(300, 120, max_pages, max_images),
+            build_trimmed(200, 100, max_pages, max_images),
+            build_trimmed(120, 80, half_pages, half_images),
         ]
         for candidate in candidates:
             if len(candidate) <= self.max_output_chars:
@@ -1169,7 +1183,14 @@ async def _stream_graph_events(
     collected_citations = []
     
     # Track tool actions for real-time sidebar
-    tool_tracker = ToolActionTracker(safe_thread_id, run_id=thread_id)
+    max_search_results = None
+    if isinstance(workflow_config, dict):
+        max_search_results = workflow_config.get("max_search_results")
+    tool_tracker = ToolActionTracker(
+        safe_thread_id,
+        run_id=thread_id,
+        max_web_search_results=max_search_results,
+    )
     prev_action_count = 0
     
     try:
