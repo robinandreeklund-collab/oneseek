@@ -966,9 +966,19 @@ def extract_citations_from_event(event: Any, safe_thread_id: str = "unknown") ->
 class ToolActionTracker:
     """Tracks tool calls and results to emit tool_actions in frontend format."""
     
-    def __init__(self, thread_id: str, run_id: Optional[str] = None):
+    def __init__(
+        self,
+        thread_id: str,
+        run_id: Optional[str] = None,
+        max_web_search_results: Optional[int] = None,
+    ):
         self.thread_id = thread_id
         self.run_id = run_id or thread_id
+        self.max_web_search_results = (
+            max_web_search_results
+            if isinstance(max_web_search_results, int) and max_web_search_results > 0
+            else None
+        )
         self.tool_calls = {}  # tool_call_id -> {tool_name, tool_input, timestamp}
         self.tool_actions = []  # List of completed tool actions
         self.pending_calls = set()  # Set of tool_call_ids waiting for results
@@ -981,6 +991,110 @@ class ToolActionTracker:
         if len(text) > max_chars:
             return text[:max_chars] + "... [truncated]"
         return text
+
+    def _normalize_web_search_output(self, output_text: str) -> str:
+        """Trim web_search JSON to keep it valid for UI preview."""
+        if not output_text:
+            return output_text
+        try:
+            data = json.loads(output_text)
+        except (json.JSONDecodeError, TypeError):
+            return self._truncate(output_text, self.max_output_chars)
+
+        if isinstance(data, dict):
+            results = data.get("results", [])
+            images = data.get("images", [])
+            if isinstance(results, list) and isinstance(images, list):
+                data = results + images
+        if not isinstance(data, list):
+            return self._truncate(output_text, self.max_output_chars)
+
+        pages_by_url: dict[str, dict] = {}
+        images_by_url: dict[str, dict] = {}
+
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            item_type = item.get("type")
+            if item_type == "image_url":
+                item_type = "image"
+            if item_type == "page":
+                url = (item.get("url") or "").strip()
+                if not url or url in pages_by_url:
+                    continue
+                pages_by_url[url] = item
+            elif item_type == "image":
+                image_url = item.get("image_url")
+                if isinstance(image_url, dict):
+                    image_url = image_url.get("url")
+                if not isinstance(image_url, str):
+                    continue
+                image_url = image_url.strip()
+                if not image_url or image_url in images_by_url:
+                    continue
+                normalized = item.copy()
+                normalized["image_url"] = image_url
+                images_by_url[image_url] = normalized
+
+        data = list(pages_by_url.values()) + list(images_by_url.values())
+
+        def build_trimmed(
+            content_len: int,
+            image_len: int,
+            max_pages: int,
+            max_images: int,
+        ) -> str:
+            pages = []
+            images = []
+            for item in data:
+                if not isinstance(item, dict):
+                    continue
+                item_type = item.get("type")
+                if item_type == "image_url":
+                    item_type = "image"
+                if item_type == "page" and len(pages) < max_pages:
+                    content = (item.get("content") or "").strip()
+                    if not content:
+                        content = (item.get("raw_content") or "").strip()
+                    if not content:
+                        content = (item.get("title") or "").strip()
+                    if content_len > 0 and len(content) > content_len:
+                        content = content[:content_len] + "..."
+                    pages.append(
+                        {
+                            "type": "page",
+                            "title": item.get("title", ""),
+                            "url": item.get("url", ""),
+                            "content": content,
+                        }
+                    )
+                elif item_type == "image" and len(images) < max_images:
+                    desc = (item.get("image_description") or "").strip()
+                    if image_len > 0 and len(desc) > image_len:
+                        desc = desc[:image_len] + "..."
+                    images.append(
+                        {
+                            "type": "image",
+                            "image_url": item.get("image_url", ""),
+                            "image_description": desc,
+                        }
+                    )
+            return json.dumps(pages + images, ensure_ascii=False)
+
+        max_pages = self.max_web_search_results or 6
+        max_images = self.max_web_search_results or 6
+        half_pages = max(1, max_pages // 2)
+        half_images = max(1, max_images // 2)
+        candidates = [
+            build_trimmed(500, 160, max_pages, max_images),
+            build_trimmed(300, 120, max_pages, max_images),
+            build_trimmed(200, 100, max_pages, max_images),
+            build_trimmed(120, 80, half_pages, half_images),
+        ]
+        for candidate in candidates:
+            if len(candidate) <= self.max_output_chars:
+                return candidate
+        return candidates[-1]
 
     def _is_error_output(self, tool_output: Any) -> bool:
         if tool_output is None:
@@ -1016,8 +1130,12 @@ class ToolActionTracker:
     def add_tool_result(self, tool_call_id: str, tool_output: Any) -> Optional[dict]:
         """Record the result for a tool call and return updated action if found."""
         if tool_call_id in self.tool_calls:
+            tool_name = self.tool_calls[tool_call_id].get("tool_name", "")
             tool_output_text = str(tool_output) if tool_output else ""
-            tool_output_text = self._truncate(tool_output_text, self.max_output_chars)
+            if tool_name == "web_search":
+                tool_output_text = self._normalize_web_search_output(tool_output_text)
+            else:
+                tool_output_text = self._truncate(tool_output_text, self.max_output_chars)
             self.tool_calls[tool_call_id]["tool_output"] = tool_output_text
             self.tool_calls[tool_call_id]["status"] = (
                 "error" if self._is_error_output(tool_output_text) else "success"
@@ -1065,7 +1183,14 @@ async def _stream_graph_events(
     collected_citations = []
     
     # Track tool actions for real-time sidebar
-    tool_tracker = ToolActionTracker(safe_thread_id, run_id=thread_id)
+    max_search_results = None
+    if isinstance(workflow_config, dict):
+        max_search_results = workflow_config.get("max_search_results")
+    tool_tracker = ToolActionTracker(
+        safe_thread_id,
+        run_id=thread_id,
+        max_web_search_results=max_search_results,
+    )
     prev_action_count = 0
     
     try:

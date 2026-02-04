@@ -10,7 +10,10 @@ import httpx
 from langchain_core.language_models import BaseChatModel
 from langchain_deepseek import ChatDeepSeek
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_openai import AzureChatOpenAI, ChatOpenAI
+from backend.deer_flow.llms.providers.openai_tool_parser import (
+    AzureChatOpenAIWithToolCallParsing,
+    ChatOpenAIWithToolCallParsing,
+)
 
 from backend.deer_flow.config import load_yaml_config
 from backend.deer_flow.config.agents import LLMType
@@ -172,7 +175,7 @@ def _create_llm_use_conf(llm_type: LLMType, conf: Dict[str, Any]) -> BaseChatMod
         return ChatGoogleGenerativeAI(**gemini_conf)
 
     if "azure_endpoint" in merged_conf or os.getenv("AZURE_OPENAI_ENDPOINT"):
-        return AzureChatOpenAI(**merged_conf)
+        return AzureChatOpenAIWithToolCallParsing(**merged_conf)
 
     # Check if base_url is dashscope endpoint
     if "base_url" in merged_conf and "dashscope." in merged_conf["base_url"]:
@@ -184,7 +187,7 @@ def _create_llm_use_conf(llm_type: LLMType, conf: Dict[str, Any]) -> BaseChatMod
         merged_conf["api_base"] = merged_conf.pop("base_url", None)
         return ChatDeepSeek(**merged_conf)
     else:
-        return ChatOpenAI(**merged_conf)
+        return ChatOpenAIWithToolCallParsing(**merged_conf)
 
 
 def get_llm_by_type(llm_type: LLMType) -> BaseChatModel:

@@ -22,7 +22,7 @@ Du MÅSTE skapa en plan med EXAKT 4 steg som orkestrera en multi-modellsdebatt:
 
 ## Steg 3: Runda 3 - Slutliga positioner och syntes
 - Titel: "Runda 3: Slutliga positioner och syntes"
-- Beskrivning: Alla AI-modeller presenterar sina slutliga positioner. OneSeek skapar en omfattande syntes som väger alla perspektiv, faktakollar påståenden via webbsökning och presenterar en balanserad slutsats.
+- Beskrivning: Alla AI-modeller presenterar sina slutliga positioner. OneSeek skapar en omfattande syntes som väger alla perspektiv, faktakollar påståenden med **begränsad** webbsökning (max 1–2) och presenterar en balanserad slutsats.
 - step_type: "research"
 - need_search: false
 
@@ -37,7 +37,7 @@ Du MÅSTE skapa en plan med EXAKT 4 steg som orkestrera en multi-modellsdebatt:
 För debattläge:
 - Sätt ALLTID `has_enough_context` till false (debatten själv kommer att generera kontexten)
 - Debattverktygen kommer att hantera alla modellinteraktioner, inte webbsökning
-- OneSeek kommer att utföra intern faktakoll under Runda 3 med sina egna forskningsverktyg
+- OneSeek kommer att utföra **begränsad** intern faktakoll under Runda 3 (max 1–2 webbsökningar, använd befintliga resultat)
 
 ## Obligatorisk Planeringsstruktur
 
@@ -84,7 +84,7 @@ Du MÅSTE skapa en plan med EXAKT 4 steg enligt detta JSON-schema:
 - Justera språket (Svenska/Engelska) baserat på locale
 - Researchern kommer att utföra dessa steg med specialiserade debattverktyg
 - Varje AI-modell kommer att frågas som ett separat verktygsanrop under exekvering
-- OneSeek kommer att utföra intern faktakoll med webbsökning under Runda 3
+- OneSeek kommer att utföra **begränsad** intern faktakoll med webbsökning under Runda 3 (max 1–2 sökningar)
 - Skapa **INTE** ytterligare forskningssteg eller modifiera 4-stegsstrukturen
 
 ## Språk och Locale

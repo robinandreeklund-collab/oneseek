@@ -75,6 +75,8 @@ class DebateFlow:
         self.models = self._initialize_models()
         self.search_tool = None
         self.retriever_tool = None
+        self.max_search_results = max_search_results
+        self.debater_search_calls: dict[int, int] = {}
         
         # Debate state
         self.current_round = 0
@@ -112,6 +114,25 @@ class DebateFlow:
                 logger.info("Retriever tool initialized for debate")
         except Exception as e:
             logger.warning(f"Could not initialize retriever tool: {e}")
+
+    def update_search_settings(self, max_search_results: int, resources: List[Any] | None = None) -> None:
+        """Update debate tools when UI settings or resources change."""
+        if max_search_results and max_search_results != self.max_search_results:
+            self.max_search_results = max_search_results
+            try:
+                self.search_tool = get_web_search_tool(max_search_results=max_search_results)
+                logger.info("Debate web search tool updated (max_results=%s)", max_search_results)
+            except Exception as e:
+                logger.warning(f"Could not update web search tool: {e}")
+        if resources is not None:
+            try:
+                if resources:
+                    self.retriever_tool = get_retriever_tool(resources=resources)
+                    logger.info("Debate retriever tool updated")
+                else:
+                    self.retriever_tool = None
+            except Exception as e:
+                logger.warning(f"Could not update retriever tool: {e}")
 
     def _initialize_models(self) -> Dict[str, Any]:
         """Initialize available AI models based on API keys."""
@@ -307,6 +328,10 @@ class DebateFlow:
         """Run a lightweight internal web search before OneSeek's first response."""
         if not self.search_tool:
             return ""
+        max_calls = int(os.getenv("DEBATE_WEB_SEARCH_MAX_CALLS", "2"))
+        if not self.record_debate_search(self.current_round or 1, max_calls):
+            logger.info("Debate search limit reached; skipping round 1 presearch")
+            return ""
         try:
             search_results = await asyncio.wait_for(
                 asyncio.to_thread(self.cached_web_search, user_query, self.current_round),
@@ -379,6 +404,7 @@ class DebateFlow:
             round_number: Round number (1, 2, or 3)
         """
         self.current_round = round_number
+        self.debater_search_calls[round_number] = 0
         
         # Save previous round before clearing
         if self.chain_so_far:
@@ -408,7 +434,18 @@ class DebateFlow:
         self.search_cache = {}
         self.crawl_cache = {}
         self.context_by_tool_call_id = {}
+        self.debater_search_calls = {}
         logger.info("DebateFlow state reset")
+
+    def record_debate_search(self, round_number: int, max_calls: int) -> bool:
+        """Track and limit debate web_search calls per round."""
+        if max_calls <= 0:
+            return False
+        current = self.debater_search_calls.get(round_number, 0)
+        if current >= max_calls:
+            return False
+        self.debater_search_calls[round_number] = current + 1
+        return True
 
     def add_fact(self, fact: str, source: str = "web_search"):
         """
@@ -711,6 +748,10 @@ class DebateFlow:
             # Simple fact-check via web search if available
             if self.search_tool and len(resp["response"]) > 100:
                 try:
+                    max_calls = int(os.getenv("DEBATE_WEB_SEARCH_MAX_CALLS", "2"))
+                    if not self.record_debate_search(self.current_round or 1, max_calls):
+                        logger.info("Debate search limit reached; skipping internal analysis search")
+                        break
                     # Extract key claims (simplified - just take first 200 chars)
                     claim = resp["response"][:200]
                     search_query = f"{user_query} {claim}"
@@ -939,8 +980,8 @@ _debate_flow_instances: Dict[str, DebateFlow] = {}
 
 
 def get_debate_flow(
-    max_search_results: int = 3,
-    resources: List[Any] = None,
+    max_search_results: int | None = None,
+    resources: List[Any] | None = None,
     thread_id: str | None = None,
     reset: bool = False,
 ) -> DebateFlow:
@@ -948,9 +989,18 @@ def get_debate_flow(
     global _debate_flow_instances
     thread_key = str(thread_id) if thread_id else "default"
     if thread_key not in _debate_flow_instances:
-        _debate_flow_instances[thread_key] = DebateFlow(max_search_results, resources)
+        init_max = max_search_results if isinstance(max_search_results, int) and max_search_results > 0 else 3
+        _debate_flow_instances[thread_key] = DebateFlow(init_max, resources)
     elif reset:
         _debate_flow_instances[thread_key].reset()
+
+    if max_search_results is not None or resources is not None:
+        effective_max = (
+            max_search_results
+            if isinstance(max_search_results, int) and max_search_results > 0
+            else _debate_flow_instances[thread_key].max_search_results
+        )
+        _debate_flow_instances[thread_key].update_search_settings(effective_max, resources)
     return _debate_flow_instances[thread_key]
 
 

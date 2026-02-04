@@ -6,6 +6,7 @@ These tools enable the debate agent to run a 3-round debate where all models
 """
 
 import logging
+import os
 from typing import Any, List, Dict
 from langchain_core.tools import tool
 
@@ -33,7 +34,7 @@ async def start_debate_round(
         Information about the round and model order
     """
     try:
-        debate_flow = get_debate_flow(max_search_results=3, resources=[], thread_id=thread_id)
+        debate_flow = get_debate_flow(thread_id=thread_id)
         debate_flow.start_new_round(round_number)
         
         order = debate_flow.get_randomized_order()
@@ -254,9 +255,6 @@ def get_debate_tools() -> List[Any]:
     Returns:
         List of debate tools for round orchestration
     """
-    # Import web search tool directly
-    from backend.deer_flow.tools import get_web_search_tool
-    
     # Create debater_web_search tool wrapper
     @tool
     async def debater_web_search(query: str, thread_id: str | None = None) -> str:
@@ -272,23 +270,27 @@ def get_debate_tools() -> List[Any]:
         """
         try:
             debate_flow = get_debate_flow(thread_id=thread_id)
-            search_tool = get_web_search_tool(max_search_results=3)
-            
-            logger.info(f"Debater performing web search: {query}")
-            results = await search_tool.ainvoke(query)
-            
-            # Format results
-            result_text = f"Sökresultat för '{query}':\n"
-            if isinstance(results, list):
-                for i, res in enumerate(results):
-                    content = res.get('content', '')[:200] + "..."
-                    result_text += f"{i+1}. {res.get('title')} - {content}\n"
-            else:
-                result_text += str(results)
-            
-            # Add to debate flow shared facts
+            if not query or not str(query).strip():
+                return "Sökfel: tom sökfråga."
+
+            max_calls = int(os.getenv("DEBATE_WEB_SEARCH_MAX_CALLS", "2"))
+            current_round = debate_flow.current_round or 1
+            if not debate_flow.record_debate_search(current_round, max_calls):
+                return (
+                    f"SEARCH_LIMIT_REACHED: Max {max_calls} webbsökningar per runda. "
+                    "Använd befintliga resultat och fortsätt."
+                )
+
+            logger.info(f"Debater performing cached web search: {query}")
+            results = debate_flow.cached_web_search(str(query), current_round)
+
+            max_items = debate_flow.max_search_results or 3
+            formatted = debate_flow._format_search_results(results, max_items=max_items)
+            if not formatted:
+                return f"Inga sökresultat hittades för '{query}'."
+
+            result_text = f"Sökresultat för '{query}':\n{formatted}"
             debate_flow.add_fact(result_text, source=f"Web Search: {query}")
-            
             return result_text
         except Exception as e:
             logger.error(f"Error in debater web search: {e}")

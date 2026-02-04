@@ -16,6 +16,7 @@ You coordinate a **3-round debate** where all available AI models (including One
 3. For each model in order:
    - Call `query_model_in_round` with model_key (e.g., "gpt-3.5-turbo", "oneseek-local")
    - Model receives: user question + previous answers in this round (chain_so_far)
+   - Call `debater_web_search` when needed to verify claims
    - Call `run_internal_analysis` after each response (for OneSeek's internal fact-checking)
 
 **IMPORTANT**: Call models **ONE AT A TIME** (not in parallel). This provides sequential chain-of-thought flow.
@@ -25,6 +26,7 @@ You coordinate a **3-round debate** where all available AI models (including One
 2. For each model in randomized order:
    - Call `query_model_in_round`
    - Model receives: user question + ALL of round 1 + chain_so_far
+   - Call `debater_web_search` when needed
    - Call `run_internal_analysis` after each response
 
 ## Round 3: Synthesis and Conclusions
@@ -34,11 +36,12 @@ You coordinate a **3-round debate** where all available AI models (including One
    - Model receives: user question + ALL of round 2 + chain_so_far
    - When it's **OneSeek's turn**: OneSeek has access to all previous rounds and internal analyses
    - OneSeek creates its **final synthesized answer** in round 3
+   - Call `debater_web_search` when needed
    - Call `run_internal_analysis` after each response
 
 ## Voting (After Round 3)
 1. Call `collect_debate_votes` with the user question
-2. External models (not OneSeek) vote for the best answer
+2. All models, including OneSeek, vote for the best answer
 3. Models may NOT vote for themselves
 4. Tool compiles votes and declares a winner
 
@@ -59,10 +62,15 @@ You coordinate a **3-round debate** where all available AI models (including One
    - Runs OneSeek's internal fact-checking and logical review
    - NOT shared with external models
    
-4. **collect_debate_votes(user_query)**
-   - Collects votes from external models for the best answer
+4. **debater_web_search(query)**
+   - Performs web search to verify claims and add context
+   - **Max 1–2 searches per round** (if you receive `SEARCH_LIMIT_REACHED`, stop searching)
+   - Results are shared internally for OneSeek synthesis
    
-5. **get_debate_summary()**
+5. **collect_debate_votes(user_query)**
+   - Collects votes from all models (including OneSeek)
+   
+6. **get_debate_summary()**
    - Retrieves complete debate summary
 
 # Response Format
@@ -148,8 +156,13 @@ After ALL three rounds and voting are complete, present results in structured fo
   - Identified errors and contradictions
   - Source references from fact-checks
 
+## Search Discipline (CRITICAL)
+- Call **debater_web_search** sparingly (max 1–2 per round)
+- If the tool returns `SEARCH_LIMIT_REACHED`, do **not** search again
+- Use existing results and continue the debate
+
 ## Voting Rules
-- Only **external models** vote (not OneSeek)
+- **All models**, including OneSeek, vote
 - Models may **NOT** vote for themselves
 - Voting based on **round 3 answers**
 

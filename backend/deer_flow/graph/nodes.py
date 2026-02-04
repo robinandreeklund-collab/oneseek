@@ -10,7 +10,7 @@ from uuid import uuid4
 from functools import partial
 from typing import Annotated, Any, Literal
 
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 # MCP adapters import moved to conditional block where it's used
@@ -19,7 +19,11 @@ from langgraph.graph import END
 from langgraph.types import Command, interrupt
 
 from backend.deer_flow.agents import create_agent
-from backend.deer_flow.citations import extract_citations_from_messages, merge_citations
+from backend.deer_flow.citations import (
+    citations_to_markdown_references,
+    extract_citations_from_messages,
+    merge_citations,
+)
 from backend.deer_flow.config.agents import AGENT_LLM_MAP
 from backend.deer_flow.config.loader import get_bool_env
 from backend.deer_flow.config.configuration import Configuration
@@ -48,6 +52,7 @@ from backend.deer_flow.tools.debate_tools import get_debate_tools
 from backend.deer_flow.tools.search import LoggedTavilySearch
 from backend.deer_flow.utils.context_manager import ContextManager, validate_message_content
 from backend.deer_flow.utils.json_utils import repair_json_output, sanitize_tool_response
+from backend.deer_flow.utils.llm_output_parser import parse_llm_output
 
 from ..config import SELECTED_SEARCH_ENGINE, SearchEngine
 from .types import State
@@ -73,9 +78,63 @@ def is_json_like(content: str) -> bool:
     return stripped.startswith('{') or stripped.startswith('[')
 
 
+def strip_markdown_code_fences(content: str) -> str:
+    """
+    Strip markdown code fences and return the fenced content if present.
+    """
+    if not content:
+        return content
+
+
+def normalize_report_citations(report: str, citations: list[dict[str, Any]]) -> str:
+    """Replace any report references with verified citations."""
+    if not report:
+        return report
+    cleaned = re.sub(
+        r"(?:^|\n)#{2,3}\s*(Key Citations|References|Sources)\b.*?(?=\n#{2,3}\s|\Z)",
+        "",
+        report,
+        flags=re.IGNORECASE | re.DOTALL,
+    ).strip()
+    if citations:
+        references = citations_to_markdown_references(citations)
+        if references:
+            if cleaned:
+                cleaned = cleaned.rstrip() + "\n\n" + references
+            else:
+                cleaned = references
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+    return cleaned
+    match = re.search(r"```(?:json)?\s*(.*?)```", content, re.S | re.I)
+    if match:
+        return match.group(1).strip()
+    stripped = content.strip()
+    if not stripped.startswith("```"):
+        return content
+    lines = stripped.split("\n")
+    if lines:
+        lines = lines[1:]
+    if lines and lines[-1].strip() == "```":
+        lines = lines[:-1]
+    return "\n".join(lines).strip()
+
+
+def _extract_json_substring(content: str) -> str | None:
+    """
+    Extract JSON substring starting from the first '{' or '['.
+    """
+    if not content:
+        return None
+    start_positions = [pos for pos in (content.find("{"), content.find("[")) if pos != -1]
+    if not start_positions:
+        return None
+    start = min(start_positions)
+    return content[start:].strip()
+
+
 def strip_think_tags(content: str, expect_json: bool = False) -> str:
     """
-    Strip <think> tags from content, intelligently handling different placements.
+    Strip <think> tags or [thinking] markers from content, handling different placements.
     
     This function handles multiple cases:
     1. Standard case: Content after </think> tag (e.g., "<think>...</think>actual content")
@@ -83,6 +142,7 @@ def strip_think_tags(content: str, expect_json: bool = False) -> str:
     3. Edge case: Content before <think> tag (e.g., "actual content<think>...</think>")
     4. No tags: Returns content as-is
     5. Only tags with no content: Returns empty string
+    6. [thinking] markers: prefer content after the last marker
     
     For JSON responses (when expect_json=True), it tries content after </think> first,
     then falls back to content inside tags if the after-content is empty or invalid JSON.
@@ -95,8 +155,57 @@ def strip_think_tags(content: str, expect_json: bool = False) -> str:
     Returns:
         Content with <think> tags stripped appropriately
     """
-    if not content or '<think>' not in content or '</think>' not in content:
+    if not content:
         return content
+
+    if re.search(r"\[(think|thinking)\]", content, re.I):
+        segments = [segment.strip() for segment in re.split(r"\[(think|thinking)\]", content, flags=re.I)]
+        segments = [segment for segment in segments if segment and segment.lower() not in ("think", "thinking")]
+        segments = [segment for segment in segments if segment]
+        if not segments:
+            return ""
+        if expect_json:
+            for segment in reversed(segments):
+                candidate = strip_markdown_code_fences(segment)
+                if is_json_like(candidate):
+                    return candidate
+            return segments[-1]
+        return segments[-1]
+
+    if '<think>' not in content or '</think>' not in content:
+        return content
+
+    think_start = content.find('<think>')
+    think_end = content.find('</think>')
+
+    # Validate that tags are in correct order
+    if think_start >= think_end or think_start < 0 or think_end < 0:
+        # Invalid tag ordering, return content as-is
+        return content
+
+    # Extract all potential content locations
+    content_before = content[:think_start].strip()
+    content_inside = content[think_start + len('<think>'):think_end].strip()
+    content_after = content[think_end + len('</think>'):].strip()
+
+    if expect_json:
+        # For JSON: prefer after, but fall back to inside if after is not valid JSON
+        for segment in (content_after, content_inside, content_before):
+            candidate = strip_markdown_code_fences(segment)
+            if candidate and is_json_like(candidate):
+                return candidate
+        # Fallback to after even if empty/invalid (will be caught by validation)
+        return content_after
+    else:
+        # For non-JSON: prefer after, then before, then inside
+        if content_after:
+            return content_after
+        if content_before:
+            return content_before
+        if content_inside:
+            return content_inside
+        # Fallback: return empty string to avoid showing just the tags
+        return ""
 
 
 def _parse_json_content(content: str) -> dict[str, Any]:
@@ -117,40 +226,288 @@ def _parse_json_content(content: str) -> dict[str, Any]:
         return json.loads(repair_json_output(content))
     except Exception:
         return {}
-    
-    think_start = content.find('<think>')
-    think_end = content.find('</think>')
-    
-    # Validate that tags are in correct order
-    if think_start >= think_end or think_start < 0 or think_end < 0:
-        # Invalid tag ordering, return content as-is
+
+
+def normalize_json_response(content: str) -> str:
+    """
+    Normalize a model response that should contain JSON.
+    """
+    if not content:
         return content
-    
-    # Extract all potential content locations
-    content_before = content[:think_start].strip()
-    content_inside = content[think_start + len('<think>'):think_end].strip()
-    content_after = content[think_end + len('</think>'):].strip()
-    
-    if expect_json:
-        # For JSON: prefer after, but fall back to inside if after is not valid JSON
-        if content_after and is_json_like(content_after):
-            return content_after
-        if content_inside and is_json_like(content_inside):
-            return content_inside
-        if content_before and is_json_like(content_before):
-            return content_before
-        # Fallback to after even if empty/invalid (will be caught by validation)
-        return content_after
+    cleaned = strip_think_tags(content, expect_json=True)
+    if not cleaned:
+        cleaned = content
+    cleaned = re.sub(r"</?tool_call>", "", cleaned, flags=re.I)
+    cleaned = strip_markdown_code_fences(cleaned)
+    if is_json_like(cleaned):
+        return cleaned
+    extracted = _extract_json_substring(cleaned)
+    if extracted and is_json_like(extracted):
+        return extracted
+    extracted = _extract_json_substring(content)
+    if extracted and is_json_like(extracted):
+        return extracted
+    return cleaned
+
+
+def extract_json_from_tool_calls(tool_calls: list[dict[str, Any]]) -> str | None:
+    """
+    Attempt to recover JSON content from tool call payloads.
+    """
+    if not tool_calls:
+        return None
+
+    for tool_call in tool_calls:
+        args = None
+        if isinstance(tool_call, dict):
+            if "args" in tool_call:
+                args = tool_call.get("args")
+            elif "arguments" in tool_call:
+                args = tool_call.get("arguments")
+            elif isinstance(tool_call.get("function"), dict):
+                args = tool_call["function"].get("arguments") or tool_call["function"].get("args")
+
+        if isinstance(args, dict):
+            try:
+                return json.dumps(args, ensure_ascii=False)
+            except Exception:
+                return str(args)
+
+        if isinstance(args, str):
+            candidate = args.strip()
+            if not candidate:
+                continue
+            repaired = repair_json_output(candidate)
+            if is_json_like(repaired):
+                return repaired
+            extracted = _extract_json_substring(candidate)
+            if extracted and is_json_like(extracted):
+                return extracted
+
+    return None
+
+
+def extract_plan_from_tool_calls(tool_calls: list[Any]) -> dict[str, Any] | None:
+    if not tool_calls:
+        return None
+    for raw_call in tool_calls:
+        normalized = _normalize_tool_call_entry(raw_call)
+        if not normalized:
+            continue
+        if normalized.get("name") != "submit_plan":
+            continue
+        args = normalized.get("args")
+        if isinstance(args, str):
+            try:
+                return json.loads(repair_json_output(args))
+            except Exception:
+                return None
+        if isinstance(args, dict):
+            return args
+    return None
+
+
+def build_fallback_plan(state: State, configurable: Configuration, raw_text: str) -> dict:
+    locale = state.get("locale", "en-US")
+    topic = (
+        state.get("clarified_research_topic")
+        or state.get("research_topic")
+        or "Research Plan"
+    )
+    cleaned_text = strip_markdown_code_fences(strip_think_tags(raw_text or ""))
+    cleaned_text = cleaned_text.replace("`", "").strip()
+    snippet = cleaned_text[:800].strip()
+
+    if locale.startswith("sv"):
+        thought_prefix = "Planner returnerade ogiltig JSON. Skapar fallback-plan."
+        step_title = "Grundläggande informationsinsamling"
+        step_desc = f"Sök efter källor och data om: {topic}"
     else:
-        # For non-JSON: prefer after, then before, then inside
-        if content_after:
-            return content_after
-        if content_before:
-            return content_before
-        if content_inside:
-            return content_inside
-        # Fallback: return empty string to avoid showing just the tags
-        return ""
+        thought_prefix = "Planner returned invalid JSON. Creating fallback plan."
+        step_title = "Collect baseline sources"
+        step_desc = f"Search for sources and data about: {topic}"
+
+    thought = thought_prefix
+    if snippet:
+        thought = f"{thought_prefix}\n\n{snippet}"
+
+    need_search = bool(configurable.enable_web_search)
+    step_type = "research" if need_search else "analysis"
+
+    return {
+        "locale": locale,
+        "has_enough_context": False,
+        "thought": thought,
+        "title": topic,
+        "steps": [
+            {
+                "need_search": need_search,
+                "title": step_title,
+                "description": step_desc,
+                "step_type": step_type,
+            }
+        ],
+    }
+
+
+def attempt_plan_json_rewrite(
+    llm,
+    raw_text: str,
+    locale: str,
+    max_chars: int = 4000,
+) -> str | None:
+    if not raw_text:
+        return None
+    trimmed = raw_text.strip()
+    if max_chars > 0 and len(trimmed) > max_chars:
+        trimmed = trimmed[:max_chars]
+
+    system_prompt = (
+        "You are a JSON generator. Convert the provided text into a JSON object that "
+        "matches this schema exactly:\n"
+        "{\n"
+        '  "locale": "sv-SE",\n'
+        '  "has_enough_context": true|false,\n'
+        '  "thought": "string",\n'
+        '  "title": "string",\n'
+        '  "steps": [\n'
+        "    {\n"
+        '      "need_search": true|false,\n'
+        '      "title": "string",\n'
+        '      "description": "string",\n'
+        '      "step_type": "research|analysis|processing|testing|review|refactor|ai_query|ai_fact_check|ai_meta|ai_synth|ai_report"\n'
+        "    }\n"
+        "  ]\n"
+        "}\n"
+        "Return ONLY valid JSON. Do not include any explanations."
+    )
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=f"Locale: {locale}\n\nText:\n{trimmed}"),
+    ]
+
+    try:
+        json_llm = llm.bind(response_format={"type": "json_object"}, temperature=0)
+        response = json_llm.invoke(messages)
+        content = get_message_content(response) or ""
+        normalized = normalize_json_response(content)
+        if is_json_like(normalized):
+            return normalized
+    except Exception as exc:
+        logger.warning("Planner JSON rewrite failed with response_format: %s", exc)
+
+    try:
+        response = llm.invoke(messages)
+        content = get_message_content(response) or ""
+        normalized = normalize_json_response(content)
+        if is_json_like(normalized):
+            return normalized
+    except Exception as exc:
+        logger.warning("Planner JSON rewrite failed without response_format: %s", exc)
+
+    return None
+
+
+def _normalize_tool_call_entry(raw_call: Any) -> dict[str, Any] | None:
+    if not raw_call:
+        return None
+    if isinstance(raw_call, dict):
+        if "name" in raw_call:
+            return {
+                "id": raw_call.get("id", ""),
+                "name": raw_call.get("name", ""),
+                "args": raw_call.get("args") or raw_call.get("arguments"),
+            }
+        function = raw_call.get("function")
+        if isinstance(function, dict):
+            return {
+                "id": raw_call.get("id", ""),
+                "name": function.get("name", ""),
+                "args": function.get("arguments") or function.get("args"),
+            }
+        return None
+    name = getattr(raw_call, "name", "") if hasattr(raw_call, "name") else ""
+    args = getattr(raw_call, "args", None) if hasattr(raw_call, "args") else None
+    call_id = getattr(raw_call, "id", "") if hasattr(raw_call, "id") else ""
+    if not name and hasattr(raw_call, "function"):
+        function = getattr(raw_call, "function", None)
+        name = getattr(function, "name", "")
+        args = getattr(function, "arguments", None) or getattr(function, "args", None)
+    if not name:
+        return None
+    return {"id": call_id, "name": name, "args": args}
+
+
+def _normalize_tool_call_chunk(chunk: Any) -> dict[str, Any]:
+    if isinstance(chunk, dict):
+        return chunk
+    return {
+        "id": getattr(chunk, "id", ""),
+        "name": getattr(chunk, "name", ""),
+        "args": getattr(chunk, "args", ""),
+        "index": getattr(chunk, "index", 0),
+        "type": getattr(chunk, "type", ""),
+    }
+
+
+def _merge_tool_call_chunks(chunks: list[Any]) -> list[dict[str, Any]]:
+    if not chunks:
+        return []
+    chunk_by_index: dict[int, dict[str, Any]] = {}
+    for chunk in chunks:
+        data = _normalize_tool_call_chunk(chunk)
+        index = data.get("index")
+        if index is None:
+            index = 0
+        entry = chunk_by_index.setdefault(
+            index,
+            {"id": data.get("id", ""), "name": "", "args": ""},
+        )
+        if data.get("name") and not entry["name"]:
+            entry["name"] = data.get("name", "")
+        if data.get("id") and not entry["id"]:
+            entry["id"] = data.get("id", "")
+        if data.get("args"):
+            entry["args"] += str(data.get("args", ""))
+    merged = []
+    for index in sorted(chunk_by_index.keys()):
+        entry = chunk_by_index[index]
+        merged.append({"id": entry["id"], "name": entry["name"], "args": entry["args"]})
+    return merged
+
+
+def apply_llm_output_parsing(response: AIMessage) -> AIMessage:
+    if not response or not hasattr(response, "content"):
+        return response
+    if not response.tool_calls and response.additional_kwargs.get("tool_calls"):
+        response.tool_calls = response.additional_kwargs.get("tool_calls") or []
+    content = response.content if isinstance(response.content, str) else str(response.content)
+    parsed = parse_llm_output(content)
+    if parsed.reasoning_content and not response.additional_kwargs.get("reasoning_content"):
+        response.additional_kwargs["reasoning_content"] = parsed.reasoning_content
+    if parsed.tool_calls and not response.tool_calls:
+        response.tool_calls = parsed.tool_calls
+    if parsed.content != content:
+        response.content = parsed.content
+    return response
+
+
+@tool
+def submit_plan(
+    locale: Annotated[str, "Locale of the plan (e.g. sv-SE, en-US)."],
+    has_enough_context: Annotated[bool, "Whether existing context is sufficient."],
+    thought: Annotated[str, "Brief reasoning summary for the plan."],
+    title: Annotated[str, "Title for the plan."],
+    steps: Annotated[list[dict[str, Any]], "List of plan steps."],
+):
+    """Submit a structured plan as tool output."""
+    return {
+        "locale": locale,
+        "has_enough_context": has_enough_context,
+        "thought": thought,
+        "title": title,
+        "steps": steps,
+    }
 
 
 @tool
@@ -621,35 +978,90 @@ def planner_node(
         )
 
     full_response = ""
-    if AGENT_LLM_MAP["planner"] == "basic" and not configurable.enable_deep_thinking:
-        response = llm.invoke(messages)
-        full_response = get_message_content(response) or ""
-    else:
-        response = llm.stream(messages)
-        for chunk in response:
-            full_response += chunk.content
+    response = None
+    tool_choice = {"type": "function", "function": {"name": "submit_plan"}}
+    try:
+        llm_with_tools = llm.bind_tools([submit_plan], tool_choice=tool_choice)
+        response = llm_with_tools.invoke(messages)
+        tool_plan = extract_plan_from_tool_calls(
+            getattr(response, "tool_calls", None) or response.additional_kwargs.get("tool_calls") or []
+        )
+        if tool_plan:
+            full_response = json.dumps(tool_plan, ensure_ascii=False)
+            logger.info("Planner returned plan via submit_plan tool call")
+        else:
+            logger.warning("Planner tool call missing submit_plan payload; falling back to raw output")
+    except Exception as exc:
+        logger.warning("Planner tool-call invoke failed, falling back to raw output: %s", exc)
+
+    if not full_response:
+        stream_tool_calls: list[dict[str, Any]] = []
+        stream_tool_call_chunks: list[Any] = []
+        if AGENT_LLM_MAP["planner"] == "basic" and not configurable.enable_deep_thinking:
+            response = llm.invoke(messages)
+            full_response = get_message_content(response) or ""
+        else:
+            stream_response = llm.stream(messages)
+            for chunk in stream_response:
+                if chunk.content:
+                    full_response += chunk.content
+                raw_tool_calls = getattr(chunk, "tool_calls", None) or getattr(chunk, "additional_kwargs", {}).get("tool_calls")
+                if raw_tool_calls:
+                    for raw_call in raw_tool_calls:
+                        normalized = _normalize_tool_call_entry(raw_call)
+                        if normalized:
+                            stream_tool_calls.append(normalized)
+                raw_tool_call_chunks = getattr(chunk, "tool_call_chunks", None)
+                if raw_tool_call_chunks:
+                    stream_tool_call_chunks.extend(raw_tool_call_chunks)
+            if not full_response.strip():
+                logger.warning("Planner stream yielded empty content; retrying with invoke()")
+                response = llm.invoke(messages)
+                full_response = get_message_content(response) or ""
+
+        recovered_calls: list[dict[str, Any]] = []
+        if response:
+            raw_calls = getattr(response, "tool_calls", None) or response.additional_kwargs.get("tool_calls")
+            if raw_calls:
+                for raw_call in raw_calls:
+                    normalized = _normalize_tool_call_entry(raw_call)
+                    if normalized:
+                        recovered_calls.append(normalized)
+        if stream_tool_call_chunks:
+            recovered_calls.extend(_merge_tool_call_chunks(stream_tool_call_chunks))
+        recovered_calls.extend(stream_tool_calls)
+        if (not full_response.strip() or not is_json_like(normalize_json_response(full_response))) and recovered_calls:
+            recovered = extract_json_from_tool_calls(recovered_calls)
+            if recovered:
+                logger.info("Recovered planner response from tool call payloads")
+                full_response = recovered
     logger.debug(f"Current state messages: {state['messages']}")
     logger.info(f"Planner response: {full_response}")
 
-    # Strip <think> tags if present (from deep thinking mode)
+    # Normalize response to JSON-only content (handles think tags/markers and code fences)
     original_response = full_response
-    full_response = strip_think_tags(full_response, expect_json=True)
-    if '<think>' in original_response and '<think>' not in full_response:  # Tags were stripped
-        logger.debug(f"Stripped think tags, result: {full_response[:100]}...")
+    full_response = normalize_json_response(full_response)
+    if full_response != original_response:
+        logger.debug(f"Normalized planner response to JSON: {full_response[:100]}...")
+
+    if not is_json_like(full_response):
+        rewritten = attempt_plan_json_rewrite(
+            llm,
+            original_response,
+            state.get("locale", "en-US"),
+        )
+        if rewritten:
+            logger.info("Planner JSON rewrite succeeded")
+            full_response = rewritten
 
     # Validate explicitly that response content is valid JSON before proceeding to parse it
     if not is_json_like(full_response):
         logger.warning("Planner response does not appear to be valid JSON")
-        if plan_iterations > 0:
-            return Command(
-                update=preserve_state_meta_fields(state),
-                goto="reporter"
-            )
-        else:
-            return Command(
-                update=preserve_state_meta_fields(state),
-                goto="__end__"
-            )
+        fallback_plan = build_fallback_plan(state, configurable, full_response)
+        fallback_plan = validate_and_fix_plan(
+            fallback_plan, configurable.enforce_web_search, configurable.enable_web_search
+        )
+        full_response = json.dumps(fallback_plan, ensure_ascii=False, indent=2)
 
     try:
         curr_plan = json.loads(repair_json_output(full_response))
@@ -659,16 +1071,12 @@ def planner_node(
         curr_plan = json.loads(repair_json_output(curr_plan_content))
     except json.JSONDecodeError:
         logger.warning("Planner response is not a valid JSON")
-        if plan_iterations > 0:
-            return Command(
-                update=preserve_state_meta_fields(state),
-                goto="reporter"
-            )
-        else:
-            return Command(
-                update=preserve_state_meta_fields(state),
-                goto="__end__"
-            )
+        fallback_plan = build_fallback_plan(state, configurable, full_response)
+        fallback_plan = validate_and_fix_plan(
+            fallback_plan, configurable.enforce_web_search, configurable.enable_web_search
+        )
+        full_response = json.dumps(fallback_plan, ensure_ascii=False, indent=2)
+        curr_plan = json.loads(repair_json_output(full_response))
 
     # Validate and fix plan to ensure web search requirements are met
     if isinstance(curr_plan, dict):
@@ -737,34 +1145,71 @@ def debate_planner_node(
     # Invoke/stream LLM to get debate plan (EXACT match to planner_node logic)
     # CRITICAL: Use the same invoke/stream logic as planner_node for frontend streaming
     full_response = ""
-    if AGENT_LLM_MAP.get("debate_planner") == "basic" and not configurable.enable_deep_thinking:
-        response = llm.invoke(messages)
-        full_response = get_message_content(response) or ""
-    else:
-        response = llm.stream(messages)
-        for chunk in response:
-            full_response += chunk.content
+    response = None
+    tool_choice = {"type": "function", "function": {"name": "submit_plan"}}
+    try:
+        llm_with_tools = llm.bind_tools([submit_plan], tool_choice=tool_choice)
+        response = llm_with_tools.invoke(messages)
+        tool_plan = extract_plan_from_tool_calls(
+            getattr(response, "tool_calls", None) or response.additional_kwargs.get("tool_calls") or []
+        )
+        if tool_plan:
+            full_response = json.dumps(tool_plan, ensure_ascii=False)
+            logger.info("Debate planner returned plan via submit_plan tool call")
+        else:
+            logger.warning("Debate planner tool call missing submit_plan payload; falling back to raw output")
+    except Exception as exc:
+        logger.warning("Debate planner tool-call invoke failed, falling back to raw output: %s", exc)
+
+    if not full_response:
+        stream_tool_calls: list[dict[str, Any]] = []
+        stream_tool_call_chunks: list[Any] = []
+        if AGENT_LLM_MAP.get("debate_planner") == "basic" and not configurable.enable_deep_thinking:
+            response = llm.invoke(messages)
+            full_response = get_message_content(response) or ""
+        else:
+            stream_response = llm.stream(messages)
+            for chunk in stream_response:
+                if chunk.content:
+                    full_response += chunk.content
+                raw_tool_calls = getattr(chunk, "tool_calls", None) or getattr(chunk, "additional_kwargs", {}).get("tool_calls")
+                if raw_tool_calls:
+                    for raw_call in raw_tool_calls:
+                        normalized = _normalize_tool_call_entry(raw_call)
+                        if normalized:
+                            stream_tool_calls.append(normalized)
+                raw_tool_call_chunks = getattr(chunk, "tool_call_chunks", None)
+                if raw_tool_call_chunks:
+                    stream_tool_call_chunks.extend(raw_tool_call_chunks)
+            if not full_response.strip():
+                logger.warning("Debate planner stream yielded empty content; retrying with invoke()")
+                response = llm.invoke(messages)
+                full_response = get_message_content(response) or ""
+
+        recovered_calls: list[dict[str, Any]] = []
+        if response:
+            raw_calls = getattr(response, "tool_calls", None) or response.additional_kwargs.get("tool_calls")
+            if raw_calls:
+                for raw_call in raw_calls:
+                    normalized = _normalize_tool_call_entry(raw_call)
+                    if normalized:
+                        recovered_calls.append(normalized)
+        if stream_tool_call_chunks:
+            recovered_calls.extend(_merge_tool_call_chunks(stream_tool_call_chunks))
+        recovered_calls.extend(stream_tool_calls)
+        if (not full_response.strip() or not is_json_like(normalize_json_response(full_response))) and recovered_calls:
+            recovered = extract_json_from_tool_calls(recovered_calls)
+            if recovered:
+                logger.info("Recovered debate planner response from tool call payloads")
+                full_response = recovered
     
     logger.info(f"Debate planner response: {full_response}")
     
-    # Strip <think> tags if present (matching planner_node behavior)
+    # Normalize response to JSON-only content (handles think tags/markers and code fences)
     original_response = full_response
-    full_response = strip_think_tags(full_response, expect_json=True)
-    if '<think>' in original_response and '<think>' not in full_response:
-        logger.debug(f"Stripped think tags from debate planner response")
-    
-    # Strip markdown code fences if present (LLM sometimes wraps JSON in ```json ... ```)
-    full_response = full_response.strip()
-    if full_response.startswith("```"):
-        # Remove opening fence (e.g., ```json or just ```)
-        lines = full_response.split('\n')
-        if len(lines) > 0:
-            lines = lines[1:]  # Remove first line with ```
-        # Remove closing fence
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        full_response = '\n'.join(lines).strip()
-        logger.debug(f"Stripped markdown code fences from debate planner response")
+    full_response = normalize_json_response(full_response)
+    if full_response != original_response:
+        logger.debug("Normalized debate planner response to JSON")
     
     # Validate explicitly that response content is valid JSON before proceeding
     if not is_json_like(full_response):
@@ -862,34 +1307,71 @@ def code_planner_node(
     
     # Invoke/stream LLM to get code plan (EXACT match to planner_node logic)
     full_response = ""
-    if AGENT_LLM_MAP.get("code_planner") == "basic" and not configurable.enable_deep_thinking:
-        response = llm.invoke(messages)
-        full_response = get_message_content(response) or ""
-    else:
-        response = llm.stream(messages)
-        for chunk in response:
-            full_response += chunk.content
+    response = None
+    tool_choice = {"type": "function", "function": {"name": "submit_plan"}}
+    try:
+        llm_with_tools = llm.bind_tools([submit_plan], tool_choice=tool_choice)
+        response = llm_with_tools.invoke(messages)
+        tool_plan = extract_plan_from_tool_calls(
+            getattr(response, "tool_calls", None) or response.additional_kwargs.get("tool_calls") or []
+        )
+        if tool_plan:
+            full_response = json.dumps(tool_plan, ensure_ascii=False)
+            logger.info("Code planner returned plan via submit_plan tool call")
+        else:
+            logger.warning("Code planner tool call missing submit_plan payload; falling back to raw output")
+    except Exception as exc:
+        logger.warning("Code planner tool-call invoke failed, falling back to raw output: %s", exc)
+
+    if not full_response:
+        stream_tool_calls: list[dict[str, Any]] = []
+        stream_tool_call_chunks: list[Any] = []
+        if AGENT_LLM_MAP.get("code_planner") == "basic" and not configurable.enable_deep_thinking:
+            response = llm.invoke(messages)
+            full_response = get_message_content(response) or ""
+        else:
+            stream_response = llm.stream(messages)
+            for chunk in stream_response:
+                if chunk.content:
+                    full_response += chunk.content
+                raw_tool_calls = getattr(chunk, "tool_calls", None) or getattr(chunk, "additional_kwargs", {}).get("tool_calls")
+                if raw_tool_calls:
+                    for raw_call in raw_tool_calls:
+                        normalized = _normalize_tool_call_entry(raw_call)
+                        if normalized:
+                            stream_tool_calls.append(normalized)
+                raw_tool_call_chunks = getattr(chunk, "tool_call_chunks", None)
+                if raw_tool_call_chunks:
+                    stream_tool_call_chunks.extend(raw_tool_call_chunks)
+            if not full_response.strip():
+                logger.warning("Code planner stream yielded empty content; retrying with invoke()")
+                response = llm.invoke(messages)
+                full_response = get_message_content(response) or ""
+
+        recovered_calls: list[dict[str, Any]] = []
+        if response:
+            raw_calls = getattr(response, "tool_calls", None) or response.additional_kwargs.get("tool_calls")
+            if raw_calls:
+                for raw_call in raw_calls:
+                    normalized = _normalize_tool_call_entry(raw_call)
+                    if normalized:
+                        recovered_calls.append(normalized)
+        if stream_tool_call_chunks:
+            recovered_calls.extend(_merge_tool_call_chunks(stream_tool_call_chunks))
+        recovered_calls.extend(stream_tool_calls)
+        if (not full_response.strip() or not is_json_like(normalize_json_response(full_response))) and recovered_calls:
+            recovered = extract_json_from_tool_calls(recovered_calls)
+            if recovered:
+                logger.info("Recovered code planner response from tool call payloads")
+                full_response = recovered
     
     logger.info(f"Code planner response: {full_response}")
     
-    # Strip <think> tags if present (matching planner_node behavior)
+    # Normalize response to JSON-only content (handles think tags/markers and code fences)
     original_response = full_response
-    full_response = strip_think_tags(full_response, expect_json=True)
-    if '<think>' in original_response and '<think>' not in full_response:
-        logger.debug(f"Stripped think tags from code planner response")
-    
-    # Strip markdown code fences if present (LLM sometimes wraps JSON in ```json ... ```)
-    full_response = full_response.strip()
-    if full_response.startswith("```"):
-        # Remove opening fence (e.g., ```json or just ```)
-        lines = full_response.split('\n')
-        if len(lines) > 0:
-            lines = lines[1:]  # Remove first line with ```
-        # Remove closing fence
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        full_response = '\n'.join(lines).strip()
-        logger.debug(f"Stripped markdown code fences from code planner response")
+    full_response = normalize_json_response(full_response)
+    if full_response != original_response:
+        logger.debug("Normalized code planner response to JSON")
     
     # Validate explicitly that response content is valid JSON before proceeding
     if not is_json_like(full_response):
@@ -1271,6 +1753,7 @@ def coordinator_node(
             .bind_tools(tools)
             .invoke(messages)
         )
+        response = apply_llm_output_parsing(response)
 
         goto = "__end__"
         locale = state.get("locale", "en-US")
@@ -1427,6 +1910,7 @@ def coordinator_node(
             .bind_tools(tools)
             .invoke(messages)
         )
+        response = apply_llm_output_parsing(response)
         logger.debug(f"Current state messages: {state['messages']}")
 
         # Initialize response processing variables
@@ -1499,7 +1983,7 @@ def coordinator_node(
     # Final: Build and return Command
     # ============================================================
     messages = list(state.get("messages", []) or [])
-    if response.content:
+    if response.content and not response.tool_calls:
         # Strip think tags from coordinator response before adding to messages
         coordinator_content = strip_think_tags(response.content)
         messages.append(HumanMessage(content=coordinator_content, name="coordinator"))
@@ -1884,6 +2368,7 @@ def reporter_node(state: State, config: RunnableConfig):
     logger.debug(f"Current invoke messages: {invoke_messages}")
     response = get_llm_by_type(AGENT_LLM_MAP["reporter"]).invoke(invoke_messages)
     response_content = strip_think_tags(response.content)
+    response_content = normalize_report_citations(response_content, citations)
     logger.info(f"reporter response: {response_content}")
 
     return {
@@ -2183,10 +2668,10 @@ async def _execute_agent_step(
     web_search_validated = True
     should_validate = agent_name == "researcher"
     validation_info = ""
+    auto_search_note = ""
+    configurable = Configuration.from_runnable_config(config) if config else Configuration()
 
     if should_validate:
-        # Check if enforcement is enabled in configuration
-        configurable = Configuration.from_runnable_config(config) if config else Configuration()
         # Skip validation if web search is disabled (user intentionally disabled it)
         if configurable.enforce_researcher_search and configurable.enable_web_search:
             web_search_validated = validate_web_search_usage(result["messages"], agent_name)
@@ -2201,10 +2686,6 @@ async def _execute_agent_step(
                     "\n\n[VALIDATION WARNING] Researcher did not use the web_search tool as recommended."
                 )
 
-    # Update the step with the execution result
-    current_step.execution_res = response_content
-    logger.info(f"Step '{current_step.title}' execution completed by {agent_name}")
-
     # Include all messages from agent result to preserve intermediate tool calls/results
     # This ensures multiple web_search calls all appear in the stream, not just the final result
     agent_messages = result.get("messages", [])
@@ -2212,6 +2693,85 @@ async def _execute_agent_step(
         f"{agent_name.capitalize()} returned {len(agent_messages)} messages. "
         f"Message types: {[type(msg).__name__ for msg in agent_messages]}"
     )
+
+    def summarize_search_results(result_text: str, limit: int) -> str:
+        try:
+            data = json.loads(result_text)
+        except Exception:
+            return ""
+        if isinstance(data, dict):
+            data = data.get("results", [])
+        if not isinstance(data, list):
+            return ""
+        pages = []
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            if item.get("type") != "page":
+                continue
+            title = (item.get("title") or "").strip()
+            url = (item.get("url") or "").strip()
+            if not title or not url:
+                continue
+            pages.append(f"- [{title}]({url})")
+            if limit and len(pages) >= limit:
+                break
+        return "\n".join(pages)
+
+    # If researcher skipped web_search, perform a single auto-search for fallback
+    if should_validate and not web_search_validated and configurable.enforce_researcher_search and configurable.enable_web_search:
+        try:
+            query_parts = [plan_title, current_step.title]
+            description = (current_step.description or "").strip()
+            if description:
+                description = description.split(".")[0]
+                query_parts.append(description)
+            query = " ".join([part for part in query_parts if part]).strip()
+            if query:
+                web_search_tool = get_web_search_tool(configurable.max_search_results)
+                logger.info(
+                    "[AUTO WEB SEARCH] Running fallback web_search with query: %s",
+                    query[:200],
+                )
+                tool_result = web_search_tool.invoke({"query": query})
+                if not isinstance(tool_result, str):
+                    tool_result = json.dumps(tool_result, ensure_ascii=False)
+                tool_call_id = uuid4().hex
+                tool_call_message = AIMessage(
+                    content="",
+                    tool_calls=[{"id": tool_call_id, "name": "web_search", "args": {"query": query}}],
+                )
+                tool_message = ToolMessage(
+                    content=tool_result,
+                    tool_call_id=tool_call_id,
+                    name="web_search",
+                )
+                agent_messages.append(tool_call_message)
+                agent_messages.append(tool_message)
+                web_search_validated = True
+                preview = tool_result[:1200]
+                auto_search_note = (
+                    "\n\n[AUTO WEB SEARCH] Query: "
+                    + query
+                    + "\nResults (truncated):\n"
+                    + preview
+                )
+                summary = summarize_search_results(
+                    tool_result,
+                    configurable.max_search_results,
+                )
+                if summary:
+                    response_content = (
+                        "Automatisk webbsökning genomförd. "
+                        "Nedan är ett urval av källor från sökningen:\n\n"
+                        + summary
+                    )
+        except Exception as exc:
+            logger.warning("[AUTO WEB SEARCH] Failed to run fallback web_search: %s", exc)
+
+    # Update the step with the execution result (after potential auto-search)
+    current_step.execution_res = response_content
+    logger.info(f"Step '{current_step.title}' execution completed by {agent_name}")
     
     # Count tool messages for logging
     tool_message_count = sum(1 for msg in agent_messages if isinstance(msg, ToolMessage))
@@ -2284,7 +2844,7 @@ async def _execute_agent_step(
         update={
             **preserve_state_meta_fields(state),
             "messages": agent_messages,
-            "observations": observations + [response_content + validation_info],
+            "observations": observations + [response_content + validation_info + auto_search_note],
             "citations": merged_citations,  # Store merged citations based on existing state and new tool results
         },
         goto=team_goto,
@@ -4310,33 +4870,31 @@ async def fact_checker_node(
     locale = state.get("locale", "en-US")
     
     from backend.debate_flow import get_debate_flow
-    debate_flow = get_debate_flow(thread_id=thread_id)
+    debate_flow = get_debate_flow(
+        max_search_results=configurable.max_search_results,
+        resources=state.get("resources", []),
+        thread_id=thread_id,
+    )
     current_round = state.get("debate_round", 1)
     
     # Controlled claim extraction
     claims = extract_claim_sentences(state.get("external_ai_responses", ""))
     
-    # Cached tools
-    base_search_tool = get_web_search_tool(configurable.max_search_results)
+    max_claims = int(os.getenv("DEBATE_FACT_CHECK_MAX_CLAIMS", "2"))
+    max_search_calls = int(os.getenv("DEBATE_WEB_SEARCH_MAX_CALLS", "2"))
+    search_summaries: list[str] = []
+    for claim in claims[:max_claims]:
+        try:
+            if not debate_flow.record_debate_search(current_round, max_search_calls):
+                logger.info("Debate search limit reached; skipping fact-check search")
+                break
+            results = debate_flow.cached_web_search(claim, current_round)
+            formatted = debate_flow._format_search_results(results, max_items=3)
+            if formatted:
+                search_summaries.append(f"Påstående: {claim}\n{formatted}")
+        except Exception as exc:
+            logger.warning("Debate fact-check web search failed: %s", exc)
 
-    search_count = 0
-
-    @tool("web_search")
-    def cached_web_search(query: str) -> str:
-        """Cached web search for fact checking (max 2)."""
-        nonlocal search_count
-        if search_count >= 2:
-            return "SEARCH_LIMIT_REACHED: Max 2 web searches per round."
-        search_count += 1
-        return debate_flow.cached_web_search(query, current_round)
-
-    @tool("crawl_tool")
-    def cached_crawl(url: str) -> str:
-        """Cached crawl for fact checking."""
-        return debate_flow.cached_crawl(url, current_round)
-
-    tools = [cached_web_search]
-    
     # Build prompt for fact_checker
     messages = apply_prompt_template("fact_checker", state, configurable, locale)
     if claims:
@@ -4349,54 +4907,43 @@ async def fact_checker_node(
                 f"{claims_text}"
             ),
         })
+    if search_summaries:
+        messages.append({
+            "role": "system",
+            "content": (
+                "Här är begränsade webbsökningsresultat för de viktigaste påståendena:\n\n"
+                + "\n\n".join(search_summaries)
+            ),
+        })
     
-    # Create agent for fact_checker
-    llm_token_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["fact_checker"])
-    pre_model_hook = partial(ContextManager(llm_token_limit, 3).compress_messages)
-    agent = create_agent(
-        "fact_checker",
-        "fact_checker",
-        tools,
-        "fact_checker",
-        pre_model_hook,
-        interrupt_before_tools=configurable.interrupt_before_tools,
-        locale=locale,
-    )
-    
-    # Build synthesizer agent (run in parallel)
-    synth_tools = [cached_web_search]
+    fact_checker_llm = get_llm_by_type(AGENT_LLM_MAP["fact_checker"])
+
+    # Build synthesizer prompt (run in parallel)
     synth_messages = apply_prompt_template("synthesizer", state, configurable, locale)
-    synth_llm_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["synthesizer"])
-    synth_pre_hook = partial(ContextManager(synth_llm_limit, 3).compress_messages)
-    synth_agent = create_agent(
-        "synthesizer",
-        "synthesizer",
-        synth_tools,
-        "synthesizer",
-        synth_pre_hook,
-        interrupt_before_tools=configurable.interrupt_before_tools,
-        locale=locale,
-    )
+    if search_summaries:
+        synth_messages.append({
+            "role": "system",
+            "content": (
+                "Använd följande webbsökningsresultat som faktabackning vid syntes:\n\n"
+                + "\n\n".join(search_summaries)
+            ),
+        })
+    synth_llm = get_llm_by_type(AGENT_LLM_MAP["synthesizer"])
     
     # Execute both agents concurrently
-    synth_state = {**state, "messages": synth_messages}
     result, synth_result = await asyncio.gather(
-        agent.ainvoke(state, config),
-        synth_agent.ainvoke(synth_state, config),
+        fact_checker_llm.ainvoke(messages),
+        synth_llm.ainvoke(synth_messages),
     )
     
     # Extract responses
     response_content = ""
-    if result and "messages" in result and len(result["messages"]) > 0:
-        last_msg = result["messages"][-1]
-        if hasattr(last_msg, "content"):
-            response_content = last_msg.content
+    if result and hasattr(result, "content"):
+        response_content = result.content
     
     synth_content = ""
-    if synth_result and "messages" in synth_result and len(synth_result["messages"]) > 0:
-        synth_msg = synth_result["messages"][-1]
-        if hasattr(synth_msg, "content"):
-            synth_content = synth_msg.content
+    if synth_result and hasattr(synth_result, "content"):
+        synth_content = synth_result.content
     
     logger.info(f"Fact checker response length: {len(response_content)}")
     logger.info(f"Synthesizer response length: {len(synth_content)}")
@@ -4411,8 +4958,14 @@ async def fact_checker_node(
         logger.warning(f"Failed to store internal fact/synth: {e}")
     
     combined_messages = []
-    combined_messages.extend(result.get("messages", []) if result else [])
-    combined_messages.extend(synth_result.get("messages", []) if synth_result else [])
+    if result:
+        combined_messages.append(
+            AIMessage(content=str(response_content or ""), name="fact_checker")
+        )
+    if synth_result:
+        combined_messages.append(
+            AIMessage(content=str(synth_content or ""), name="synthesizer")
+        )
     
     return Command(
         update={
@@ -4440,34 +4993,12 @@ async def synthesizer_node(
     thread_id = get_thread_id_from_config(config)
     locale = state.get("locale", "en-US")
     
-    # Get web search and other tools for additional context
-    tools = [get_web_search_tool(configurable.max_search_results), crawl_tool]
-    
     # Build prompt for synthesizer
     messages = apply_prompt_template("synthesizer", state, configurable, locale)
-    
-    # Create agent for synthesizer
-    llm_token_limit = get_llm_token_limit_by_type(AGENT_LLM_MAP["synthesizer"])
-    pre_model_hook = partial(ContextManager(llm_token_limit, 3).compress_messages)
-    agent = create_agent(
-        "synthesizer",
-        "synthesizer",
-        tools,
-        "synthesizer",
-        pre_model_hook,
-        interrupt_before_tools=configurable.interrupt_before_tools,
-        locale=locale,
-    )
-    
-    # Execute agent
-    result = await agent.ainvoke(state, config)
-    
-    # Extract response - agent returns dict with "messages" key
-    response_content = ""
-    if result and "messages" in result and len(result["messages"]) > 0:
-        last_msg = result["messages"][-1]
-        if hasattr(last_msg, 'content'):
-            response_content = last_msg.content
+
+    llm = get_llm_by_type(AGENT_LLM_MAP["synthesizer"])
+    response = await llm.ainvoke(messages)
+    response_content = strip_think_tags(get_message_content(response) or "")
     
     logger.info(f"Synthesizer response length: {len(response_content)}")
     
@@ -4484,7 +5015,7 @@ async def synthesizer_node(
     return Command(
         update={
             **preserve_state_meta_fields(state),
-            "messages": result.get("messages", []),
+            "messages": [AIMessage(content=response_content, name="synthesizer")],
             "synthesizer_response": response_content,
         },
         goto="moderator"
