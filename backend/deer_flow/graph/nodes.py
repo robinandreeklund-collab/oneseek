@@ -19,7 +19,11 @@ from langgraph.graph import END
 from langgraph.types import Command, interrupt
 
 from backend.deer_flow.agents import create_agent
-from backend.deer_flow.citations import extract_citations_from_messages, merge_citations
+from backend.deer_flow.citations import (
+    citations_to_markdown_references,
+    extract_citations_from_messages,
+    merge_citations,
+)
 from backend.deer_flow.config.agents import AGENT_LLM_MAP
 from backend.deer_flow.config.loader import get_bool_env
 from backend.deer_flow.config.configuration import Configuration
@@ -80,6 +84,27 @@ def strip_markdown_code_fences(content: str) -> str:
     """
     if not content:
         return content
+
+
+def normalize_report_citations(report: str, citations: list[dict[str, Any]]) -> str:
+    """Replace any report references with verified citations."""
+    if not report:
+        return report
+    cleaned = re.sub(
+        r"(?:^|\n)#{2,3}\s*(Key Citations|References|Sources)\b.*?(?=\n#{2,3}\s|\Z)",
+        "",
+        report,
+        flags=re.IGNORECASE | re.DOTALL,
+    ).strip()
+    if citations:
+        references = citations_to_markdown_references(citations)
+        if references:
+            if cleaned:
+                cleaned = cleaned.rstrip() + "\n\n" + references
+            else:
+                cleaned = references
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+    return cleaned
     match = re.search(r"```(?:json)?\s*(.*?)```", content, re.S | re.I)
     if match:
         return match.group(1).strip()
@@ -2343,6 +2368,7 @@ def reporter_node(state: State, config: RunnableConfig):
     logger.debug(f"Current invoke messages: {invoke_messages}")
     response = get_llm_by_type(AGENT_LLM_MAP["reporter"]).invoke(invoke_messages)
     response_content = strip_think_tags(response.content)
+    response_content = normalize_report_citations(response_content, citations)
     logger.info(f"reporter response: {response_content}")
 
     return {
