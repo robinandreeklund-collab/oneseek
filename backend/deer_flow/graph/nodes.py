@@ -2660,10 +2660,6 @@ async def _execute_agent_step(
                     "\n\n[VALIDATION WARNING] Researcher did not use the web_search tool as recommended."
                 )
 
-    # Update the step with the execution result
-    current_step.execution_res = response_content
-    logger.info(f"Step '{current_step.title}' execution completed by {agent_name}")
-
     # Include all messages from agent result to preserve intermediate tool calls/results
     # This ensures multiple web_search calls all appear in the stream, not just the final result
     agent_messages = result.get("messages", [])
@@ -2671,6 +2667,30 @@ async def _execute_agent_step(
         f"{agent_name.capitalize()} returned {len(agent_messages)} messages. "
         f"Message types: {[type(msg).__name__ for msg in agent_messages]}"
     )
+
+    def summarize_search_results(result_text: str, limit: int) -> str:
+        try:
+            data = json.loads(result_text)
+        except Exception:
+            return ""
+        if isinstance(data, dict):
+            data = data.get("results", [])
+        if not isinstance(data, list):
+            return ""
+        pages = []
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            if item.get("type") != "page":
+                continue
+            title = (item.get("title") or "").strip()
+            url = (item.get("url") or "").strip()
+            if not title or not url:
+                continue
+            pages.append(f"- [{title}]({url})")
+            if limit and len(pages) >= limit:
+                break
+        return "\n".join(pages)
 
     # If researcher skipped web_search, perform a single auto-search for fallback
     if should_validate and not web_search_validated and configurable.enforce_researcher_search and configurable.enable_web_search:
@@ -2710,8 +2730,22 @@ async def _execute_agent_step(
                     + "\nResults (truncated):\n"
                     + preview
                 )
+                summary = summarize_search_results(
+                    tool_result,
+                    configurable.max_search_results,
+                )
+                if summary:
+                    response_content = (
+                        "Automatisk webbsökning genomförd. "
+                        "Nedan är ett urval av källor från sökningen:\n\n"
+                        + summary
+                    )
         except Exception as exc:
             logger.warning("[AUTO WEB SEARCH] Failed to run fallback web_search: %s", exc)
+
+    # Update the step with the execution result (after potential auto-search)
+    current_step.execution_res = response_content
+    logger.info(f"Step '{current_step.title}' execution completed by {agent_name}")
     
     # Count tool messages for logging
     tool_message_count = sum(1 for msg in agent_messages if isinstance(msg, ToolMessage))
