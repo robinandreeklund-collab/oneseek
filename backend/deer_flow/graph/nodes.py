@@ -262,6 +262,49 @@ def extract_json_from_tool_calls(tool_calls: list[dict[str, Any]]) -> str | None
     return None
 
 
+def build_fallback_plan(state: State, configurable: Configuration, raw_text: str) -> dict:
+    locale = state.get("locale", "en-US")
+    topic = (
+        state.get("clarified_research_topic")
+        or state.get("research_topic")
+        or "Research Plan"
+    )
+    cleaned_text = strip_markdown_code_fences(strip_think_tags(raw_text or ""))
+    cleaned_text = cleaned_text.replace("`", "").strip()
+    snippet = cleaned_text[:800].strip()
+
+    if locale.startswith("sv"):
+        thought_prefix = "Planner returnerade ogiltig JSON. Skapar fallback-plan."
+        step_title = "Grundläggande informationsinsamling"
+        step_desc = f"Sök efter källor och data om: {topic}"
+    else:
+        thought_prefix = "Planner returned invalid JSON. Creating fallback plan."
+        step_title = "Collect baseline sources"
+        step_desc = f"Search for sources and data about: {topic}"
+
+    thought = thought_prefix
+    if snippet:
+        thought = f"{thought_prefix}\n\n{snippet}"
+
+    need_search = bool(configurable.enable_web_search)
+    step_type = "research" if need_search else "analysis"
+
+    return {
+        "locale": locale,
+        "has_enough_context": False,
+        "thought": thought,
+        "title": topic,
+        "steps": [
+            {
+                "need_search": need_search,
+                "title": step_title,
+                "description": step_desc,
+                "step_type": step_type,
+            }
+        ],
+    }
+
+
 def _normalize_tool_call_entry(raw_call: Any) -> dict[str, Any] | None:
     if not raw_call:
         return None
@@ -873,16 +916,11 @@ def planner_node(
     # Validate explicitly that response content is valid JSON before proceeding to parse it
     if not is_json_like(full_response):
         logger.warning("Planner response does not appear to be valid JSON")
-        if plan_iterations > 0:
-            return Command(
-                update=preserve_state_meta_fields(state),
-                goto="reporter"
-            )
-        else:
-            return Command(
-                update=preserve_state_meta_fields(state),
-                goto="__end__"
-            )
+        fallback_plan = build_fallback_plan(state, configurable, full_response)
+        fallback_plan = validate_and_fix_plan(
+            fallback_plan, configurable.enforce_web_search, configurable.enable_web_search
+        )
+        full_response = json.dumps(fallback_plan, ensure_ascii=False, indent=2)
 
     try:
         curr_plan = json.loads(repair_json_output(full_response))
@@ -892,16 +930,12 @@ def planner_node(
         curr_plan = json.loads(repair_json_output(curr_plan_content))
     except json.JSONDecodeError:
         logger.warning("Planner response is not a valid JSON")
-        if plan_iterations > 0:
-            return Command(
-                update=preserve_state_meta_fields(state),
-                goto="reporter"
-            )
-        else:
-            return Command(
-                update=preserve_state_meta_fields(state),
-                goto="__end__"
-            )
+        fallback_plan = build_fallback_plan(state, configurable, full_response)
+        fallback_plan = validate_and_fix_plan(
+            fallback_plan, configurable.enforce_web_search, configurable.enable_web_search
+        )
+        full_response = json.dumps(fallback_plan, ensure_ascii=False, indent=2)
+        curr_plan = json.loads(repair_json_output(full_response))
 
     # Validate and fix plan to ensure web search requirements are met
     if isinstance(curr_plan, dict):
