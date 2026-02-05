@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grok Design 8 - Card Based</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            background: #f8f9fa;
+            color: #1a1a1a;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            background: white;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.06);
+        }
+
+        .header {
+            padding: 16px 24px;
+            border-bottom: 1px solid #e5e5e5;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: white;
+        }
+
+        .header-content {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 16px;
+        }
+
+        .header-text {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #1a1a1a;
+        }
+
+        .header-status {
+            font-size: 12px;
+            color: #6b7280;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #10b981;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .header-btn {
+            width: 36px;
+            height: 36px;
+            border: 1px solid #e5e5e5;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            transition: all 0.2s ease;
+        }
+
+        .header-btn:hover {
+            background: #f3f4f6;
+            border-color: #d1d5db;
+        }
+
+        .messages-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .messages-area::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .messages-area::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .messages-area::-webkit-scrollbar-thumb {
+            background: #d1d5db;
+            border-radius: 4px;
+        }
+
+        .message-card {
+            display: flex;
+            gap: 12px;
+            animation: slideInUp 0.3s ease;
+        }
+
+        @keyframes slideInUp {
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message-card.user {
+            justify-content: flex-end;
+        }
+
+        .card-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 13px;
+            flex-shrink: 0;
+        }
+
+        .card-avatar.user {
+            background: #f3f4f6;
+            color: #1a1a1a;
+            border: 2px solid #e5e5e5;
+        }
+
+        .card-content {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-width: 65%;
+        }
+
+        .card-content.user {
+            align-items: flex-end;
+        }
+
+        .message-card-body {
+            background: white;
+            border: 1px solid #e5e5e5;
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 14px;
+            line-height: 1.5;
+            word-wrap: break-word;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            transition: all 0.2s ease;
+        }
+
+        .message-card-body:hover {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        .message-card-body.user {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: transparent;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        .card-timestamp {
+            font-size: 12px;
+            color: #9ca3af;
+            margin-top: 4px;
+        }
+
+        .card-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .card-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: white;
+            border: 1px solid #e5e5e5;
+            border-radius: 20px;
+            padding: 8px 14px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: #667eea;
+            white-space: nowrap;
+            font-weight: 500;
+        }
+
+        .card-chip:hover {
+            background: #f0f4ff;
+            border-color: #667eea;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
+        }
+
+        .card-chip.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .section-divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, #e5e5e5, transparent);
+            margin: 8px 0;
+        }
+
+        .input-area {
+            padding: 20px 24px;
+            border-top: 1px solid #e5e5e5;
+            background: white;
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+
+        .input-card {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: white;
+            border: 2px solid #e5e5e5;
+            border-radius: 12px;
+            padding: 12px 16px;
+            transition: all 0.2s ease;
+        }
+
+        .input-card:focus-within {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .input-card input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: #1a1a1a;
+            font-size: 14px;
+            outline: none;
+            padding: 0;
+        }
+
+        .input-card input::placeholder {
+            color: #d1d5db;
+        }
+
+        .input-action {
+            width: 36px;
+            height: 36px;
+            border: none;
+            background: transparent;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            transition: all 0.2s ease;
+            color: #9ca3af;
+        }
+
+        .input-action:hover {
+            background: #f3f4f6;
+            color: #667eea;
+        }
+
+        .send-button {
+            width: 40px;
+            height: 40px;
+            border: none;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 18px;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        .send-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .send-button:active {
+            transform: translateY(0);
+        }
+
+        /* Mobile responsive */
+        @media (max-width: 768px) {
+            .card-content {
+                max-width: 85%;
+            }
+
+            .messages-area {
+                padding: 16px;
+                gap: 12px;
+            }
+
+            .input-area {
+                padding: 16px;
+            }
+
+            .card-chip {
+                padding: 6px 12px;
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-content">
+                <div class="header-avatar">G</div>
+                <div class="header-text">
+                    <div class="header-title">Grok Card Design</div>
+                    <div class="header-status">
+                        <div class="status-dot"></div>
+                        <span>Always available</span>
+                    </div>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button class="header-btn">⭐</button>
+                <button class="header-btn">⚙️</button>
+            </div>
+        </div>
+
+        <div class="messages-area">
+            <div class="message-card">
+                <div class="card-avatar">G</div>
+                <div class="card-content">
+                    <div class="message-card-body">
+                        👋 Welcome to Card-Based Design! Each message is a beautiful, distinct card. How can I help you today?
+                    </div>
+                    <div class="card-chips">
+                        <span class="card-chip">🚀 Quick Start</span>
+                        <span class="card-chip">📚 Documentation</span>
+                        <span class="card-chip">💬 Examples</span>
+                        <span class="card-chip">❓ Support</span>
+                    </div>
+                    <div class="card-timestamp">Just now</div>
+                </div>
+            </div>
+
+            <div class="message-card user">
+                <div class="card-content user">
+                    <div class="message-card-body user">
+                        Explain the card-based design pattern for UIs
+                    </div>
+                    <div class="card-timestamp">12:45 PM</div>
+                </div>
+                <div class="card-avatar user">You</div>
+            </div>
+
+            <div class="message-card">
+                <div class="card-avatar">G</div>
+                <div class="card-content">
+                    <div class="message-card-body">
+                        <strong>Card-Based UI Design Pattern</strong>
+                    </div>
+                    <div class="message-card-body">
+                        <strong>Key Benefits:</strong><br/>
+                        • Clear visual separation of content<br/>
+                        • Better mobile responsiveness<br/>
+                        • Improved scalability<br/>
+                        • Enhanced user focus
+                    </div>
+                    <div class="message-card-body">
+                        <strong>Common Use Cases:</strong><br/>
+                        • Product listings<br/>
+                        • Messaging systems<br/>
+                        • Dashboards<br/>
+                        • Portfolio galleries
+                    </div>
+                    <div class="card-chips">
+                        <span class="card-chip">See examples</span>
+                        <span class="card-chip">Best practices</span>
+                        <span class="card-chip">Design tools</span>
+                    </div>
+                    <div class="card-timestamp">12:46 PM</div>
+                </div>
+            </div>
+
+            <div class="message-card user">
+                <div class="card-content user">
+                    <div class="message-card-body user">
+                        What's the difference between cards and traditional layouts?
+                    </div>
+                    <div class="card-timestamp">12:47 PM</div>
+                </div>
+                <div class="card-avatar user">You</div>
+            </div>
+
+            <div class="message-card">
+                <div class="card-avatar">G</div>
+                <div class="card-content">
+                    <div class="message-card-body">
+                        <strong>Cards vs. Traditional Layouts</strong>
+                    </div>
+                    <div class="message-card-body">
+                        <strong>Card-Based:</strong><br/>
+                        ✓ Contained, modular<br/>
+                        ✓ Easy to reorganize<br/>
+                        ✓ Good for mobile<br/>
+                        ✓ Clear visual hierarchy
+                    </div>
+                    <div class="message-card-body">
+                        <strong>Traditional:</strong><br/>
+                        ✓ Efficient space usage<br/>
+                        ✓ Linear flow<br/>
+                        ✓ Better for dense data<br/>
+                        ✓ Desktop-optimized
+                    </div>
+                    <div class="card-chips">
+                        <span class="card-chip active">Compare more</span>
+                        <span class="card-chip">View samples</span>
+                    </div>
+                    <div class="card-timestamp">12:48 PM</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="input-area">
+            <div class="input-card">
+                <span>✏️</span>
+                <input type="text" placeholder="Type your question..." />
+                <button class="input-action">🎤</button>
+            </div>
+            <button class="send-button">→</button>
+        </div>
+    </div>
+</body>
+</html>

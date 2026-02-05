@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grok-Inspired 5: Mobile First</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #000000;
+            color: #ffffff;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            height: 56px;
+            background: #1a1a1a;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+            border-bottom: 1px solid #2a2a2a;
+        }
+        
+        .menu-btn {
+            width: 40px;
+            height: 40px;
+            background: transparent;
+            border: none;
+            color: #ffffff;
+            font-size: 20px;
+            cursor: pointer;
+        }
+        
+        .logo { font-size: 18px; font-weight: 700; }
+        
+        .main {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 16px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .welcome {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            text-align: center;
+        }
+        
+        .avatar-circle {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-radius: 50%;
+            margin: 0 auto 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+        }
+        
+        h1 {
+            font-size: 28px;
+            margin-bottom: 12px;
+        }
+        
+        .subtitle {
+            font-size: 16px;
+            color: #999;
+            margin-bottom: 32px;
+        }
+        
+        .quick-cards {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .quick-card {
+            padding: 16px;
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 12px;
+            text-align: left;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .quick-card:active {
+            background: #252525;
+            transform: scale(0.98);
+        }
+        
+        .card-icon {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+        
+        .card-text {
+            font-size: 15px;
+            line-height: 1.4;
+        }
+        
+        .input-container {
+            padding: 16px;
+            background: #1a1a1a;
+            border-top: 1px solid #2a2a2a;
+        }
+        
+        .input-box {
+            background: #000000;
+            border: 1px solid #2a2a2a;
+            border-radius: 24px;
+            padding: 4px;
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+        }
+        
+        textarea {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: #ffffff;
+            font-size: 16px;
+            font-family: inherit;
+            padding: 12px 16px;
+            resize: none;
+            min-height: 44px;
+            max-height: 120px;
+        }
+        
+        textarea::placeholder { color: #666; }
+        
+        .send-btn {
+            width: 44px;
+            height: 44px;
+            background: #667eea;
+            border: none;
+            border-radius: 50%;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        
+        .send-btn:active {
+            transform: scale(0.95);
+        }
+        
+        .tools-bar {
+            display: flex;
+            gap: 16px;
+            margin-top: 12px;
+            justify-content: center;
+        }
+        
+        .tool {
+            font-size: 24px;
+            cursor: pointer;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+        }
+        
+        .tool:active { opacity: 1; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <button class="menu-btn">☰</button>
+        <div class="logo">OneSeek</div>
+        <button class="menu-btn">⋮</button>
+    </div>
+    
+    <div class="main">
+        <div class="welcome">
+            <div class="avatar-circle">🤖</div>
+            <h1>Hej!</h1>
+            <p class="subtitle">Hur kan jag hjälpa dig idag?</p>
+            
+            <div class="quick-cards">
+                <div class="quick-card">
+                    <div class="card-icon">🔍</div>
+                    <div class="card-text">Sök och analysera information</div>
+                </div>
+                <div class="quick-card">
+                    <div class="card-icon">💡</div>
+                    <div class="card-text">Brainstorma kreativa idéer</div>
+                </div>
+                <div class="quick-card">
+                    <div class="card-icon">✍️</div>
+                    <div class="card-text">Hjälp mig skriva innehåll</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="input-container">
+        <div class="input-box">
+            <textarea placeholder="Meddelande..."></textarea>
+            <button class="send-btn">
+                <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+            </button>
+        </div>
+        <div class="tools-bar">
+            <div class="tool">📎</div>
+            <div class="tool">🖼️</div>
+            <div class="tool">🎤</div>
+        </div>
+    </div>
+</body>
+</html>
